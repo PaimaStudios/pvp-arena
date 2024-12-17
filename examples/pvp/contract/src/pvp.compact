@@ -1,0 +1,524 @@
+pragma language_version >= 0.12.1;
+
+import CompactStandardLibrary;
+
+export enum RESULT { p1_win, p2_win, tie, waiting, continue }
+
+export enum ITEM { nothing, axe, shield, bow, sword, spear }
+
+export enum ARMOR { nothing, leather, metal }
+
+export struct Hero {
+    rhs: ITEM,
+    lhs: ITEM,
+    helmet: ARMOR,
+    chest: ARMOR,
+    skirt: ARMOR,
+    greaves: ARMOR,
+}
+
+// cache stats for smaller circuits
+export struct TotalStats {
+    crush_def: Uint<32>,
+    pierce_def: Uint<32>,
+}
+
+// crush:  
+// pierce: 
+// slash:  
+
+export enum STANCE { neutral, aggressive, defensive }
+
+// export struct Command {
+//     attack: Uint<32>,
+//     stance: STANCE,
+// }
+
+export ledger p1_heroes: Cell<Vector<3, Hero>>;
+export ledger p1_stats: Cell<Vector<3, TotalStats>>;
+export ledger p1_cmds: Cell<Maybe<Vector<3, Uint<32>>>>;
+export ledger p1_stances: Cell<Vector<3, STANCE>>;
+//export ledger p1_dmg: Cell<Vector<3, Uint<32>>>;
+export ledger p1_dmg_0: Cell<Uint<32>>;
+export ledger p1_dmg_1: Cell<Uint<32>>;
+export ledger p1_dmg_2: Cell<Uint<32>>;
+
+export ledger p2_heroes: Cell<Vector<3, Hero>>;
+export ledger p2_stats: Cell<Vector<3, TotalStats>>;
+export ledger p2_cmds: Cell<Maybe<Vector<3, Uint<32>>>>;
+export ledger p2_stances: Cell<Vector<3, STANCE>>;
+export ledger p2_dmg_0: Cell<Uint<32>>;
+export ledger p2_dmg_1: Cell<Uint<32>>;
+export ledger p2_dmg_2: Cell<Uint<32>>;
+//export ledger p2_dmg: Cell<Vector<3, Uint<32>>>;
+
+export ledger instance: Counter;
+export ledger p1_sig: Cell<Field>;
+export ledger p2_sig: Cell<Maybe<Field>>;
+
+witness player_secret_key(): Bytes<32>;
+
+constructor(p1: Vector<3, Hero>, p2: Vector<3, Hero>) {
+    p1_heroes = p1;
+    p2_heroes = p2;
+    //p1_dmg = [0, 0, 0];
+    //p2_dmg = [0, 0, 0];
+    p1_stances = [STANCE.neutral, STANCE.neutral, STANCE.neutral];
+    p2_stances = [STANCE.neutral, STANCE.neutral, STANCE.neutral];
+    p1_dmg_0 = 0;
+    p1_dmg_1 = 0;
+    p1_dmg_2 = 0;
+    p2_dmg_0 = 0;
+    p2_dmg_1 = 0;
+    p2_dmg_2 = 0;
+    p2_stats = [calc_stats(p1_heroes[0]), calc_stats(p1_heroes[1]), calc_stats(p1_heroes[2])];
+    p2_stats = [calc_stats(p2_heroes[0]), calc_stats(p2_heroes[1]), calc_stats(p2_heroes[2])];
+    instance.increment(1);
+    p1_sig = calc_sig(player_secret_key(), instance as Field);
+}
+
+export pure circuit calc_stats(hero: Hero): TotalStats {
+    return TotalStats { (item_crush_def(hero.lhs) + item_crush_def(hero.rhs) + armor_crush_def(hero.helmet) + armor_crush_def(hero.chest) + armor_crush_def(hero.skirt) + armor_crush_def(hero.greaves)) as Uint<32>, (item_pierce_def(hero.lhs) + item_pierce_def(hero.rhs) + armor_pierce_def(hero.helmet) + armor_pierce_def(hero.chest) + armor_pierce_def(hero.skirt) + armor_pierce_def(hero.greaves)) as Uint<32> };
+}
+
+struct Hasher {
+    f: Field,
+    b: Bytes<32>,
+}
+
+struct Stats {
+    dmg: Uint<32>,
+    armor_dmg: Uint<32>,
+    dex_factor: Uint<32>,
+}
+
+//export circuit item_stats(): Stats {}
+
+export circuit armor_crush_def(armor: ARMOR): Uint<32> {
+    if (armor == ARMOR.metal) {
+        return 3;
+    } else if (armor == ARMOR.leather) {
+        return 5;
+    } else {
+        return 0;
+    }
+}
+
+export circuit armor_pierce_def(armor: ARMOR): Uint<32> {
+    if (armor == ARMOR.metal) {
+        return 10;
+    } else if (armor == ARMOR.leather) {
+        return 5;
+    } else {
+        return 0;
+    }
+}
+
+export circuit item_pierce_dmg(item: ITEM): Uint<32> {
+    if (item == ITEM.axe) {
+        return 10;
+    } else if (item == ITEM.sword) {
+        return 20;
+    } else if (item == ITEM.spear) {
+        return 30;
+    } else if (item == ITEM.bow) {
+        return 40;
+    } else {
+        return 0;
+    }
+}
+
+export circuit item_crush_dmg(item: ITEM): Uint<32> {
+    if (item == ITEM.axe) {
+        return 25;
+    } else if (item == ITEM.sword) {
+        return 10;
+    } else if (item == ITEM.spear) {
+        return 7;
+    } else if (item == ITEM.bow) {
+        return 3;
+    } else {
+        return 0;
+    }
+}
+
+export circuit item_crush_def(item: ITEM): Uint<32> {
+    if (item == ITEM.shield) {
+        return 30;
+    } else if (item == ITEM.sword) {
+        return 5;
+    } else {
+        return 0;
+    }
+}
+
+export circuit item_pierce_def(item: ITEM): Uint<32> {
+    if (item == ITEM.shield) {
+        return 30;
+    } else if (item == ITEM.sword) {
+        return 5;
+    } else {
+        return 0;
+    }
+}
+
+export circuit item_dex_bonus(item: ITEM): Uint<32> {
+    if (item == ITEM.axe) {
+        return 0;
+    } else if (item == ITEM.sword) {
+        return 20;
+    } else if (item == ITEM.shield) {
+        return 0;
+    } else {
+        return 30;
+    }
+}
+
+// export circuit hero_armor(hero: Hero): Uint<32> {
+//     return (item_armor(hero.lhs) + item_armor(hero.rhs) + armor_armor(hero.armor_helmet) + armor_armor(hero.armor_chest) + armor_armor(hero.armor_skirt) + armor_armor(hero.armor_greaves)) as Uint<32>;
+// }
+
+export circuit calc_item_dmg_against(item: ITEM, stats: TotalStats, enemy_stats: TotalStats): Uint<32> {
+    //return ((100 - enemy_armor) * item_dmg(item) + enemy_armor * item_armor_dmg(item) * dex) as Uint<32>;
+    //return ((100 - enemy_stats.crush_def) * item_crush_dmg(item) + (100 - enemy_stats.pierce_def) * item_pierce_def(item) + dex * item_dex_bonus(item)) as Uint<32>;
+    return 25;
+}
+
+export circuit calc_sig(sk: Bytes<32>, instance: Field): Field {
+    return transient_hash<Hasher>(Hasher { transient_hash<Vector<2, Field>>([1234567890, instance]), sk});
+}
+
+export circuit reg_p2(): Void {
+    p2_sig = some<Field>(1);//calc_sig(player_sk(), instance as Field));
+}
+
+export circuit p1_command(cmds: Vector<3, Uint<32>>): RESULT {
+    //assert calc_sig(player_sk(), instance as Field as Bytes<32>) == p1_sig "Not authorized as P1";
+    // TODO: commitments
+    p1_cmds = some<Vector<3, Uint<32>>>(cmds);//[Uint<32> { attack: cmds[0], stance: STANCE.neutral}, Uint<32> { attack: cmds[1], stance: STANCE.neutral}, Uint<32> { attack: cmds[2], stance: STANCE.neutral}]]);
+    if (p2_cmds == none<Vector<3, Uint<32>>>()) {
+        return RESULT.waiting;
+    }
+    return battle_round();
+    // instance.increment(2);
+    // return RESULT.waiting;
+}
+
+// export circuit p1_command(cmds: Vector<3, Uint<32>>): RESULT {
+//     // TODO: commitments
+//     p1_cmds = some<Vector<3, Uint<32>>>(cmds);
+//     if (p2_cmds == none<Vector<3, Uint<32>>>()) {
+//         return RESULT.waiting;
+//     }
+//     return battle_round();
+// }
+
+export circuit p2_command(cmds: Vector<3, Uint<32>>): RESULT {
+    // TODO: commitments
+    p2_cmds = some<Vector<3, Uint<32>>>(cmds);
+    if (p1_cmds == none<Vector<3, Uint<32>>>()) {
+        return RESULT.waiting;
+    }
+    return battle_round();
+}
+
+circuit battle_round(): RESULT {
+    const DEAD = 300;
+
+    if (p1_dmg_0 < DEAD) {
+        if (p1_cmds.value[0] == 0) {
+            p2_dmg_0 = (p2_dmg_0 + calc_item_dmg_against(p1_heroes[0].lhs, p1_stats[0], p2_stats[0]) + calc_item_dmg_against(p1_heroes[0].rhs, p1_stats[0], p2_stats[0])) as Uint<32>;
+        } else if (p1_cmds.value[0] == 1) {
+            p2_dmg_1 = (p2_dmg_1 + calc_item_dmg_against(p1_heroes[0].lhs, p1_stats[0], p2_stats[1]) + calc_item_dmg_against(p1_heroes[0].rhs, p1_stats[0], p2_stats[1])) as Uint<32>;
+        } else {
+            p2_dmg_2 = (p2_dmg_2 + calc_item_dmg_against(p1_heroes[0].lhs, p1_stats[0], p2_stats[2]) + calc_item_dmg_against(p1_heroes[0].rhs, p1_stats[0], p2_stats[2])) as Uint<32>;
+        }
+    }
+    if (p1_dmg_1 < DEAD) {
+        if (p1_cmds.value[1] == 0) {
+            p2_dmg_0 = (p2_dmg_0 + calc_item_dmg_against(p1_heroes[1].lhs, p1_stats[1], p2_stats[0]) + calc_item_dmg_against(p1_heroes[1].rhs, p1_stats[0], p2_stats[0])) as Uint<32>;
+        } else if (p1_cmds.value[1] == 1) {
+            p2_dmg_1 = (p2_dmg_1 + calc_item_dmg_against(p1_heroes[1].lhs, p1_stats[1], p2_stats[1]) + calc_item_dmg_against(p1_heroes[1].rhs, p1_stats[0], p2_stats[1])) as Uint<32>;
+        } else {
+            p2_dmg_2 = (p2_dmg_2 + calc_item_dmg_against(p1_heroes[1].lhs, p1_stats[1], p2_stats[2]) + calc_item_dmg_against(p1_heroes[1].rhs, p1_stats[0], p2_stats[2])) as Uint<32>;
+        }
+    }
+    if (p1_dmg_0 < DEAD) {
+        if (p1_cmds.value[2] == 0) {
+            p2_dmg_0 = (p2_dmg_0 + calc_item_dmg_against(p1_heroes[2].lhs, p1_stats[2], p2_stats[0]) + calc_item_dmg_against(p1_heroes[1].rhs, p1_stats[2], p2_stats[0])) as Uint<32>;
+        } else if (p1_cmds.value[2] == 1) {
+            p2_dmg_1 = (p2_dmg_1 + calc_item_dmg_against(p1_heroes[2].lhs, p1_stats[2], p2_stats[1]) + calc_item_dmg_against(p1_heroes[1].rhs, p1_stats[2], p2_stats[1])) as Uint<32>;
+        } else {
+            p2_dmg_2 = (p2_dmg_2 + calc_item_dmg_against(p1_heroes[2].lhs, p1_stats[2], p2_stats[2]) + calc_item_dmg_against(p1_heroes[1].rhs, p1_stats[2], p2_stats[2])) as Uint<32>;
+        }
+    }
+    if (p2_dmg_0 < DEAD) {
+        if (p2_cmds.value[0] == 0) {
+            p1_dmg_0 = (p1_dmg_0 + calc_item_dmg_against(p2_heroes[0].lhs, p2_stats[0], p1_stats[0]) + calc_item_dmg_against(p2_heroes[0].rhs, p2_stats[0], p1_stats[0])) as Uint<32>;
+        } else if (p2_cmds.value[0] == 1) {
+            p1_dmg_1 = (p1_dmg_1 + calc_item_dmg_against(p2_heroes[0].lhs, p2_stats[0], p1_stats[1]) + calc_item_dmg_against(p2_heroes[0].rhs, p2_stats[0], p1_stats[1])) as Uint<32>;
+        } else {
+            p1_dmg_2 = (p1_dmg_2 + calc_item_dmg_against(p2_heroes[0].lhs, p2_stats[0], p1_stats[2]) + calc_item_dmg_against(p2_heroes[0].rhs, p2_stats[0], p1_stats[2])) as Uint<32>;
+        }
+    }
+    if (p2_dmg_1 < DEAD) {
+        if (p2_cmds.value[1] == 0) {
+            p1_dmg_0 = (p1_dmg_0 + calc_item_dmg_against(p2_heroes[1].lhs, p2_stats[1], p1_stats[0]) + calc_item_dmg_against(p2_heroes[1].rhs, p2_stats[0], p1_stats[0])) as Uint<32>;
+        } else if (p2_cmds.value[1] == 1) {
+            p1_dmg_1 = (p1_dmg_1 + calc_item_dmg_against(p2_heroes[1].lhs, p2_stats[1], p1_stats[1]) + calc_item_dmg_against(p2_heroes[1].rhs, p2_stats[0], p1_stats[1])) as Uint<32>;
+        } else {
+            p1_dmg_2 = (p1_dmg_2 + calc_item_dmg_against(p2_heroes[1].lhs, p2_stats[1], p1_stats[2]) + calc_item_dmg_against(p2_heroes[1].rhs, p2_stats[0], p1_stats[2])) as Uint<32>;
+        }
+    }
+    if (p2_dmg_0 < DEAD) {
+        if (p2_cmds.value[2] == 0) {
+            p1_dmg_0 = (p1_dmg_0 + calc_item_dmg_against(p2_heroes[2].lhs, p2_stats[2], p1_stats[0]) + calc_item_dmg_against(p2_heroes[1].rhs, p2_stats[2], p1_stats[0])) as Uint<32>;
+        } else if (p2_cmds.value[2] == 1) {
+            p1_dmg_1 = (p1_dmg_1 + calc_item_dmg_against(p2_heroes[2].lhs, p2_stats[2], p1_stats[1]) + calc_item_dmg_against(p2_heroes[1].rhs, p2_stats[2], p1_stats[1])) as Uint<32>;
+        } else {
+            p1_dmg_2 = (p1_dmg_2 + calc_item_dmg_against(p2_heroes[2].lhs, p2_stats[2], p1_stats[2]) + calc_item_dmg_against(p2_heroes[1].rhs, p2_stats[2], p1_stats[2])) as Uint<32>;
+        }
+    }
+    // if (p1_dmg_0 < DEAD) {
+    //     if (p1_cmds.value[0] == 0) {
+    //         p2_dmg_0 = (p2_dmg_0 + calc_item_dmg_against(p1_heroes[0].lhs, 100 - hero_armor(p1_heroes[0]), hero_armor(p2_heroes[0])) + calc_item_dmg_against(p1_heroes[0].rhs, 100 - hero_armor(p1_heroes[0]), hero_armor(p2_heroes[0]))) as Uint<32>;
+    //     } else if (p1_cmds.value[0] == 1) {
+    //         p2_dmg_1 = (p2_dmg_1 + calc_item_dmg_against(p1_heroes[0].lhs, 100 - hero_armor(p1_heroes[0]), hero_armor(p2_heroes[1])) + calc_item_dmg_against(p1_heroes[0].rhs, 100 - hero_armor(p1_heroes[1]), hero_armor(p2_heroes[0]))) as Uint<32>;
+    //     } else {
+    //         p2_dmg_2 = (p2_dmg_2 + calc_item_dmg_against(p1_heroes[0].lhs, 100 - hero_armor(p1_heroes[0]), hero_armor(p2_heroes[2])) + calc_item_dmg_against(p1_heroes[0].rhs, 100 - hero_armor(p1_heroes[2]), hero_armor(p2_heroes[0]))) as Uint<32>;
+    //     }
+    // }
+    // if (p1_dmg_1 < DEAD) {
+    //     if (p1_cmds.value[1] == 0) {
+    //         p2_dmg_0 = (p2_dmg_0 + calc_item_dmg_against(p1_heroes[1].lhs, 100 - hero_armor(p1_heroes[1]), hero_armor(p2_heroes[0])) + calc_item_dmg_against(p1_heroes[1].rhs, 100 - hero_armor(p1_heroes[0]), hero_armor(p2_heroes[1]))) as Uint<32>;
+    //     } else if (p1_cmds.value[1] == 1) {
+    //         p2_dmg_1 = (p2_dmg_1 + calc_item_dmg_against(p1_heroes[1].lhs, 100 - hero_armor(p1_heroes[1]), hero_armor(p2_heroes[1])) + calc_item_dmg_against(p1_heroes[1].rhs, 100 - hero_armor(p1_heroes[1]), hero_armor(p2_heroes[1]))) as Uint<32>;
+    //     } else {
+    //         p2_dmg_2 = (p2_dmg_2 + calc_item_dmg_against(p1_heroes[1].lhs, 100 - hero_armor(p1_heroes[1]), hero_armor(p2_heroes[2])) + calc_item_dmg_against(p1_heroes[1].rhs, 100 - hero_armor(p1_heroes[2]), hero_armor(p2_heroes[1]))) as Uint<32>;
+    //     }
+    // }
+    // if (p1_dmg_2 < DEAD) {
+    //     if (p1_cmds.value[2] == 0) {
+    //         p2_dmg_0 = (p2_dmg_0 + calc_item_dmg_against(p1_heroes[2].lhs, 100 - hero_armor(p1_heroes[2]), hero_armor(p2_heroes[0])) + calc_item_dmg_against(p1_heroes[2].rhs, 100 - hero_armor(p1_heroes[0]), hero_armor(p2_heroes[2]))) as Uint<32>;
+    //     } else if (p1_cmds.value[2] == 1) {
+    //         p2_dmg_1 = (p2_dmg_1 + calc_item_dmg_against(p1_heroes[2].lhs, 100 - hero_armor(p1_heroes[2]), hero_armor(p2_heroes[1])) + calc_item_dmg_against(p1_heroes[2].rhs, 100 - hero_armor(p1_heroes[1]), hero_armor(p2_heroes[2]))) as Uint<32>;
+    //     } else {
+    //         p2_dmg_2 = (p2_dmg_2 + calc_item_dmg_against(p1_heroes[2].lhs, 100 - hero_armor(p1_heroes[2]), hero_armor(p2_heroes[2])) + calc_item_dmg_against(p1_heroes[2].rhs, 100 - hero_armor(p1_heroes[2]), hero_armor(p2_heroes[2]))) as Uint<32>;
+    //     }
+    // }
+    // if (p2_dmg_0 < DEAD) {
+    //     if (p2_cmds.value[0] == 0) {
+    //         p1_dmg_0 = (p1_dmg_0 + calc_item_dmg_against(p2_heroes[0].lhs, 100 - hero_armor(p2_heroes[0]), hero_armor(p1_heroes[0])) + calc_item_dmg_against(p2_heroes[0].rhs, 100 - hero_armor(p2_heroes[0]), hero_armor(p1_heroes[0]))) as Uint<32>;
+    //     } else if (p2_cmds.value[0] == 1) {
+    //         p1_dmg_1 = (p1_dmg_1 + calc_item_dmg_against(p2_heroes[0].lhs, 100 - hero_armor(p2_heroes[0]), hero_armor(p1_heroes[1])) + calc_item_dmg_against(p2_heroes[0].rhs, 100 - hero_armor(p2_heroes[1]), hero_armor(p1_heroes[0]))) as Uint<32>;
+    //     } else {
+    //         p1_dmg_2 = (p1_dmg_2 + calc_item_dmg_against(p2_heroes[0].lhs, 100 - hero_armor(p2_heroes[0]), hero_armor(p1_heroes[2])) + calc_item_dmg_against(p2_heroes[0].rhs, 100 - hero_armor(p2_heroes[2]), hero_armor(p1_heroes[0]))) as Uint<32>;
+    //     }
+    // }
+    // if (p2_dmg_1 < DEAD) {
+    //     if (p2_cmds.value[1] == 0) {
+    //         p1_dmg_0 = (p1_dmg_0 + calc_item_dmg_against(p2_heroes[1].lhs, 100 - hero_armor(p2_heroes[1]), hero_armor(p1_heroes[0])) + calc_item_dmg_against(p2_heroes[1].rhs, 100 - hero_armor(p2_heroes[0]), hero_armor(p1_heroes[1]))) as Uint<32>;
+    //     } else if (p2_cmds.value[1] == 1) {
+    //         p1_dmg_1 = (p1_dmg_1 + calc_item_dmg_against(p2_heroes[1].lhs, 100 - hero_armor(p2_heroes[1]), hero_armor(p1_heroes[1])) + calc_item_dmg_against(p2_heroes[1].rhs, 100 - hero_armor(p2_heroes[1]), hero_armor(p1_heroes[1]))) as Uint<32>;
+    //     } else {
+    //         p1_dmg_2 = (p1_dmg_2 + calc_item_dmg_against(p2_heroes[1].lhs, 100 - hero_armor(p2_heroes[1]), hero_armor(p1_heroes[2])) + calc_item_dmg_against(p2_heroes[1].rhs, 100 - hero_armor(p2_heroes[2]), hero_armor(p1_heroes[1]))) as Uint<32>;
+    //     }
+    // }
+    // if (p2_dmg_2 < DEAD) {
+    //     if (p2_cmds.value[2] == 0) {
+    //         p1_dmg_0 = (p1_dmg_0 + calc_item_dmg_against(p2_heroes[2].lhs, 100 - hero_armor(p2_heroes[2]), hero_armor(p1_heroes[0])) + calc_item_dmg_against(p2_heroes[2].rhs, 100 - hero_armor(p2_heroes[0]), hero_armor(p1_heroes[2]))) as Uint<32>;
+    //     } else if (p2_cmds.value[2] == 1) {
+    //         p1_dmg_1 = (p1_dmg_1 + calc_item_dmg_against(p2_heroes[2].lhs, 100 - hero_armor(p2_heroes[2]), hero_armor(p1_heroes[1])) + calc_item_dmg_against(p2_heroes[2].rhs, 100 - hero_armor(p2_heroes[1]), hero_armor(p1_heroes[2]))) as Uint<32>;
+    //     } else {
+    //         p1_dmg_2 = (p1_dmg_2 + calc_item_dmg_against(p2_heroes[2].lhs, 100 - hero_armor(p2_heroes[2]), hero_armor(p1_heroes[2])) + calc_item_dmg_against(p2_heroes[2].rhs, 100 - hero_armor(p2_heroes[2]), hero_armor(p1_heroes[2]))) as Uint<32>;
+    //     }
+    // }
+    // if (p1_dmg[1] < DEAD) {
+    //     if (p1_cmds.value[1] == 0) {
+    //         p2_dmg_0 = (p2_dmg_0 + p1_attack(1, p1_cmds.value[1])) as Uint<32>;
+    //     } else if (p1_cmds.value[1] == 1) {
+    //         p2_dmg_1 = (p2_dmg_1 + p1_attack(1, p1_cmds.value[1])) as Uint<32>;
+    //     } else {
+    //         p2_dmg_2 = (p2_dmg_2 + p1_attack(1, p1_cmds.value[1])) as Uint<32>;
+    //     }
+    // }
+    // if (p1_dmg[2] < DEAD) {
+    //     if (p1_cmds.value[2] == 0) {
+    //         p2_dmg_0 = (p2_dmg_0 + p1_attack(2, p1_cmds.value[2])) as Uint<32>;
+    //     } else if (p1_cmds.value[2] == 1) {
+    //         p2_dmg_1 = (p2_dmg_1 + p1_attack(2, p1_cmds.value[2])) as Uint<32>;
+    //     } else {
+    //         p2_dmg_2 = (p2_dmg_2 + p1_attack(2, p1_cmds.value[2])) as Uint<32>;
+    //     }
+    // }
+
+    // compact vectors are so useless
+
+    // p1 attack
+    // if (p1_dmg[0] < DEAD) {
+    //     if (p1_cmds.value[0] == 0) {
+    //         p2_dmg = [(p2_dmg[0] + p1_attack(0, p1_cmds.value[0])) as Uint<32>, p2_dmg[1], p2_dmg[2]];
+    //     } else if (p1_cmds.value[0] == 1) {
+    //         p2_dmg = [p2_dmg[0], (p2_dmg[1] + p1_attack(0, p1_cmds.value[0])) as Uint<32>, p2_dmg[2]];
+    //     } else {
+    //         p2_dmg = [p2_dmg[0], p2_dmg[1], (p2_dmg[2] + p1_attack(0, p1_cmds.value[0])) as Uint<32>];
+    //     }
+    // }
+    // if (p1_dmg[1] < DEAD) {
+    //     if (p1_cmds.value[1] == 0) {
+    //         p2_dmg = [(p2_dmg[0] + p1_attack(1, p1_cmds.value[1])) as Uint<32>, p2_dmg[1], p2_dmg[2]];
+    //     } else if (p1_cmds.value[1] == 1) {
+    //         p2_dmg = [p2_dmg[0], (p2_dmg[1] + p1_attack(1, p1_cmds.value[1])) as Uint<32>, p2_dmg[2]];
+    //     } else {
+    //         p2_dmg = [p2_dmg[0], p2_dmg[1], (p2_dmg[2] + p1_attack(1, p1_cmds.value[1])) as Uint<32>];
+    //     }
+    // }
+    // if (p1_dmg[2] < DEAD) {
+    //     if (p1_cmds.value[2] == 0) {
+    //         p2_dmg = [(p2_dmg[0] + p1_attack(2, p1_cmds.value[2])) as Uint<32>, p2_dmg[1], p2_dmg[2]];
+    //     } else if (p1_cmds.value[2] == 1) {
+    //         p2_dmg = [p2_dmg[0], (p2_dmg[1] + p1_attack(2, p1_cmds.value[2])) as Uint<32>, p2_dmg[2]];
+    //     } else {
+    //         p2_dmg = [p2_dmg[0], p2_dmg[1], (p2_dmg[2] + p1_attack(2, p1_cmds.value[2])) as Uint<32>];
+    //     }
+    // }
+    // if (p1_dmg[0] < DEAD) {
+    //     if (p1_cmds.value[0] == 0) {
+    //         p2_dmg_0 = (p2_dmg_0 + p1_attack(0, p1_cmds.value[0])) as Uint<32>;
+    //     } else if (p1_cmds.value[0] == 1) {
+    //         p2_dmg_1 = (p2_dmg_1 + p1_attack(0, p1_cmds.value[0])) as Uint<32>;
+    //     } else {
+    //         p2_dmg_2 = (p2_dmg_2 + p1_attack(0, p1_cmds.value[0])) as Uint<32>;
+    //     }
+    // }
+    // if (p1_dmg[1] < DEAD) {
+    //     if (p1_cmds.value[1] == 0) {
+    //         p2_dmg_0 = (p2_dmg_0 + p1_attack(1, p1_cmds.value[1])) as Uint<32>;
+    //     } else if (p1_cmds.value[1] == 1) {
+    //         p2_dmg_1 = (p2_dmg_1 + p1_attack(1, p1_cmds.value[1])) as Uint<32>;
+    //     } else {
+    //         p2_dmg_2 = (p2_dmg_2 + p1_attack(1, p1_cmds.value[1])) as Uint<32>;
+    //     }
+    // }
+    // if (p1_dmg[2] < DEAD) {
+    //     if (p1_cmds.value[2] == 0) {
+    //         p2_dmg_0 = (p2_dmg_0 + p1_attack(2, p1_cmds.value[2])) as Uint<32>;
+    //     } else if (p1_cmds.value[2] == 1) {
+    //         p2_dmg_1 = (p2_dmg_1 + p1_attack(2, p1_cmds.value[2])) as Uint<32>;
+    //     } else {
+    //         p2_dmg_2 = (p2_dmg_2 + p1_attack(2, p1_cmds.value[2])) as Uint<32>;
+    //     }
+    // }
+    // // p2 attack
+    // if (p2_dmg_0 < DEAD) {
+    //     if (p2_cmds.value[0] == 0) {
+    //         p1_dmg = [(p1_dmg[0] + p2_attack(p2_cmds.value[0], 0)) as Uint<32>, p1_dmg[1], p1_dmg[2]];
+    //     } else if (p2_cmds.value[0] == 1) {
+    //         p1_dmg = [p1_dmg[0], (p1_dmg[1] + p2_attack(p2_cmds.value[0], 0)) as Uint<32>, p1_dmg[2]];
+    //     } else {
+    //         p1_dmg = [p1_dmg[0], p1_dmg[1], (p1_dmg[2] + p2_attack(p2_cmds.value[0], 0)) as Uint<32>];
+    //     }
+    // }
+    // if (p2_dmg_1 < DEAD) {
+    //     if (p2_cmds.value[1] == 0) {
+    //         p1_dmg = [(p1_dmg[0] + p2_attack(p2_cmds.value[1], 1)) as Uint<32>, p1_dmg[1], p1_dmg[2]];
+    //     } else if (p2_cmds.value[1] == 1) {
+    //         p1_dmg = [p1_dmg[0], (p1_dmg[1] + p2_attack(p2_cmds.value[1], 1)) as Uint<32>, p1_dmg[2]];
+    //     } else {
+    //         p1_dmg = [p1_dmg[0], p1_dmg[1], (p1_dmg[2] + p2_attack(p2_cmds.value[1], 1)) as Uint<32>];
+    //     }
+    // }
+    // if (p2_dmg_2 < DEAD) {
+    //     if (p2_cmds.value[2] == 0) {
+    //         p1_dmg = [(p1_dmg[0] + p2_attack(p2_cmds.value[2], 2)) as Uint<32>, p1_dmg[1], p1_dmg[2]];
+    //     } else if (p2_cmds.value[2] == 1) {
+    //         p1_dmg = [p1_dmg[0], (p1_dmg[1] + p2_attack(p2_cmds.value[2], 2)) as Uint<32>, p1_dmg[2]];
+    //     } else {
+    //         p1_dmg = [p1_dmg[0], p1_dmg[1], (p1_dmg[2] + p2_attack(p2_cmds.value[2], 2)) as Uint<32>];
+    //     }
+    // }
+
+    // reset commands for next round
+    p1_cmds = none<Vector<3, Uint<32>>>();
+    p2_cmds = none<Vector<3, Uint<32>>>();
+
+    // check for a winner
+    // if (p2_dmg[0] >= DEAD && p2_dmg[1] >= DEAD && p2_dmg[2] >= DEAD) {
+    //     if (p1_dmg[0] >= DEAD && p1_dmg[1] >= DEAD && p1_dmg[2] >= DEAD) {
+    //         return RESULT.tie;
+    //     }
+    //     return RESULT.p1_win;
+    // }
+    // if (p1_dmg[0] >= DEAD && p1_dmg[1] >= DEAD && p1_dmg[2] >= DEAD) {
+    //     return RESULT.p2_win;
+    // }
+    if (p2_dmg_0 >= DEAD && p2_dmg_1 >= DEAD && p2_dmg_2 >= DEAD) {
+        if (p1_dmg_0 >= DEAD && p1_dmg_1 >= DEAD && p1_dmg_2 >= DEAD) {
+            return RESULT.tie;
+        }
+        return RESULT.p1_win;
+    }
+    if (p1_dmg_0 >= DEAD && p1_dmg_1 >= DEAD && p1_dmg_2 >= DEAD) {
+        return RESULT.p2_win;
+    }
+    return RESULT.continue;
+} 
+
+pure circuit item_dmg(item: ITEM, against: ITEM): Uint<32> {
+    if (item == ITEM.axe) {
+        if (against == ITEM.shield) {
+            return 3;
+        } else if (against == ITEM.sword) {
+            return 1;
+        }
+    } else if (item == ITEM.shield) {
+        if (against == ITEM.bow) {
+            return 3;
+        } else if (against == ITEM.axe) {
+            return 1;
+        }
+    }
+    if (item == ITEM.bow) {
+        if (against == ITEM.sword) {
+            return 3;
+        } else if (against == ITEM.shield) {
+            return 1;
+        }
+    } else {
+    //if (item == ITEM.sword) {
+        if (against == ITEM.axe) {
+            return 3;
+        } else if (against == ITEM.bow) {
+            return 1;
+        }
+    }
+    return 2;
+}
+
+circuit p1_attack(p1_unit_index: Uint<32>, p2_unit_index: Uint<32>): Uint<32> {
+    //return 3;
+    return (item_dmg(p1_hero(p1_unit_index).lhs, p2_hero(p2_unit_index).lhs) + item_dmg(p1_hero(p1_unit_index).lhs, p2_hero(p2_unit_index).rhs) + item_dmg(p1_hero(p1_unit_index).rhs, p2_hero(p2_unit_index).lhs) + item_dmg(p1_hero(p1_unit_index).rhs, p2_hero(p2_unit_index).rhs)) as Uint<32>;
+}
+
+circuit p2_attack(p1_unit_index: Uint<32>, p2_unit_index: Uint<32>): Uint<32> {
+    return (item_dmg(p2_hero(p2_unit_index).lhs, p1_hero(p1_unit_index).lhs) + item_dmg(p2_hero(p2_unit_index).lhs, p1_hero(p1_unit_index).rhs) + item_dmg(p2_hero(p2_unit_index).rhs, p1_hero(p1_unit_index).lhs) + item_dmg(p2_hero(p2_unit_index).rhs, p1_hero(p1_unit_index).rhs)) as Uint<32>;
+}
+
+// is this really necessary?!!!??!?!
+circuit p1_hero(p1_unit_index: Uint<32>): Hero {
+    if (p1_unit_index == 0) {
+        return p1_heroes[0];
+    } else if (p1_unit_index == 2) {
+        return p1_heroes[1];
+    }
+    return p1_heroes[2];
+}
+
+circuit p2_hero(p2_unit_index: Uint<32>): Hero {
+    if (p2_unit_index == 0) {
+        return p2_heroes[0];
+    } else if (p2_unit_index == 2) {
+        return p2_heroes[1];
+    }
+    return p2_heroes[2];
+}
