@@ -11,7 +11,7 @@
     "test": "turbo run test",
     "test-e2e": "turbo run test-e2e",
     "lint": "turbo run lint",
-    "check": "turbo run check --ignore packages/dao-ui-tests",
+    "check": "turbo run check --ignore packages/dao-ui-tests"
   },
   "resolutions": {
     "@midnight-ntwrk/compact-runtime/@midnight-ntwrk/onchain-runtime": "^0.2.2",
