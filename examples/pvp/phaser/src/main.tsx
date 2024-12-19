@@ -1,5 +1,7 @@
 import { NetworkId, setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 import '@midnight-ntwrk/dapp-connector-api';
+import { ITEM, RESULT, STANCE, Hero, ARMOR } from '@midnight-ntwrk/pvp-contract';
+import { type BBoardDerivedState, type DeployedBBoardAPI } from '@midnight-ntwrk/pvp-api';
 import './globals';
 
 // TODO: get this properly? it's undefined if i uncomment this
@@ -10,8 +12,10 @@ setNetworkId(networkId);
 
 console.log(`networkId = ${networkId}`);
 
+const MAX_HP = 300;
 
-
+const ARENA_WIDTH = 480;
+const ARENA_HEIGHT = 360;
 
 
 // phaser part
@@ -19,7 +23,6 @@ console.log(`networkId = ${networkId}`);
 import 'phaser';
 import RexUIPlugin from 'phaser3-rex-plugins/templates/ui/ui-plugin'
 //import KeyboardPlugin from 'phaser3-';
-import { ITEM, RESULT, STANCE, Hero, ARMOR } from '@midnight-ntwrk/pvp-contract';
 import RoundRectanglePlugin from 'phaser3-rex-plugins/plugins/roundrectangle-plugin.js';
 
 const COLOR_MAIN = 0x4e342e;
@@ -40,27 +43,144 @@ var createButton = function (scene: any, text: any) {
         }
     });
 }
-function createHero(arena: Arena, x: number, y: number, hero: Hero, isP2: boolean) {
-    // todo: group into container?
-    arena.add.image(x, y, 'hero_body').flipX = isP2;
-    if (hero.lhs != ITEM.nothing) {
-        arena.add.image(x, y, itemSprite(hero.lhs, false)).flipX = isP2;
+
+type HeroIndex = 0 | 1 | 2;
+type Team = 0 | 1;
+
+class Rank {
+    index: HeroIndex;
+    team: Team;
+
+    constructor(index: HeroIndex, team: Team) {
+        this.index = index;
+        this.team = team;
     }
-    if (hero.helmet != ARMOR.nothing) {
-        arena.add.image(x, y, armorSprite(hero.helmet, 'helmet')).flipX = isP2;
+
+    x(stance: STANCE): number {
+        let stanceContribution = 0;
+        const stanceWidth = 50;
+        switch (stance) {
+            case STANCE.aggressive:
+                stanceContribution = this.team == 0 ? stanceWidth : -stanceWidth;
+                break;
+            case STANCE.defensive:
+                stanceContribution = this.team == 0 ? -stanceWidth : stanceWidth;
+                break;
+        }
+        return stanceContribution + (this.team == 0 ? (160 - 4 * this.index) : (ARENA_WIDTH - 160 + 4 * this.index));
     }
-    if (hero.chest != ARMOR.nothing) {
-        arena.add.image(x, y, armorSprite(hero.chest, 'chest')).flipX = isP2;
+
+    y(): number {
+        return 140 + 65 * this.index;
     }
-    if (hero.skirt != ARMOR.nothing) {
-        arena.add.image(x, y, armorSprite(hero.skirt, 'skirt')).flipX = isP2;
+}
+
+class HeroActor extends Phaser.GameObjects.Container {
+    arena: Arena;
+    hero: Hero;
+    //body_images: Phaser.GameObjects.Image[];
+    hpBar: HpBar;
+    rank: Rank;
+    target: Rank | undefined;
+    targetLine: Phaser.GameObjects.Line;
+    dmg: number;
+    stance: STANCE;
+
+    constructor(arena: Arena, hero: Hero, rank: Rank) {
+        super(arena, rank.x(STANCE.neutral), rank.y());
+
+        this.arena = arena;
+        this.hero = hero;
+        this.rank = rank;
+        this.target = undefined;
+        this.dmg = 0;
+        this.stance = STANCE.neutral;
+
+        const isP2 = this.rank.team == 1;
+
+        const line = arena.add.line(0, 0, 0, 0, 0, 0, rank.team == 0 ? 0x3333bb : 0xbb3333, 0.3)
+            .setOrigin(0, 0)
+            .setLineWidth(3)
+            .setVisible(false);
+        this.targetLine = line;
+        this.add(line);
+
+        //this.body_images = [];
+        if (hero.lhs == ITEM.bow || hero.rhs == ITEM.bow) {
+            this.add(arena.add.image(0, 0, 'hero_quiver').setFlipX(isP2));
+        }
+        this.add(arena.add.image(0, 0, 'hero_body').setFlipX(isP2));
+        if (hero.lhs != ITEM.nothing) {
+            this.add(arena.add.image(0, 0, itemSprite(hero.lhs, false)).setFlipX(isP2));
+        }
+        if (hero.helmet != ARMOR.nothing) {
+            this.add(arena.add.image(0, 0, armorSprite(hero.helmet, 'helmet')).setFlipX(isP2));
+        }
+        if (hero.chest != ARMOR.nothing) {
+            this.add(arena.add.image(0, 0, armorSprite(hero.chest, 'chest')).setFlipX(isP2));
+        }
+        if (hero.skirt != ARMOR.nothing) {
+            this.add(arena.add.image(0, 0, armorSprite(hero.skirt, 'skirt')).setFlipX(isP2));
+        }
+        if (hero.greaves != ARMOR.nothing) {
+            this.add(arena.add.image(0, 0, armorSprite(hero.greaves, 'greaves')).setFlipX(isP2));
+        }
+        this.add(arena.add.image(0, 0, 'hero_arm_r').setFlipX(isP2));
+        if (hero.rhs != ITEM.nothing) {
+            this.add(arena.add.image(0, 0, itemSprite(hero.rhs, true)).setFlipX(isP2));
+        }
+
+        this.hpBar = new HpBar(arena, 0, -31, 40);
+        this.add(this.hpBar);
+
+        arena.add.existing(this);
     }
-    if (hero.greaves != ARMOR.nothing) {
-        arena.add.image(x, y, armorSprite(hero.greaves, 'greaves')).flipX = isP2;
+
+    preUpdate(): void {
     }
-    arena.add.image(x, y, 'hero_arm_r').flipX = isP2;
-    if (hero.rhs != ITEM.nothing) {
-        arena.add.image(x, y, itemSprite(hero.rhs, true)).flipX = isP2;
+
+    // true = killed
+    public attack(dmg: number): boolean {
+        this.dmg = Math.min(MAX_HP, this.dmg + dmg);
+        if (this.isAlive()) {
+            return false;
+        }
+        this.visible = false;
+        return true;
+    }
+
+    public isAlive(): boolean {
+        return this.dmg < MAX_HP;
+    }
+
+    public setStance(stance: STANCE) {
+        this.stance = stance;
+
+        const x = this.rank.x(stance);
+        const y = this.rank.y();
+
+        this.setPosition(x, y);
+
+        this.updateTargetLine();
+    }
+
+    public setTarget(target: Rank | undefined) {
+        this.target = target;
+
+        this.updateTargetLine();
+    }
+
+    private updateTargetLine() {
+        if (this.target != undefined) {
+            // TODO: how to know other person's stance?
+            const tx = this.target.x(this.arena.getHero(this.target).stance);
+            const ty = this.target.y();
+            this.targetLine
+                .setTo(0, 0, tx - this.x, ty - this.y)
+                .setVisible(true);
+        } else {
+            this.targetLine.setVisible(false);
+        }
     }
 }
 
@@ -100,24 +220,30 @@ function armorSprite(armor: ARMOR, part: string): string {
     return str;
 }
 
-class TargetLine {
-    target: number | undefined;
-    lines: Phaser.GameObjects.Line[];
+class HpBar extends Phaser.GameObjects.Container {
+    // left: Phaser.GameObjects.Image;
+    // right: Phaser.GameObjects.Image;
+    middle: Phaser.GameObjects.Image;
+    //back: Phaser.GameObjects.Image;
+    width: number;
 
-    constructor(lines: Phaser.GameObjects.Line[]) {
-        this.lines = lines;
-        this.target = undefined;
+    constructor(arena: Arena, x: number, y: number, w: number) {
+        super(arena, x, y);
+
+        this.width = w;
+        this.add(arena.add.image(-w / 2, 0, 'hp_bar_back').setOrigin(0, 0.5).setScale(w, 1));
+        this.middle = arena.add.image(-w  / 2, 0, 'hp_bar_middle').setOrigin(0, 0.5);
+        this.add(this.middle);
+        this.add(arena.add.image(-w / 2 - 1, 0, 'hp_bar_side'));
+        this.add(arena.add.image(w / 2 + 1, 0, 'hp_bar_side').setFlipX(true));
+        this.setHp(1.0);
+
+        //arena.add.existing(this);
     }
 
-    setTarget(target: number | undefined) {
-        if (this.target != undefined) {
-            this.lines[this.target].visible = false;
-        }
-        console.log(`toggled set(${JSON.stringify(target)})`);
-        if (target != undefined) {
-            this.lines[target].visible = true;
-        }
-        this.target = target;
+    // from 0.0 to 1.0
+    setHp(hp: number) {
+        this.middle.setScale(hp * this.width, 1);
     }
 }
 
@@ -125,11 +251,11 @@ class Arena extends Phaser.Scene
 {
     cursors: any;//Phaser.Types.Input.Keyboard.KeyboardPlugin | undefined;
     keys: any;
-    targets: TargetLine[][];//((number | undefined)[][]) | undefined;
+    heroes: HeroActor[][];
 
     constructor() {
         super();
-        this.targets = [];
+        this.heroes = [];
     }
 
     preload ()
@@ -137,6 +263,8 @@ class Arena extends Phaser.Scene
         this.load.setBaseURL('/');
 
         this.load.image('arena_bg', 'arena_bg.png');
+
+        this.load.image('hero_quiver', 'hero_quiver.png');
         this.load.image('hero_axe_l', 'hero_axe_l.png');
         this.load.image('hero_sword_l', 'hero_sword_l.png');
         this.load.image('hero_shield_l', 'hero_shield_l.png');
@@ -155,24 +283,66 @@ class Arena extends Phaser.Scene
                 console.log(`loading hero_${part}_${material}.png`);
             }
         }
+
+        this.load.image('hp_bar_back', 'hp_bar_back.png');
+        this.load.image('hp_bar_side', 'hp_bar_side.png');
+        this.load.image('hp_bar_middle', 'hp_bar_middle.png');
+
+        this.load.image('skull', 'skull.png');
     }
 
     create ()
     {
-        this.add.image(480, 360, 'arena_bg').setPosition(240, 180);
+        this.add.image(ARENA_WIDTH, ARENA_HEIGHT, 'arena_bg').setPosition(ARENA_WIDTH / 2, ARENA_HEIGHT / 2);
 
         //this.cursors = this?.input?.keyboard?.addCapture('1,2,3,8,9,0,X,C');
         this.keys = this.input?.keyboard?.addKeys({
-            n1:  Phaser.Input.Keyboard.KeyCodes.ONE,
-            n2:  Phaser.Input.Keyboard.KeyCodes.TWO,
-            n3:  Phaser.Input.Keyboard.KeyCodes.THREE,
+            n1: Phaser.Input.Keyboard.KeyCodes.ONE,
+            n2: Phaser.Input.Keyboard.KeyCodes.TWO,
+            n3: Phaser.Input.Keyboard.KeyCodes.THREE,
+            n4: Phaser.Input.Keyboard.KeyCodes.FOUR,
             q:  Phaser.Input.Keyboard.KeyCodes.Q,
             w:  Phaser.Input.Keyboard.KeyCodes.W,
             e:  Phaser.Input.Keyboard.KeyCodes.E,
+            r:  Phaser.Input.Keyboard.KeyCodes.R,
             a:  Phaser.Input.Keyboard.KeyCodes.A,
             s:  Phaser.Input.Keyboard.KeyCodes.S,
             d:  Phaser.Input.Keyboard.KeyCodes.D,
             x:  Phaser.Input.Keyboard.KeyCodes.X,
+            f:  Phaser.Input.Keyboard.KeyCodes.F,
+        });
+        let toggleStance = (stance: STANCE) => {
+            if (stance == STANCE.neutral) {
+                return STANCE.aggressive;
+            } else if (stance == STANCE.aggressive) {
+                return STANCE.defensive;
+            }
+            return STANCE.neutral;
+        };
+        this.input?.keyboard?.on('keydown-FOUR', () => {
+            const hero = this.heroes[0][0];
+            hero.setStance(toggleStance(hero.stance));
+        });
+        this.input?.keyboard?.on('keydown-R', () => {
+            const hero = this.heroes[0][1];
+            hero.setStance(toggleStance(hero.stance));
+        });
+        this.input?.keyboard?.on('keydown-F', () => {
+            const hero = this.heroes[0][2];
+            hero.setStance(toggleStance(hero.stance));
+        });
+        //p2
+        this.input?.keyboard?.on('keydown-FIVE', () => {
+            const hero = this.heroes[1][0];
+            hero.setStance(toggleStance(hero.stance));
+        });
+        this.input?.keyboard?.on('keydown-T', () => {
+            const hero = this.heroes[1][1];
+            hero.setStance(toggleStance(hero.stance));
+        });
+        this.input?.keyboard?.on('keydown-G', () => {
+            const hero = this.heroes[1][2];
+            hero.setStance(toggleStance(hero.stance));
         });
 
         //this.cursors = this.input?.keyboard?.createCursorKeys();
@@ -192,35 +362,15 @@ class Arena extends Phaser.Scene
             [STANCE.aggressive, STANCE.neutral, STANCE.defensive],
             [STANCE.defensive, STANCE.aggressive, STANCE.neutral]
         ];
-        let stanceX = (i: number, team: number) => {
-            switch (stances[team][i]) {
-                case STANCE.aggressive:
-                    return team == 0 ? 23 : -23;
-                case STANCE.defensive:
-                    return team == 0 ? -23 : 23;
-            }
-            return 0;
-        };
 
-        this.targets = [];
         for (let team = 0; team < 2; ++team) {
-            let targets: TargetLine[] = [];
+            let hero_actors = [];
             for (let i = 0; i < 3; ++i) {
-                const x = stanceX(i, team) + (team == 0 ? (170 - 5 * i) : (480 - 170 + 5 * i));
-                const y = 140 + 55 * i;
-                createHero(this, x, y, heroes[team][i], team == 1)
-                const lines: Phaser.GameObjects.Line[] = [];
-                for (let j = 0; j < 3; ++j) {
-                    const x2 = stanceX(j, team == 0 ? 1 : 0) + (team != 0 ? (170 - 5 * j) : (480 - 170 + 5 * j));
-                    const y2 = 140 + 55 * j;
-                    const line = this.add.line(0, 0, x, y, x2, y2, team == 0 ? 0x3333bb : 0xbb3333, 0.3).setOrigin(0, 0);
-                    line.setLineWidth(3);
-                    line.visible = false;
-                    lines.push(line);
-                }
-                targets.push(new TargetLine(lines));
+                const rank = new Rank(i as HeroIndex, team as Team);
+                // TODO: how to do these loops so typescript knows that team/i are 0-1 and 0-2?
+                hero_actors.push(new HeroActor(this, heroes[team][i], rank));
             }
-            this.targets.push(targets);
+            this.heroes.push(hero_actors);
         }
 
 
@@ -252,54 +402,53 @@ class Arena extends Phaser.Scene
 
     update() {
         if (this.keys.n1.isDown) {
-            //console.log('0 -> 0');
-            this.targets[0][0].setTarget(0);
+            this.heroes[0][0].setTarget(new Rank(0, 1));
         }
         if (this.keys.n2.isDown) {
-            //console.log('0 -> 1');
-            this.targets[0][0].setTarget(1);
+            this.heroes[0][0].setTarget(new Rank(1, 1));
         }
         if (this.keys.n3.isDown) {
-            //console.log('0 -> 2');
-            this.targets[0][0].setTarget(2);
+            this.heroes[0][0].setTarget(new Rank(2, 1));
         }
         if (this.keys.q.isDown) {
-            //console.log('1 -> 0');
-            this.targets[0][1].setTarget(0);
+            this.heroes[0][1].setTarget(new Rank(0, 1));
         }
         if (this.keys.w.isDown) {
-            //console.log('1 -> 1');
-            this.targets[0][1].setTarget(1);
+            this.heroes[0][1].setTarget(new Rank(1, 1));
         }
         if (this.keys.e.isDown) {
-            //console.log('1 -> 2');
-            this.targets[0][1].setTarget(2);
+            this.heroes[0][1].setTarget(new Rank(2, 1));
         }
         if (this.keys.a.isDown) {
-            //console.log('2 -> 0');
-            this.targets[0][2].setTarget(0);
+            this.heroes[0][2].setTarget(new Rank(0, 1));
         }
         if (this.keys.s.isDown) {
-            //console.log('2 -> 1');
-            this.targets[0][2].setTarget(1);
+            this.heroes[0][2].setTarget(new Rank(1, 1));
         }
         if (this.keys.d.isDown) {
-            //console.log('2 -> 2');
-            this.targets[0][2].setTarget(2);
+            this.heroes[0][2].setTarget(new Rank(2, 1));
         }
         if (this.keys.x.isDown) {
             for (let i = 0; i < 3; ++i) {
-                this.targets[0][i].setTarget(undefined);
+                this.heroes[0][i].setTarget(undefined);
             }
         }
+    }
+
+    getHero(rank: Rank): HeroActor {
+        return this.heroes[rank.team][rank.index];
+    }
+
+    getAliveHeroes(team: Team): HeroActor[] {
+        return this.heroes[team].filter((h) => h.isAlive());
     }
 }
 
 
 const config = {
     type: Phaser.AUTO,
-    width: 480,
-    height: 360,
+    width: ARENA_WIDTH,
+    height: ARENA_HEIGHT,
     scene: Arena,
     // physics: {
     //     default: 'arcade',

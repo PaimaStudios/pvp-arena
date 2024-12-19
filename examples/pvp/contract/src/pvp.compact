@@ -243,7 +243,7 @@ circuit battle_round(): RESULT {
             p2_dmg_2 = (p2_dmg_2 + calc_item_dmg_against(p1_heroes[1].lhs, p1_stats[1], p2_stats[2]) + calc_item_dmg_against(p1_heroes[1].rhs, p1_stats[0], p2_stats[2])) as Uint<32>;
         }
     }
-    if (p1_dmg_0 < DEAD) {
+    if (p1_dmg_2 < DEAD) {
         if (p1_cmds.value[2] == 0) {
             p2_dmg_0 = (p2_dmg_0 + calc_item_dmg_against(p1_heroes[2].lhs, p1_stats[2], p2_stats[0]) + calc_item_dmg_against(p1_heroes[1].rhs, p1_stats[2], p2_stats[0])) as Uint<32>;
         } else if (p1_cmds.value[2] == 1) {
@@ -270,7 +270,7 @@ circuit battle_round(): RESULT {
             p1_dmg_2 = (p1_dmg_2 + calc_item_dmg_against(p2_heroes[1].lhs, p2_stats[1], p1_stats[2]) + calc_item_dmg_against(p2_heroes[1].rhs, p2_stats[0], p1_stats[2])) as Uint<32>;
         }
     }
-    if (p2_dmg_0 < DEAD) {
+    if (p2_dmg_2 < DEAD) {
         if (p2_cmds.value[2] == 0) {
             p1_dmg_0 = (p1_dmg_0 + calc_item_dmg_against(p2_heroes[2].lhs, p2_stats[2], p1_stats[0]) + calc_item_dmg_against(p2_heroes[1].rhs, p2_stats[2], p1_stats[0])) as Uint<32>;
         } else if (p2_cmds.value[2] == 1) {
