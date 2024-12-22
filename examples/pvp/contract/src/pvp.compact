@@ -56,7 +56,17 @@ export ledger instance: Counter;
 export ledger p1_sig: Cell<Field>;
 export ledger p2_sig: Cell<Maybe<Field>>;
 
+// why can't compact just support local vars?!
+//export ledger tmp_moves: Vector<3, Uint<32>>;
+//export ledger tmp_stances: Vector<3, STANCE>;
+
 witness player_secret_key(): Bytes<32>;
+
+//witness player_commands(): Vector<3, Command>;
+
+witness player_moves(): Vector<3, Uint<32>>;
+
+witness player_stances(): Vector<3, STANCE>;
 
 constructor(p1: Vector<3, Hero>, p2: Vector<3, Hero>) {
     p1_heroes = p1;
@@ -192,10 +202,12 @@ export circuit reg_p2(): Void {
     p2_sig = some<Field>(1);//calc_sig(player_sk(), instance as Field));
 }
 
-export circuit p1_command(cmds: Vector<3, Uint<32>>): RESULT {
+export circuit p1_command(): RESULT {
     //assert calc_sig(player_sk(), instance as Field as Bytes<32>) == p1_sig "Not authorized as P1";
     // TODO: commitments
-    p1_cmds = some<Vector<3, Uint<32>>>(cmds);//[Uint<32> { attack: cmds[0], stance: STANCE.neutral}, Uint<32> { attack: cmds[1], stance: STANCE.neutral}, Uint<32> { attack: cmds[2], stance: STANCE.neutral}]]);
+    p1_stances = player_stances();
+    p1_cmds = some<Vector<3, Uint<32>>>(player_moves());//[Uint<32> { attack: cmds[0], stance: STANCE.neutral}, Uint<32> { attack: cmds[1], stance: STANCE.neutral}, Uint<32> { attack: cmds[2], stance: STANCE.neutral}]]);
+    
     if (p2_cmds == none<Vector<3, Uint<32>>>()) {
         return RESULT.waiting;
     }
@@ -222,9 +234,10 @@ pure circuit stance_damage_modifier(stance: STANCE): Uint<32> {
 //     return battle_round();
 // }
 
-export circuit p2_command(cmds: Vector<3, Uint<32>>): RESULT {
+export circuit p2_command(/*cmds: Vector<3, Uint<32>>, stances: Vector<3, STANCE>*/): RESULT {
     // TODO: commitments
-    p2_cmds = some<Vector<3, Uint<32>>>(cmds);
+    p2_cmds = some<Vector<3, Uint<32>>>(player_moves());
+    p2_stances = player_stances();
     if (p1_cmds == none<Vector<3, Uint<32>>>()) {
         return RESULT.waiting;
     }

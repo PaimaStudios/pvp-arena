@@ -9,6 +9,7 @@ import { type Logger } from 'pino';
 import type { BBoardDerivedState, BBoardContract, BBoardProviders, DeployedBBoardContract } from './common-types.js';
 import {
   type BBoardPrivateState,
+  type DynamicWitnesses,
   Contract,
   createBBoardPrivateState,
   ledger,
@@ -37,8 +38,8 @@ export interface DeployedBBoardAPI {
   readonly state$: Observable<BBoardDerivedState>;
 
   reg_p2: () => Promise<void>;
-  p1Command: (commands: bigint[]) => Promise<RESULT>;
-  p2Command: (commands: bigint[]) => Promise<RESULT>;
+  p1Command: () => Promise<RESULT>;
+  p2Command: () => Promise<RESULT>;
 }
 
 /**
@@ -149,7 +150,7 @@ export class BBoardAPI implements DeployedBBoardAPI {
     });
   }
 
-  async p1Command(commands: bigint[]): Promise<RESULT> {
+  async p1Command(): Promise<RESULT> {
     this.logger?.info('p1Command');
 
     //console.log(`commands: ${commands.map((c) => c.attack.toString()).join(',')}`);
@@ -157,7 +158,7 @@ export class BBoardAPI implements DeployedBBoardAPI {
     console.log('before[1]');
     var txData;
     try {
-      txData = await this.deployedContract.callTx.p1_command(commands);
+      txData = await this.deployedContract.callTx.p1_command();
     } catch (err) {
       console.log(`p1Cmd failed: ${JSON.stringify(err)}`);
       throw err;
@@ -174,13 +175,13 @@ export class BBoardAPI implements DeployedBBoardAPI {
     return txData.private.result;
   }
 
-  async p2Command(commands: bigint[]): Promise<RESULT> {
+  async p2Command(): Promise<RESULT> {
     this.logger?.info('p2Command');
 
     console.log('before[2]');
     var txData;
     try {
-      txData = await this.deployedContract.callTx.p2_command(commands);
+      txData = await this.deployedContract.callTx.p2_command();
     } catch (err) {
       console.log(`p2Cmd failed: ${JSON.stringify(err)}`);
       throw err;
@@ -207,15 +208,15 @@ export class BBoardAPI implements DeployedBBoardAPI {
    * @returns A `Promise` that resolves with a {@link BBoardAPI} instance that manages the newly deployed
    * {@link DeployedBBoardContract}; or rejects with a deployment error.
    */
-  static async deploy(providers: BBoardProviders, logger?: Logger): Promise<BBoardAPI> {
-    logger?.info('deployContract');
+  static async deploy(providers: BBoardProviders, dynamicWitnesses: DynamicWitnesses, logger?: Logger): Promise<BBoardAPI> {
+    logger?.info(`deployContract(${dynamicWitnesses})`);
 
     // EXERCISE 5: FILL IN THE CORRECT ARGUMENTS TO deployContract
     const deployedBBoardContract = await deployContract(providers, {
       // EXERCISE ANSWER
       privateStateKey: 'pvpPrivateState', // EXERCISE ANSWER
       contract: pvpContractInstance,
-      initialPrivateState: await BBoardAPI.getPrivateState(providers), // EXERCISE ANSWER
+      initialPrivateState: BBoardAPI.makeNewPrivateState(dynamicWitnesses),//await BBoardAPI.getPrivateState(providers, dynamicWitnesses), // EXERCISE ANSWER
       args: [            [
         { lhs: ITEM.axe, rhs: ITEM.sword, helmet: ARMOR.leather, chest: ARMOR.leather, skirt: ARMOR.nothing, greaves: ARMOR.leather },
         { lhs: ITEM.bow, rhs: ITEM.nothing, helmet: ARMOR.nothing, chest: ARMOR.nothing, skirt: ARMOR.leather, greaves: ARMOR.metal },
@@ -226,6 +227,8 @@ export class BBoardAPI implements DeployedBBoardAPI {
         { lhs: ITEM.sword, rhs: ITEM.sword, helmet: ARMOR.nothing, chest: ARMOR.nothing, skirt: ARMOR.nothing, greaves: ARMOR.nothing },
     ]],
     });
+    
+    console.log('!!!!\n\n\ndeployed contract!\n\n\n\n!!!!');
 
     logger?.trace({
       contractDeployed: {
@@ -245,7 +248,7 @@ export class BBoardAPI implements DeployedBBoardAPI {
    * @returns A `Promise` that resolves with a {@link BBoardAPI} instance that manages the joined
    * {@link DeployedBBoardContract}; or rejects with an error.
    */
-  static async join(providers: BBoardProviders, contractAddress: ContractAddress, logger?: Logger): Promise<BBoardAPI> {
+  static async join(providers: BBoardProviders, contractAddress: ContractAddress, dynamicWitnesses: DynamicWitnesses, logger?: Logger): Promise<BBoardAPI> {
     logger?.info({
       joinContract: {
         contractAddress,
@@ -256,7 +259,7 @@ export class BBoardAPI implements DeployedBBoardAPI {
       contractAddress,
       contract: pvpContractInstance,
       privateStateKey: 'pvpPrivateState',
-      initialPrivateState: await BBoardAPI.getPrivateState(providers),
+      initialPrivateState: BBoardAPI.makeNewPrivateState(dynamicWitnesses),//await BBoardAPI.getPrivateState(providers, dynamicWitnesses),
     });
 
     logger?.trace({
@@ -268,8 +271,14 @@ export class BBoardAPI implements DeployedBBoardAPI {
     return new BBoardAPI(deployedBBoardContract, providers, logger);
   }
 
-  private static async getPrivateState(providers: BBoardProviders): Promise<BBoardPrivateState> {
+  private static async getPrivateState(providers: BBoardProviders, dynamicWitnesses: DynamicWitnesses): Promise<BBoardPrivateState> {
+    console.log(`*** dynamicWitnesses: ${dynamicWitnesses}`);
     const existingPrivateState = await providers.privateStateProvider.get('pvpPrivateState');
+    if (existingPrivateState != null) {
+      //existingPrivateState.dynamicWitnesses = dynamicWitnesses;
+      console.log(``);
+    }
+    //console.log(`existing state? ${existingPrivateState} || ${existingPrivateState?.dynamicWitnesses.moves}`);
     // hacky convert bytes[32] to bigint
     const randSrc = utils.randomBytes(32);
     // let randBigInt = BigInt(0);
@@ -278,7 +287,12 @@ export class BBoardAPI implements DeployedBBoardAPI {
     //   randBigInt += BigInt(randSrc[i]) * scalar;
     //   scalar *= BigInt(256);
     // }
-    return existingPrivateState ?? createBBoardPrivateState(randSrc);
+    return existingPrivateState ?? createBBoardPrivateState(randSrc, dynamicWitnesses);
+  }
+
+  private static makeNewPrivateState(dynamicWitnesses: DynamicWitnesses): BBoardPrivateState {
+    const randSrc = utils.randomBytes(32);
+    return createBBoardPrivateState(randSrc, dynamicWitnesses)
   }
 }
 

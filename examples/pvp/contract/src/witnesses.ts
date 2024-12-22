@@ -3,8 +3,25 @@
  * as well as the single witness function that accesses it.
  */
 
-import { Ledger } from './managed/pvp/contract/index.cjs';
+import { Ledger, STANCE } from './managed/pvp/contract/index.cjs';
 import { WitnessContext } from '@midnight-ntwrk/compact-runtime';
+
+// this is god-awfully hacky but I can't figure out how to access the witnesses in another way
+// without making a lot of changes to contract management code since the examples only have
+// static witnesses
+// export interface DynamicWitnesses {
+//   moves: () => bigint[];
+//   stances: () => STANCE[];
+//   dbg: () => string;
+// }
+
+export abstract class DynamicWitnesses {
+  public abstract moves(): bigint[];
+  public abstract stances(): STANCE[];
+  public abstract dbg(): string;
+}
+
+
 
 /* **********************************************************************
  * The only hidden state needed by the bulletin board contract is
@@ -15,14 +32,21 @@ import { WitnessContext } from '@midnight-ntwrk/compact-runtime';
  */
 
 export type BBoardPrivateState = {
-  // EXERCISE 1a: FILL IN A REPRESENTATION OF THE PRIVATE STATE
-  readonly secretKey: Uint8Array; // EXERCISE ANSWER
+  readonly secretKey: Uint8Array;
+  //dynamicWitnesses: DynamicWitnesses;
+  moves: bigint[];
+  stances: STANCE[];
 };
 
-export const createBBoardPrivateState = (secretKey: Uint8Array) => ({
-  // EXERCISE 1b: INITIALIZE THE OBJECT OF TYPE BBoardPrivateState
-  secretKey, // EXERCISE ANSWER
-});
+export const createBBoardPrivateState = (secretKey: Uint8Array, dynamicWitnesses: DynamicWitnesses) => {
+  console.log(`  -- createBBoardPrivateState: ${JSON.stringify(dynamicWitnesses)} | ${dynamicWitnesses.dbg()}`);
+  return {
+    secretKey,
+    //dynamicWitnesses,
+    moves: [],
+    stances: [],
+  };
+};
 
 /* **********************************************************************
  * The witnesses object for the bulletin board contract is an object
@@ -53,8 +77,23 @@ export const createBBoardPrivateState = (secretKey: Uint8Array) => ({
  */
 export const witnesses = {
   player_secret_key: ({ privateState }: WitnessContext<Ledger, BBoardPrivateState>): [BBoardPrivateState, Uint8Array] => [
-    // EXERCISE 2: WHAT ARE THE CORRECT TWO VALUES TO RETURN HERE?
-    privateState, // EXERCISE ANSWER
-    privateState.secretKey, // EXERCISE ANSWER
+    privateState,
+    privateState.secretKey,
   ],
+
+  player_moves: ({ privateState }: WitnessContext<Ledger, BBoardPrivateState>): [BBoardPrivateState, bigint[]] => {
+    //console.log(`let's try JSON:  ; ${JSON.stringify(privateState.dynamicWitnesses)}`);
+    //console.log(`player_moves() impl called - has it been initialized? [2] ${privateState.dynamicWitnesses.dbg()}`);
+    return [
+      privateState,
+      privateState.moves,
+      //privateState.dynamicWitnesses.moves(),
+    ]
+  },
+
+  player_stances: ({ privateState }: WitnessContext<Ledger, BBoardPrivateState>): [BBoardPrivateState, STANCE[]] => [
+    privateState,
+    privateState.stances,
+    //privateState.dynamicWitnesses.stances(),
+  ]
 };

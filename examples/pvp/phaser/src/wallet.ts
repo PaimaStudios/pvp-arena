@@ -1,4 +1,5 @@
 import { type DeployedBBoardAPI, BBoardAPI, type BBoardProviders } from '@midnight-ntwrk/pvp-api';
+import { type DynamicWitnesses } from '@midnight-ntwrk/pvp-contract';
 import { type ContractAddress } from '@midnight-ntwrk/compact-runtime';
 import {
   BehaviorSubject,
@@ -47,21 +48,21 @@ export class BrowserDeploymentManager {
   constructor(private readonly logger: Logger) {
   }
 
-  async create(): Promise<BBoardAPI> {
+  async create(dynamicWitnesses: DynamicWitnesses): Promise<BBoardAPI> {
     console.log('getting providers');
     const providers = await this.getProviders();
     console.log('trying to create');
-    return BBoardAPI.deploy(providers, this.logger).then((api) => {
+    return BBoardAPI.deploy(providers, dynamicWitnesses, this.logger).then((api) => {
       console.log('got create api');
       return api;
     });
   }
-  async join(contractAddress: ContractAddress): Promise<BBoardAPI> {
+  async join(contractAddress: ContractAddress, dynamicWitnesses: DynamicWitnesses): Promise<BBoardAPI> {
     console.log('getting providers');
     const providers = await this.getProviders();
     console.log('trying to join');
     // TODO: do we need error handling?
-    return BBoardAPI.join(providers, contractAddress, this.logger)
+    return BBoardAPI.join(providers, contractAddress, dynamicWitnesses, this.logger)
       .then((api) => { console.log('got join api'); return api.reg_p2().then(() => { console.log('registered p2'); return api; }) });
   }
 

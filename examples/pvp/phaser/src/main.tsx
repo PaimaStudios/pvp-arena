@@ -1,6 +1,6 @@
 import { NetworkId, setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 import '@midnight-ntwrk/dapp-connector-api';
-import { ITEM, RESULT, STANCE, Hero, ARMOR } from '@midnight-ntwrk/pvp-contract';
+import { ITEM, RESULT, STANCE, Hero, ARMOR, DynamicWitnesses } from '@midnight-ntwrk/pvp-contract';
 import { type BBoardDerivedState, type DeployedBBoardAPI, BBoardAPI } from '@midnight-ntwrk/pvp-api';
 import './globals';
 import { type ContractAddress } from '@midnight-ntwrk/compact-runtime';
@@ -283,11 +283,13 @@ class MainMenu extends Phaser.Scene {
             if (!this.waiting) {
                 this.text?.setText('Creating match, please wait...');
                 this.waiting = true;
-                this.deployProvider.create().then((api) => {
+                const witnesses = new ArenaDynamicWitnesses();
+                this.deployProvider.create(witnesses).then((api) => {
                     console.log('====================\napi done from creating\n===============');
                     console.log(`contract address: ${api.deployedContractAddress}`);
                     navigator.clipboard.writeText(api.deployedContractAddress);
                     const arena = new Arena(api, true);
+                    witnesses.init(arena);
                     this.scene.add('Arena', arena);
                     this.scene.start('Arena');
                 });
@@ -299,9 +301,11 @@ class MainMenu extends Phaser.Scene {
                 if (contractAddress != null) {
                     this.text?.setText('Joining match, please wait...');
                     this.waiting = true;
-                    this.deployProvider.join(contractAddress).then((api) => {
+                    const witnesses = new ArenaDynamicWitnesses();
+                    this.deployProvider.join(contractAddress, witnesses).then((api) => {
                         console.log('=====================\napi done from joining\n======================');
                         const arena = new Arena(api, false);
+                        witnesses.init(arena);
                         this.scene.add('Arena', arena);
                         this.scene.start('Arena');
                     });
@@ -321,6 +325,47 @@ enum MatchState {
     WaitingOnPlayer,
     WaitingOnOpponent,
     SubmittingMove,
+}
+
+// this is god-awfully hacky but I can't figure out how to access the witnesses in another way
+// without making a lot of changes to contract management code since the examples only have
+// static witnesses
+class ArenaDynamicWitnesses extends DynamicWitnesses {
+    public test: number;
+    public arena: Arena | undefined;
+
+    constructor() {
+        super();
+        this.test = 9;
+        this.arena = undefined;
+    }
+
+    init(arena: Arena) {
+        console.log(`ArenaDynamicWitnesses.init(${arena})`);
+        this.arena = arena;
+    }
+
+    // moves: () => bigint[] = () => {
+    //     return this.arena!.heroes[this.arena!.playerTeam()].map((hero) => BigInt(hero.target!.index));
+    // }
+
+    // stances: () => STANCE[] = () => {
+    //     return this.arena!.heroes[this.arena!.playerTeam()].map((hero) => hero.stance);
+    // }
+
+    // dbg: () => string = () => `D B G: ${this.arena}`;
+
+    moves(): bigint[] {
+        return this.arena!.heroes[this.arena!.playerTeam()].map((hero) => BigInt(hero.target!.index));
+    }
+
+    stances(): STANCE[] {
+        return this.arena!.heroes[this.arena!.playerTeam()].map((hero) => hero.stance);
+    }
+
+    dbg(): string {
+        return `D B G: ${this.arena}`;
+    }
 }
 
 class Arena extends Phaser.Scene
@@ -486,18 +531,25 @@ class Arena extends Phaser.Scene
         this.input?.keyboard?.on('keydown-Z', () => {
             //const stances = this.heroes[this.playerTeam()].map((hero) => hero.stance);
             const moves = this.heroes[this.playerTeam()].filter((hero) => hero.target != undefined && hero.target.team == this.opponentTeam()).map((hero) => BigInt(hero.target!.index));
+            if (this.api != undefined) {
+                console.log(`old private state: ${JSON.stringify(this.api?.deployedContract.deployTxData.private.initialPrivateState)}`);
+                this.api.deployedContract.deployTxData.private.initialPrivateState.stances = this.heroes[this.playerTeam()].map((hero) => hero.stance);
+                console.log(`new private state: ${JSON.stringify(this.api?.deployedContract.deployTxData.private.initialPrivateState)}`);
+                this.api.deployedContract.deployTxData.private.initialPrivateState.moves = this.heroes[this.playerTeam()].map((hero) => BigInt(hero.target!.index));
+                console.log(`moves: ${this.api.deployedContract.deployTxData.private.initialPrivateState.moves.map((m) => m.toString()).join(',')}`);
+            }
             // TODO: need to check vs number of alive heroes
             if (moves.length == 3) {
                 if (this.api != undefined) {
                     this.setMatchState(MatchState.SubmittingMove);
                     if (this.isP1) {
                         console.log('submitting move (as p1)');
-                        this.api.p1Command(moves).then((result) => {
+                        this.api.p1Command().then((result) => {
                             // ???
                         });
                     } else {
                         console.log('submitting move (as p2)');
-                        this.api.p2Command(moves).then((result) => {
+                        this.api.p2Command().then((result) => {
                             // ???
                         });
                     }
