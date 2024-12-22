@@ -178,7 +178,7 @@ export circuit item_dex_bonus(item: ITEM): Uint<32> {
 //     return (item_armor(hero.lhs) + item_armor(hero.rhs) + armor_armor(hero.armor_helmet) + armor_armor(hero.armor_chest) + armor_armor(hero.armor_skirt) + armor_armor(hero.armor_greaves)) as Uint<32>;
 // }
 
-export circuit calc_item_dmg_against(item: ITEM, stats: TotalStats, enemy_stats: TotalStats): Uint<32> {
+export circuit calc_item_dmg_against(lhs: ITEM/*, stats: TotalStats, enemy_stats: TotalStats*/): Uint<32> {
     //return ((100 - enemy_armor) * item_dmg(item) + enemy_armor * item_armor_dmg(item) * dex) as Uint<32>;
     //return ((100 - enemy_stats.crush_def) * item_crush_dmg(item) + (100 - enemy_stats.pierce_def) * item_pierce_def(item) + dex * item_dex_bonus(item)) as Uint<32>;
     return 25;
@@ -204,6 +204,15 @@ export circuit p1_command(cmds: Vector<3, Uint<32>>): RESULT {
     // return RESULT.waiting;
 }
 
+pure circuit stance_damage_modifier(stance: STANCE): Uint<32> {
+    if (stance == STANCE.aggressive) {
+        return 7;
+    } else if (stance == STANCE.defensive) {
+        return 3;
+    }
+    return 5;
+}
+
 // export circuit p1_command(cmds: Vector<3, Uint<32>>): RESULT {
 //     // TODO: commitments
 //     p1_cmds = some<Vector<3, Uint<32>>>(cmds);
@@ -227,56 +236,56 @@ circuit battle_round(): RESULT {
 
     if (p1_dmg_0 < DEAD) {
         if (p1_cmds.value[0] == 0) {
-            p2_dmg_0 = (p2_dmg_0 + calc_item_dmg_against(p1_heroes[0].lhs, p1_stats[0], p2_stats[0]) + calc_item_dmg_against(p1_heroes[0].rhs, p1_stats[0], p2_stats[0])) as Uint<32>;
+            p2_dmg_0 = (p2_dmg_0 + calc_item_dmg_against(p1_heroes[0].lhs/*, p1_stats[0], p2_stats[0]*/) + calc_item_dmg_against(p1_heroes[0].rhs/*, p1_stats[0], p2_stats[0]*/)) as Uint<32>;
         } else if (p1_cmds.value[0] == 1) {
-            p2_dmg_1 = (p2_dmg_1 + calc_item_dmg_against(p1_heroes[0].lhs, p1_stats[0], p2_stats[1]) + calc_item_dmg_against(p1_heroes[0].rhs, p1_stats[0], p2_stats[1])) as Uint<32>;
+            p2_dmg_1 = (p2_dmg_1 + calc_item_dmg_against(p1_heroes[0].lhs/*, p1_stats[0], p2_stats[1]*/) + calc_item_dmg_against(p1_heroes[0].rhs/*, p1_stats[0], p2_stats[1]*/)) as Uint<32>;
         } else {
-            p2_dmg_2 = (p2_dmg_2 + calc_item_dmg_against(p1_heroes[0].lhs, p1_stats[0], p2_stats[2]) + calc_item_dmg_against(p1_heroes[0].rhs, p1_stats[0], p2_stats[2])) as Uint<32>;
+            p2_dmg_2 = (p2_dmg_2 + calc_item_dmg_against(p1_heroes[0].lhs/*, p1_stats[0], p2_stats[2]*/) + calc_item_dmg_against(p1_heroes[0].rhs/*, p1_stats[0], p2_stats[2]*/)) as Uint<32>;
         }
     }
     if (p1_dmg_1 < DEAD) {
         if (p1_cmds.value[1] == 0) {
-            p2_dmg_0 = (p2_dmg_0 + calc_item_dmg_against(p1_heroes[1].lhs, p1_stats[1], p2_stats[0]) + calc_item_dmg_against(p1_heroes[1].rhs, p1_stats[0], p2_stats[0])) as Uint<32>;
+            p2_dmg_0 = (p2_dmg_0 + calc_item_dmg_against(p1_heroes[1].lhs/*, p1_stats[1], p2_stats[0]*/) + calc_item_dmg_against(p1_heroes[1].rhs/*, p1_stats[0], p2_stats[0]*/)) as Uint<32>;
         } else if (p1_cmds.value[1] == 1) {
-            p2_dmg_1 = (p2_dmg_1 + calc_item_dmg_against(p1_heroes[1].lhs, p1_stats[1], p2_stats[1]) + calc_item_dmg_against(p1_heroes[1].rhs, p1_stats[0], p2_stats[1])) as Uint<32>;
+            p2_dmg_1 = (p2_dmg_1 + calc_item_dmg_against(p1_heroes[1].lhs/*, p1_stats[1], p2_stats[1]*/) + calc_item_dmg_against(p1_heroes[1].rhs/*, p1_stats[0], p2_stats[1]*/)) as Uint<32>;
         } else {
-            p2_dmg_2 = (p2_dmg_2 + calc_item_dmg_against(p1_heroes[1].lhs, p1_stats[1], p2_stats[2]) + calc_item_dmg_against(p1_heroes[1].rhs, p1_stats[0], p2_stats[2])) as Uint<32>;
+            p2_dmg_2 = (p2_dmg_2 + calc_item_dmg_against(p1_heroes[1].lhs/*, p1_stats[1], p2_stats[2]*/) + calc_item_dmg_against(p1_heroes[1].rhs/*, p1_stats[0], p2_stats[2]*/)) as Uint<32>;
         }
     }
     if (p1_dmg_2 < DEAD) {
         if (p1_cmds.value[2] == 0) {
-            p2_dmg_0 = (p2_dmg_0 + calc_item_dmg_against(p1_heroes[2].lhs, p1_stats[2], p2_stats[0]) + calc_item_dmg_against(p1_heroes[1].rhs, p1_stats[2], p2_stats[0])) as Uint<32>;
+            p2_dmg_0 = (p2_dmg_0 + calc_item_dmg_against(p1_heroes[2].lhs/*, p1_stats[2], p2_stats[0]*/) + calc_item_dmg_against(p1_heroes[1].rhs/*, p1_stats[2], p2_stats[0]*/)) as Uint<32>;
         } else if (p1_cmds.value[2] == 1) {
-            p2_dmg_1 = (p2_dmg_1 + calc_item_dmg_against(p1_heroes[2].lhs, p1_stats[2], p2_stats[1]) + calc_item_dmg_against(p1_heroes[1].rhs, p1_stats[2], p2_stats[1])) as Uint<32>;
+            p2_dmg_1 = (p2_dmg_1 + calc_item_dmg_against(p1_heroes[2].lhs/*, p1_stats[2], p2_stats[1]*/) + calc_item_dmg_against(p1_heroes[1].rhs/*, p1_stats[2], p2_stats[1]*/)) as Uint<32>;
         } else {
-            p2_dmg_2 = (p2_dmg_2 + calc_item_dmg_against(p1_heroes[2].lhs, p1_stats[2], p2_stats[2]) + calc_item_dmg_against(p1_heroes[1].rhs, p1_stats[2], p2_stats[2])) as Uint<32>;
+            p2_dmg_2 = (p2_dmg_2 + calc_item_dmg_against(p1_heroes[2].lhs/*, p1_stats[2], p2_stats[2]*/) + calc_item_dmg_against(p1_heroes[1].rhs/*, p1_stats[2], p2_stats[2]*/)) as Uint<32>;
         }
     }
     if (p2_dmg_0 < DEAD) {
         if (p2_cmds.value[0] == 0) {
-            p1_dmg_0 = (p1_dmg_0 + calc_item_dmg_against(p2_heroes[0].lhs, p2_stats[0], p1_stats[0]) + calc_item_dmg_against(p2_heroes[0].rhs, p2_stats[0], p1_stats[0])) as Uint<32>;
+            p1_dmg_0 = (p1_dmg_0 + calc_item_dmg_against(p2_heroes[0].lhs/*, p2_stats[0], p1_stats[0]*/) + calc_item_dmg_against(p2_heroes[0].rhs/*, p2_stats[0], p1_stats[0]*/)) as Uint<32>;
         } else if (p2_cmds.value[0] == 1) {
-            p1_dmg_1 = (p1_dmg_1 + calc_item_dmg_against(p2_heroes[0].lhs, p2_stats[0], p1_stats[1]) + calc_item_dmg_against(p2_heroes[0].rhs, p2_stats[0], p1_stats[1])) as Uint<32>;
+            p1_dmg_1 = (p1_dmg_1 + calc_item_dmg_against(p2_heroes[0].lhs/*, p2_stats[0], p1_stats[1]*/) + calc_item_dmg_against(p2_heroes[0].rhs/*, p2_stats[0], p1_stats[1]*/)) as Uint<32>;
         } else {
-            p1_dmg_2 = (p1_dmg_2 + calc_item_dmg_against(p2_heroes[0].lhs, p2_stats[0], p1_stats[2]) + calc_item_dmg_against(p2_heroes[0].rhs, p2_stats[0], p1_stats[2])) as Uint<32>;
+            p1_dmg_2 = (p1_dmg_2 + calc_item_dmg_against(p2_heroes[0].lhs/*, p2_stats[0], p1_stats[2]*/) + calc_item_dmg_against(p2_heroes[0].rhs/*, p2_stats[0], p1_stats[2]*/)) as Uint<32>;
         }
     }
     if (p2_dmg_1 < DEAD) {
         if (p2_cmds.value[1] == 0) {
-            p1_dmg_0 = (p1_dmg_0 + calc_item_dmg_against(p2_heroes[1].lhs, p2_stats[1], p1_stats[0]) + calc_item_dmg_against(p2_heroes[1].rhs, p2_stats[0], p1_stats[0])) as Uint<32>;
+            p1_dmg_0 = (p1_dmg_0 + calc_item_dmg_against(p2_heroes[1].lhs/*, p2_stats[1], p1_stats[0]*/) + calc_item_dmg_against(p2_heroes[1].rhs/*, p2_stats[0], p1_stats[0]*/)) as Uint<32>;
         } else if (p2_cmds.value[1] == 1) {
-            p1_dmg_1 = (p1_dmg_1 + calc_item_dmg_against(p2_heroes[1].lhs, p2_stats[1], p1_stats[1]) + calc_item_dmg_against(p2_heroes[1].rhs, p2_stats[0], p1_stats[1])) as Uint<32>;
+            p1_dmg_1 = (p1_dmg_1 + calc_item_dmg_against(p2_heroes[1].lhs/*, p2_stats[1], p1_stats[1]*/) + calc_item_dmg_against(p2_heroes[1].rhs/*, p2_stats[0], p1_stats[1]*/)) as Uint<32>;
         } else {
-            p1_dmg_2 = (p1_dmg_2 + calc_item_dmg_against(p2_heroes[1].lhs, p2_stats[1], p1_stats[2]) + calc_item_dmg_against(p2_heroes[1].rhs, p2_stats[0], p1_stats[2])) as Uint<32>;
+            p1_dmg_2 = (p1_dmg_2 + calc_item_dmg_against(p2_heroes[1].lhs/*, p2_stats[1], p1_stats[2]*/) + calc_item_dmg_against(p2_heroes[1].rhs/*, p2_stats[0], p1_stats[2]*/)) as Uint<32>;
         }
     }
     if (p2_dmg_2 < DEAD) {
         if (p2_cmds.value[2] == 0) {
-            p1_dmg_0 = (p1_dmg_0 + calc_item_dmg_against(p2_heroes[2].lhs, p2_stats[2], p1_stats[0]) + calc_item_dmg_against(p2_heroes[1].rhs, p2_stats[2], p1_stats[0])) as Uint<32>;
+            p1_dmg_0 = (p1_dmg_0 + calc_item_dmg_against(p2_heroes[2].lhs/*, p2_stats[2], p1_stats[0]*/) + calc_item_dmg_against(p2_heroes[1].rhs/*, p2_stats[2], p1_stats[0]*/)) as Uint<32>;
         } else if (p2_cmds.value[2] == 1) {
-            p1_dmg_1 = (p1_dmg_1 + calc_item_dmg_against(p2_heroes[2].lhs, p2_stats[2], p1_stats[1]) + calc_item_dmg_against(p2_heroes[1].rhs, p2_stats[2], p1_stats[1])) as Uint<32>;
+            p1_dmg_1 = (p1_dmg_1 + calc_item_dmg_against(p2_heroes[2].lhs/*, p2_stats[2], p1_stats[1]*/) + calc_item_dmg_against(p2_heroes[1].rhs/*, p2_stats[2], p1_stats[1]*/)) as Uint<32>;
         } else {
-            p1_dmg_2 = (p1_dmg_2 + calc_item_dmg_against(p2_heroes[2].lhs, p2_stats[2], p1_stats[2]) + calc_item_dmg_against(p2_heroes[1].rhs, p2_stats[2], p1_stats[2])) as Uint<32>;
+            p1_dmg_2 = (p1_dmg_2 + calc_item_dmg_against(p2_heroes[2].lhs/*, p2_stats[2], p1_stats[2]*/) + calc_item_dmg_against(p2_heroes[1].rhs/*, p2_stats[2], p1_stats[2]*/)) as Uint<32>;
         }
     }
     // if (p1_dmg_0 < DEAD) {

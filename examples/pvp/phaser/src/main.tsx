@@ -1,15 +1,21 @@
 import { NetworkId, setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 import '@midnight-ntwrk/dapp-connector-api';
 import { ITEM, RESULT, STANCE, Hero, ARMOR } from '@midnight-ntwrk/pvp-contract';
-import { type BBoardDerivedState, type DeployedBBoardAPI } from '@midnight-ntwrk/pvp-api';
+import { type BBoardDerivedState, type DeployedBBoardAPI, BBoardAPI } from '@midnight-ntwrk/pvp-api';
 import './globals';
+import { type ContractAddress } from '@midnight-ntwrk/compact-runtime';
+import { LedgerState } from '@midnight-ntwrk/ledger';
+import { BrowserDeploymentManager } from './wallet';
+import * as pino from 'pino';
 
 // TODO: get this properly? it's undefined if i uncomment this
-//const networkId = import.meta.env.VITE_NETWORK_ID as NetworkId;
-const networkId = NetworkId.TestNet;
+const networkId = import.meta.env.VITE_NETWORK_ID as NetworkId;
+//const networkId = NetworkId.TestNet;
 // Ensure that the network IDs are set within the Midnight libraries.
 setNetworkId(networkId);
-
+export const logger = pino.pino({
+    level: import.meta.env.VITE_LOGGING_LEVEL as string,
+});
 console.log(`networkId = ${networkId}`);
 
 const MAX_HP = 300;
@@ -18,12 +24,14 @@ const ARENA_WIDTH = 480;
 const ARENA_HEIGHT = 360;
 
 
+
 // phaser part
 
 import 'phaser';
 import RexUIPlugin from 'phaser3-rex-plugins/templates/ui/ui-plugin'
 //import KeyboardPlugin from 'phaser3-';
 import RoundRectanglePlugin from 'phaser3-rex-plugins/plugins/roundrectangle-plugin.js';
+import { extend } from 'fp-ts/lib/pipeable';
 
 const COLOR_MAIN = 0x4e342e;
 const COLOR_LIGHT = 0x7b5e57;
@@ -71,7 +79,7 @@ class Rank {
     }
 
     y(): number {
-        return 140 + 65 * this.index;
+        return 140 + 68 * this.index;
     }
 }
 
@@ -247,15 +255,157 @@ class HpBar extends Phaser.GameObjects.Container {
     }
 }
 
+class MainMenu extends Phaser.Scene {
+    deployProvider: BrowserDeploymentManager;
+    waiting: boolean;
+    text: Phaser.GameObjects.Text | undefined;
+
+    constructor() {
+        super('MainMenu');
+        this.deployProvider = new BrowserDeploymentManager(logger);
+        this.waiting = false;
+    }
+
+    preload ()
+    {
+        this.load.setBaseURL('/');
+
+        this.load.image('arena_bg', 'arena_bg.png');
+    }
+
+    create ()
+    {
+        this.add.image(ARENA_WIDTH, ARENA_HEIGHT, 'arena_bg').setPosition(ARENA_WIDTH / 2, ARENA_HEIGHT / 2);
+        this.add.text(ARENA_WIDTH / 2 + 2, ARENA_HEIGHT / 4 + 2, 'PVP ARENA', {fontSize: 64, color: 'black'}).setOrigin(0.5, 0.5);
+        this.add.text(ARENA_WIDTH / 2, ARENA_HEIGHT / 4, 'PVP ARENA', {fontSize: 64, color: 'white'}).setOrigin(0.5, 0.5);
+        this.text = this.add.text(ARENA_WIDTH / 2, ARENA_HEIGHT * 0.65, 'Press J to join, C to create', {fontSize: 12, color: 'white'}).setOrigin(0.5, 0.5);
+        this.input?.keyboard?.on('keydown-C', () => {
+            if (!this.waiting) {
+                this.text?.setText('Creating match, please wait...');
+                this.waiting = true;
+                this.deployProvider.create().then((api) => {
+                    console.log('====================\napi done from creating\n===============');
+                    console.log(`contract address: ${api.deployedContractAddress}`);
+                    navigator.clipboard.writeText(api.deployedContractAddress);
+                    const arena = new Arena(api, true);
+                    this.scene.add('Arena', arena);
+                    this.scene.start('Arena');
+                });
+            }
+        });
+        this.input?.keyboard?.on('keydown-J', () => {
+            if (!this.waiting) {
+                const contractAddress = window.prompt('Enter contract address to join')
+                if (contractAddress != null) {
+                    this.text?.setText('Joining match, please wait...');
+                    this.waiting = true;
+                    this.deployProvider.join(contractAddress).then((api) => {
+                        console.log('=====================\napi done from joining\n======================');
+                        const arena = new Arena(api, false);
+                        this.scene.add('Arena', arena);
+                        this.scene.start('Arena');
+                    });
+                }
+            }
+        });
+        // create an off-chain testing world for testing graphical stuff without having to wait a long time
+        this.input?.keyboard?.on('keydown-T', () => {
+            this.scene.add('Arena', new Arena(undefined, true));
+            this.scene.start('Arena');
+        });
+    }
+}
+
+enum MatchState {
+    Initializing,
+    WaitingOnPlayer,
+    WaitingOnOpponent,
+    SubmittingMove,
+}
+
 class Arena extends Phaser.Scene
 {
     cursors: any;//Phaser.Types.Input.Keyboard.KeyboardPlugin | undefined;
     keys: any;
     heroes: HeroActor[][];
+    // this is undefined in testing battles (offline) only, will always be defined in real battles (on-chain)
+    api: BBoardAPI | undefined;
+    isP1: boolean;
+    matchState: MatchState;
+    matchStateText: Phaser.GameObjects.Text | undefined;
 
-    constructor() {
-        super();
+    constructor(api: BBoardAPI | undefined, isP1: boolean) {
+        super('Arena');
         this.heroes = [];
+        this.api = api;
+        this.isP1 = isP1;
+        this.matchState = MatchState.Initializing;
+
+        if (api != undefined) {
+            const subscription = api.state$.subscribe((state) => this.onStateChange(state));
+        }
+    }
+
+    playerTeam(): Team {
+        return this.isP1 ? 0 : 1;
+    }
+
+    opponentTeam(): Team {
+        return this.isP1 ? 1 : 0;
+    }
+
+    setMatchState(state: MatchState) {
+        this.matchState = state;
+        switch (state) {
+            case MatchState.Initializing:
+                this.matchStateText?.setText('Initializing...');
+                break;
+            case MatchState.WaitingOnPlayer:
+                this.matchStateText?.setText('Make your move');
+                break;
+            case MatchState.WaitingOnOpponent:
+                this.matchStateText?.setText('Waiting on opponent...');
+                break;
+            case MatchState.SubmittingMove:
+                this.matchStateText?.setText('Submitting move...');
+                break;
+        }
+    }
+
+    onStateChange(state: BBoardDerivedState) {
+        //console.log(`new state: ${JSON.stringify(state)}`);
+        console.log('new state');
+
+        if (this.heroes.length == 0) {
+            for (let team = 0; team < 2; ++team) {
+                let hero_actors = [];
+                for (let i = 0; i < 3; ++i) {
+                    const rank = new Rank(i as HeroIndex, team as Team);
+                    // TODO: how to do these loops so typescript knows that team/i are 0-1 and 0-2?
+                    hero_actors.push(new HeroActor(this, team == 0 ? state.p1Heroes[i] : state.p2Heroes[i], rank));
+                }
+                this.heroes.push(hero_actors);
+            }
+        }
+
+        for (let team = 0; team < 2; ++team) {
+            const heroes = team == 0 ? state.p1Heroes : state.p2Heroes;
+            const dmgs = team == 0 ? state.p1Dmg : state.p2Dmg;
+            const stances = team == 0 ? state.p1Stances : state.p2Stances;
+            for (let i = 0; i < 3; ++i) {
+                this.heroes[team][i].hpBar.setHp(1 - (Number(dmgs[i]) / 300));
+                this.heroes[team][i].setStance(stances[i]);
+            }
+        }
+        switch (state.state) {
+            case RESULT.continue:
+                this.setMatchState(MatchState.WaitingOnPlayer);
+                break;
+            case RESULT.waiting:
+                this.setMatchState(MatchState.WaitingOnOpponent);
+                break;
+                // TODO: match end logic
+        }
     }
 
     preload ()
@@ -295,6 +445,8 @@ class Arena extends Phaser.Scene
     {
         this.add.image(ARENA_WIDTH, ARENA_HEIGHT, 'arena_bg').setPosition(ARENA_WIDTH / 2, ARENA_HEIGHT / 2);
 
+        this.matchStateText = this.add.text(ARENA_WIDTH / 2, ARENA_HEIGHT * 0.9, 'Initializing...', {fontSize: 12, color: 'white'}).setOrigin(0.5, 0.5);
+
         //this.cursors = this?.input?.keyboard?.addCapture('1,2,3,8,9,0,X,C');
         this.keys = this.input?.keyboard?.addKeys({
             n1: Phaser.Input.Keyboard.KeyCodes.ONE,
@@ -320,57 +472,95 @@ class Arena extends Phaser.Scene
             return STANCE.neutral;
         };
         this.input?.keyboard?.on('keydown-FOUR', () => {
-            const hero = this.heroes[0][0];
+            const hero = this.heroes[this.playerTeam()][0];
             hero.setStance(toggleStance(hero.stance));
         });
         this.input?.keyboard?.on('keydown-R', () => {
-            const hero = this.heroes[0][1];
+            const hero = this.heroes[this.playerTeam()][1];
             hero.setStance(toggleStance(hero.stance));
         });
         this.input?.keyboard?.on('keydown-F', () => {
-            const hero = this.heroes[0][2];
+            const hero = this.heroes[this.playerTeam()][2];
             hero.setStance(toggleStance(hero.stance));
         });
-        //p2
-        this.input?.keyboard?.on('keydown-FIVE', () => {
-            const hero = this.heroes[1][0];
-            hero.setStance(toggleStance(hero.stance));
+        this.input?.keyboard?.on('keydown-Z', () => {
+            //const stances = this.heroes[this.playerTeam()].map((hero) => hero.stance);
+            const moves = this.heroes[this.playerTeam()].filter((hero) => hero.target != undefined && hero.target.team == this.opponentTeam()).map((hero) => BigInt(hero.target!.index));
+            // TODO: need to check vs number of alive heroes
+            if (moves.length == 3) {
+                if (this.api != undefined) {
+                    this.setMatchState(MatchState.SubmittingMove);
+                    if (this.isP1) {
+                        console.log('submitting move (as p1)');
+                        this.api.p1Command(moves).then((result) => {
+                            // ???
+                        });
+                    } else {
+                        console.log('submitting move (as p2)');
+                        this.api.p2Command(moves).then((result) => {
+                            // ???
+                        });
+                    }
+                } else {
+                    console.log('TODO: submit moves in testing battles?');
+                }
+            } else {
+                console.log(`invalid move: ${JSON.stringify(this.heroes[this.playerTeam()].map((hero) => hero.target))}`);
+            }
         });
-        this.input?.keyboard?.on('keydown-T', () => {
-            const hero = this.heroes[1][1];
-            hero.setStance(toggleStance(hero.stance));
-        });
-        this.input?.keyboard?.on('keydown-G', () => {
-            const hero = this.heroes[1][2];
-            hero.setStance(toggleStance(hero.stance));
-        });
+        // //p2
+        // this.input?.keyboard?.on('keydown-FIVE', () => {
+        //     const hero = this.heroes[1][0];
+        //     hero.setStance(toggleStance(hero.stance));
+        // });
+        // this.input?.keyboard?.on('keydown-T', () => {
+        //     const hero = this.heroes[1][1];
+        //     hero.setStance(toggleStance(hero.stance));
+        // });
+        // this.input?.keyboard?.on('keydown-G', () => {
+        //     const hero = this.heroes[1][2];
+        //     hero.setStance(toggleStance(hero.stance));
+        // });
 
         //this.cursors = this.input?.keyboard?.createCursorKeys();
 
-        let heroes: Hero[][] = [
-            [
-                { lhs: ITEM.axe, rhs: ITEM.sword, helmet: ARMOR.leather, chest: ARMOR.leather, skirt: ARMOR.nothing, greaves: ARMOR.leather },
-                { lhs: ITEM.bow, rhs: ITEM.nothing, helmet: ARMOR.nothing, chest: ARMOR.nothing, skirt: ARMOR.leather, greaves: ARMOR.metal },
-                { lhs: ITEM.shield, rhs: ITEM.axe, helmet: ARMOR.metal, chest: ARMOR.metal, skirt: ARMOR.metal, greaves: ARMOR.nothing },
-            ], [
-                { lhs: ITEM.spear, rhs: ITEM.spear, helmet: ARMOR.leather, chest: ARMOR.metal, skirt: ARMOR.leather, greaves: ARMOR.leather},
-                { lhs: ITEM.spear, rhs: ITEM.shield, helmet: ARMOR.metal, chest: ARMOR.metal, skirt: ARMOR.metal, greaves: ARMOR.metal },
-                { lhs: ITEM.sword, rhs: ITEM.sword, helmet: ARMOR.nothing, chest: ARMOR.nothing, skirt: ARMOR.nothing, greaves: ARMOR.nothing },
-            ]
-        ];
-        let stances: STANCE[][] = [
-            [STANCE.aggressive, STANCE.neutral, STANCE.defensive],
-            [STANCE.defensive, STANCE.aggressive, STANCE.neutral]
-        ];
-
-        for (let team = 0; team < 2; ++team) {
-            let hero_actors = [];
-            for (let i = 0; i < 3; ++i) {
-                const rank = new Rank(i as HeroIndex, team as Team);
-                // TODO: how to do these loops so typescript knows that team/i are 0-1 and 0-2?
-                hero_actors.push(new HeroActor(this, heroes[team][i], rank));
+        // let heroes: Hero[][] = [
+        //     [
+        //         { lhs: ITEM.axe, rhs: ITEM.sword, helmet: ARMOR.leather, chest: ARMOR.leather, skirt: ARMOR.nothing, greaves: ARMOR.leather },
+        //         { lhs: ITEM.bow, rhs: ITEM.nothing, helmet: ARMOR.nothing, chest: ARMOR.nothing, skirt: ARMOR.leather, greaves: ARMOR.metal },
+        //         { lhs: ITEM.shield, rhs: ITEM.axe, helmet: ARMOR.metal, chest: ARMOR.metal, skirt: ARMOR.metal, greaves: ARMOR.nothing },
+        //     ], [
+        //         { lhs: ITEM.spear, rhs: ITEM.spear, helmet: ARMOR.leather, chest: ARMOR.metal, skirt: ARMOR.leather, greaves: ARMOR.leather},
+        //         { lhs: ITEM.spear, rhs: ITEM.shield, helmet: ARMOR.metal, chest: ARMOR.metal, skirt: ARMOR.metal, greaves: ARMOR.metal },
+        //         { lhs: ITEM.sword, rhs: ITEM.sword, helmet: ARMOR.nothing, chest: ARMOR.nothing, skirt: ARMOR.nothing, greaves: ARMOR.nothing },
+        //     ]
+        // ];
+        // let stances: STANCE[][] = [
+        //     [STANCE.aggressive, STANCE.neutral, STANCE.defensive],
+        //     [STANCE.defensive, STANCE.aggressive, STANCE.neutral]
+        // ];
+        if (this.api == undefined) {
+            let mockHeroes: Hero[][] = [
+                [
+                    { lhs: ITEM.axe, rhs: ITEM.sword, helmet: ARMOR.leather, chest: ARMOR.leather, skirt: ARMOR.nothing, greaves: ARMOR.leather },
+                    { lhs: ITEM.bow, rhs: ITEM.nothing, helmet: ARMOR.nothing, chest: ARMOR.nothing, skirt: ARMOR.leather, greaves: ARMOR.metal },
+                    { lhs: ITEM.shield, rhs: ITEM.axe, helmet: ARMOR.metal, chest: ARMOR.metal, skirt: ARMOR.metal, greaves: ARMOR.nothing },
+                ], [
+                    { lhs: ITEM.spear, rhs: ITEM.spear, helmet: ARMOR.leather, chest: ARMOR.metal, skirt: ARMOR.leather, greaves: ARMOR.leather},
+                    { lhs: ITEM.spear, rhs: ITEM.shield, helmet: ARMOR.metal, chest: ARMOR.metal, skirt: ARMOR.metal, greaves: ARMOR.metal },
+                    { lhs: ITEM.sword, rhs: ITEM.sword, helmet: ARMOR.nothing, chest: ARMOR.nothing, skirt: ARMOR.nothing, greaves: ARMOR.nothing },
+                ]
+            ];
+            for (let team = 0; team < 2; ++team) {
+                let hero_actors = [];
+                for (let i = 0; i < 3; ++i) {
+                    const rank = new Rank(i as HeroIndex, team as Team);
+                    // TODO: how to do these loops so typescript knows that team/i are 0-1 and 0-2?
+                    hero_actors.push(new HeroActor(this, mockHeroes[team][i], rank));
+                }
+                this.heroes.push(hero_actors);
             }
-            this.heroes.push(hero_actors);
+            this.setMatchState(MatchState.WaitingOnPlayer);
         }
 
 
@@ -402,35 +592,35 @@ class Arena extends Phaser.Scene
 
     update() {
         if (this.keys.n1.isDown) {
-            this.heroes[0][0].setTarget(new Rank(0, 1));
+            this.heroes[this.playerTeam()][0].setTarget(new Rank(0, this.opponentTeam()));
         }
         if (this.keys.n2.isDown) {
-            this.heroes[0][0].setTarget(new Rank(1, 1));
+            this.heroes[this.playerTeam()][0].setTarget(new Rank(1, this.opponentTeam()));
         }
         if (this.keys.n3.isDown) {
-            this.heroes[0][0].setTarget(new Rank(2, 1));
+            this.heroes[this.playerTeam()][0].setTarget(new Rank(2, this.opponentTeam()));
         }
         if (this.keys.q.isDown) {
-            this.heroes[0][1].setTarget(new Rank(0, 1));
+            this.heroes[this.playerTeam()][1].setTarget(new Rank(0, this.opponentTeam()));
         }
         if (this.keys.w.isDown) {
-            this.heroes[0][1].setTarget(new Rank(1, 1));
+            this.heroes[this.playerTeam()][1].setTarget(new Rank(1, this.opponentTeam()));
         }
         if (this.keys.e.isDown) {
-            this.heroes[0][1].setTarget(new Rank(2, 1));
+            this.heroes[this.playerTeam()][1].setTarget(new Rank(2, this.opponentTeam()));
         }
         if (this.keys.a.isDown) {
-            this.heroes[0][2].setTarget(new Rank(0, 1));
+            this.heroes[this.playerTeam()][2].setTarget(new Rank(0, this.opponentTeam()));
         }
         if (this.keys.s.isDown) {
-            this.heroes[0][2].setTarget(new Rank(1, 1));
+            this.heroes[this.playerTeam()][2].setTarget(new Rank(1, this.opponentTeam()));
         }
         if (this.keys.d.isDown) {
-            this.heroes[0][2].setTarget(new Rank(2, 1));
+            this.heroes[this.playerTeam()][2].setTarget(new Rank(2, this.opponentTeam()));
         }
         if (this.keys.x.isDown) {
             for (let i = 0; i < 3; ++i) {
-                this.heroes[0][i].setTarget(undefined);
+                this.heroes[this.playerTeam()][i].setTarget(undefined);
             }
         }
     }
@@ -449,7 +639,7 @@ const config = {
     type: Phaser.AUTO,
     width: ARENA_WIDTH,
     height: ARENA_HEIGHT,
-    scene: Arena,
+    scene: [MainMenu],
     // physics: {
     //     default: 'arcade',
     //     arcade: {

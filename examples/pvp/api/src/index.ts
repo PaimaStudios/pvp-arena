@@ -18,6 +18,7 @@ import {
   ITEM,
   ARMOR,
   Hero,
+  STANCE,
  // Command,
 } from '@midnight-ntwrk/pvp-contract';
 import * as utils from './utils/index.js';
