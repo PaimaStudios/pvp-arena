@@ -27,7 +27,7 @@ export struct TotalStats {
 // pierce: 
 // slash:  
 
-export enum STANCE { neutral, aggressive, defensive }
+export enum STANCE { defensive, neutral, aggressive }
 
 // export struct Command {
 //     attack: Uint<32>,
@@ -53,6 +53,7 @@ export ledger p2_dmg_2: Cell<Uint<32>>;
 //export ledger p2_dmg: Cell<Vector<3, Uint<32>>>;
 
 export ledger instance: Counter;
+export ledger round: Cell<Uint<32>>;
 export ledger p1_sig: Cell<Field>;
 export ledger p2_sig: Cell<Maybe<Field>>;
 
@@ -75,6 +76,7 @@ constructor(p1: Vector<3, Hero>, p2: Vector<3, Hero>) {
     p2_stats = [calc_stats(p2_heroes[0]), calc_stats(p2_heroes[1]), calc_stats(p2_heroes[2])];
     instance.increment(1);
     p1_sig = calc_sig(player_secret_key(), instance as Field);
+    round = 0;
 }
 
 export pure circuit calc_stats(hero: Hero): TotalStats {
@@ -448,8 +450,9 @@ circuit battle_round(): RESULT {
     // }
 
     // reset commands for next round
-    p1_cmds = none<Vector<3, Uint<32>>>();
-    p2_cmds = none<Vector<3, Uint<32>>>();
+
+    // p1_cmds = none<Vector<3, Uint<32>>>();
+    // p2_cmds = none<Vector<3, Uint<32>>>();
 
     // check for a winner
     // if (p2_dmg[0] >= DEAD && p2_dmg[1] >= DEAD && p2_dmg[2] >= DEAD) {
@@ -461,6 +464,9 @@ circuit battle_round(): RESULT {
     // if (p1_dmg[0] >= DEAD && p1_dmg[1] >= DEAD && p1_dmg[2] >= DEAD) {
     //     return RESULT.p2_win;
     // }
+
+    round = (round + 1) as Uint<32>;
+
     if (p2_dmg_0 >= DEAD && p2_dmg_1 >= DEAD && p2_dmg_2 >= DEAD) {
         if (p1_dmg_0 >= DEAD && p1_dmg_1 >= DEAD && p1_dmg_2 >= DEAD) {
             return RESULT.tie;

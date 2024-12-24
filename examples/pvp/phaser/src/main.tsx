@@ -52,6 +52,53 @@ var createButton = function (scene: any, text: any) {
     });
 }
 
+class BloodDrop extends Phaser.GameObjects.Sprite {
+    arena: Arena;
+    xPrev: number;
+    yPrev: number;
+    // moving in 3d space so use our own super-basic physics
+    xSpeed: number;
+    ySpeed: number;
+    zSpeed: number;
+    z: number;
+    constructor(arena: Arena, x: number, y: number, dir2: number) {
+        super(arena, x, y, `blood_drop${Phaser.Math.Between(0, 3)}`);
+        this.arena = arena;
+        this.xPrev = x;
+        this.yPrev = y;
+        const dir = Phaser.Math.Angle.Random();
+        const spd = 0.2 + Math.random() * 0.4;
+        const spd2 = 0.3 + Math.random() * 0.8;
+        // probably fine but might need to look at Phaser.Math.SinCosTableGenerator
+        this.xSpeed = spd * Math.cos(dir) + spd2 * Math.cos(dir2);
+        // don't care if positive or negative since we're just looking for random
+        this.ySpeed = spd * Math.sin(dir) - spd2 * Math.sin(dir2);
+        this.zSpeed = - (Math.random() * 0.9 + 0.3);
+        this.z = -10;
+        this.setAlpha(0.5);
+
+        arena.add.existing(this);
+    }
+
+    preUpdate() {
+        //console.log(`not moving?! `);
+        this.x += this.xSpeed;
+        this.y += this.ySpeed + this.zSpeed;
+        this.z += this.zSpeed;
+
+        this.zSpeed += 0.05;
+
+        this.rotation = Phaser.Math.Angle.Between(this.xPrev, this.yPrev, this.x, this.y);
+        this.xPrev = this.x;
+        this.yPrev = this.y;
+
+        if (this.z >= 0) {
+            this.arena.add.image(this.x, this.y, `blood_puddle${Phaser.Math.Between(3, 6)}`).setAlpha(0.5).setDepth(-1);
+            this.destroy();
+        }
+    }
+}
+
 type HeroIndex = 0 | 1 | 2;
 type Team = 0 | 1;
 
@@ -93,6 +140,8 @@ class HeroActor extends Phaser.GameObjects.Container {
     targetLine: Phaser.GameObjects.Line;
     dmg: number;
     stance: STANCE;
+    nextStance: STANCE;
+    arrow: Phaser.GameObjects.Image;
 
     constructor(arena: Arena, hero: Hero, rank: Rank) {
         super(arena, rank.x(STANCE.neutral), rank.y());
@@ -103,6 +152,7 @@ class HeroActor extends Phaser.GameObjects.Container {
         this.target = undefined;
         this.dmg = 0;
         this.stance = STANCE.neutral;
+        this.nextStance = this.stance;
 
         const isP2 = this.rank.team == 1;
 
@@ -141,6 +191,9 @@ class HeroActor extends Phaser.GameObjects.Container {
         this.hpBar = new HpBar(arena, 0, -31, 40);
         this.add(this.hpBar);
 
+        this.arrow = arena.add.image(0, 0, 'arrow_move').setVisible(false);
+        this.add(this.arrow);
+
         arena.add.existing(this);
     }
 
@@ -161,15 +214,22 @@ class HeroActor extends Phaser.GameObjects.Container {
         return this.dmg < MAX_HP;
     }
 
-    public setStance(stance: STANCE) {
-        this.stance = stance;
-
-        const x = this.rank.x(stance);
-        const y = this.rank.y();
-
-        this.setPosition(x, y);
-
-        this.updateTargetLine();
+    public toggleNextStance() {
+        if (this.nextStance == STANCE.neutral) {
+            this.nextStance = this.stance == STANCE.defensive ? STANCE.defensive : STANCE.aggressive;
+        } else if (this.nextStance == STANCE.aggressive) {
+            this.nextStance = this.stance == STANCE.aggressive ? STANCE.neutral : STANCE.defensive;
+        } else {
+            this.nextStance = STANCE.neutral;
+        }
+        if (this.nextStance == this.stance) {
+            this.arrow.visible = false;
+        } else {
+            const pointsLeft = this.nextStance == STANCE.defensive || (this.stance == STANCE.aggressive && this.nextStance == STANCE.neutral);
+            this.arrow.visible = true;
+            this.arrow.setPosition(pointsLeft ? -32 : 32, 0);
+            this.arrow.setFlipX(pointsLeft);
+        }
     }
 
     public setTarget(target: Rank | undefined) {
@@ -178,7 +238,7 @@ class HeroActor extends Phaser.GameObjects.Container {
         this.updateTargetLine();
     }
 
-    private updateTargetLine() {
+    public updateTargetLine() {
         if (this.target != undefined) {
             // TODO: how to know other person's stance?
             const tx = this.target.x(this.arena.getHero(this.target).stance);
@@ -275,7 +335,7 @@ class MainMenu extends Phaser.Scene {
 
     create ()
     {
-        this.add.image(ARENA_WIDTH, ARENA_HEIGHT, 'arena_bg').setPosition(ARENA_WIDTH / 2, ARENA_HEIGHT / 2);
+        this.add.image(ARENA_WIDTH, ARENA_HEIGHT, 'arena_bg').setPosition(ARENA_WIDTH / 2, ARENA_HEIGHT / 2).setDepth(-2);
         this.add.text(ARENA_WIDTH / 2 + 2, ARENA_HEIGHT / 4 + 2, 'PVP ARENA', {fontSize: 64, color: 'black'}).setOrigin(0.5, 0.5);
         this.add.text(ARENA_WIDTH / 2, ARENA_HEIGHT / 4, 'PVP ARENA', {fontSize: 64, color: 'white'}).setOrigin(0.5, 0.5);
         this.text = this.add.text(ARENA_WIDTH / 2, ARENA_HEIGHT * 0.65, 'Press J to join, C to create', {fontSize: 12, color: 'white'}).setOrigin(0.5, 0.5);
@@ -321,6 +381,7 @@ enum MatchState {
     WaitingOnPlayer,
     WaitingOnOpponent,
     SubmittingMove,
+    CombatResolving,
 }
 
 class Arena extends Phaser.Scene
@@ -333,6 +394,7 @@ class Arena extends Phaser.Scene
     isP1: boolean;
     matchState: MatchState;
     matchStateText: Phaser.GameObjects.Text | undefined;
+    round: number;
 
     constructor(api: BBoardAPI | undefined, isP1: boolean) {
         super('Arena');
@@ -340,6 +402,7 @@ class Arena extends Phaser.Scene
         this.api = api;
         this.isP1 = isP1;
         this.matchState = MatchState.Initializing;
+        this.round = 0;
 
         if (api != undefined) {
             const subscription = api.state$.subscribe((state) => this.onStateChange(state));
@@ -369,6 +432,9 @@ class Arena extends Phaser.Scene
             case MatchState.SubmittingMove:
                 this.matchStateText?.setText('Submitting move...');
                 break;
+            case MatchState.CombatResolving:
+                this.matchStateText?.setText('Battle!');
+                break;
         }
     }
 
@@ -388,15 +454,27 @@ class Arena extends Phaser.Scene
             }
         }
 
-        for (let team = 0; team < 2; ++team) {
-            const heroes = team == 0 ? state.p1Heroes : state.p2Heroes;
-            const dmgs = team == 0 ? state.p1Dmg : state.p2Dmg;
-            const stances = team == 0 ? state.p1Stances : state.p2Stances;
-            for (let i = 0; i < 3; ++i) {
-                this.heroes[team][i].hpBar.setHp(1 - (Number(dmgs[i]) / 300));
-                this.heroes[team][i].setStance(stances[i]);
+        if (state.p1Cmds != undefined && state.p2Cmds != undefined) {
+            const newTargets = [
+                state.p1Cmds.map(Number),
+                state.p1Cmds.map(Number)
+            ];
+            for (let team = 0; team < 2; ++team) {
+                const heroes = team == 0 ? state.p1Heroes : state.p2Heroes;
+                const dmgs = team == 0 ? state.p1Dmg : state.p2Dmg;
+                const stances = team == 0 ? state.p1Stances : state.p2Stances;
+                for (let i = 0; i < 3; ++i) {
+                    const hero = this.heroes[team][i];
+                    // update damage now, but no graphical effect shown 
+                    hero.dmg = Number(dmgs[i]);
+                    hero.nextStance = stances[i];
+                    hero.target = new Rank(newTargets[team][i] as HeroIndex, team == 0 ? 1 : 0);
+                }
             }
         }
+        
+        // TODO: it's weird we have both this and the combat animations to control MatchState
+        // we should consolidate this
         switch (state.state) {
             case RESULT.continue:
                 this.setMatchState(MatchState.WaitingOnPlayer);
@@ -406,6 +484,102 @@ class Arena extends Phaser.Scene
                 break;
                 // TODO: match end logic
         }
+
+        if (this.round < state.round) {
+            this.runCombatAnims();
+            this.round = Number(state.round);
+        }
+    }
+
+    runCombatAnims() {
+        this.setMatchState(MatchState.CombatResolving);
+        const tweens: Phaser.Types.Tweens.TweenBuilderConfig[] = [];
+        // stance change tweens
+        for (let team = 0; team < 2; ++team) {
+            for (let i = 0; i < 3; ++i) {
+                const hero = this.heroes[team][i];
+                tweens.push({
+                    targets: hero,
+                    delay: 150,
+                    duration: 350,
+                    ease: 'Linear',
+                    x: hero.rank.x(hero.nextStance),
+                    onStart: () => {
+                        hero.arrow.visible = false;
+                    },
+                    onComplete: () => {
+                        hero.stance = hero.nextStance;
+                        //hero
+                        hero.updateTargetLine();
+                    },
+                });
+            }
+        }
+        tweens.push({
+            targets: null,
+            duration: 3000,
+        });
+
+        // attack tweens
+        for (let team = 0; team < 2; ++team) {
+            for (let i = 0; i < 3; ++i) {
+                const hero = this.heroes[team][i];
+                const enemy = this.heroes[hero.target!.team][hero.target!.index];
+                tweens.push({
+                    targets: hero,
+                    duration: 150,
+                    onComplete: () => {
+                        // get rid of line before attack
+                        hero.setTarget(undefined);
+                    },
+                });
+                const dist = (new Phaser.Math.Vector2(hero.rank.x(hero.nextStance), hero.y)).distance(new Phaser.Math.Vector2(enemy.rank.x(enemy.nextStance), enemy.y));
+                tweens.push({
+                    targets: hero,
+                    ease: 'Quad.easeInOut',
+                    x: hero.target!.x(this.getHero(hero.target!).nextStance),
+                    y: hero.target!.y(),
+                    duration: 40 + dist * 2,
+                    onComplete: () => {
+                        console.log(`half of tween [${team}][${i}]`);
+                        // do graphical part of hp change (TODO: this should prob be in Hero)
+                        // TODO: this is ALL damage done the entire turn to enemy so only
+                        // the first attack will appear to change it. need to fix this, can't rely on just this
+                        enemy.hpBar.setHp(1 - (enemy.dmg / 300));
+                        
+                        // TODO: base on how much damage was done
+                        const n = 1 + 2 * Math.random();
+                        for (let i = 0; i < n; ++i) {
+                            // TODO: this feels weird/ugly/hacky - maybe the constructor shouldn't add itself
+                            new BloodDrop(this, enemy.x, enemy.y, Phaser.Math.Angle.Between(hero.rank.x(hero.stance), hero.rank.y(), enemy.rank.x(enemy.stance), enemy.rank.y()));
+                        }
+                    },
+                    persist: false,
+                });
+                tweens.push({
+                    targets: hero,
+                    ease: 'Quad.easeInOut',
+                    x: hero.rank.x(hero.nextStance),
+                    y: hero.y,
+                    duration: 60 + dist * 3,
+                    onComplete: (tween) => {
+                        console.log(`tween.targets = ${JSON.stringify(tween.targets)}`);
+                        console.log(`completed tween [${team}][${i}]`);
+                    },
+                    persist: false,
+                });
+            }
+        }
+        tweens.push({
+            targets: null,
+            onComplete: () => {
+                this.setMatchState(MatchState.WaitingOnPlayer);
+            }
+        });
+        this.tweens.chain({
+            targets: this.heroes[0],
+            tweens,
+        });
     }
 
     preload ()
@@ -438,12 +612,25 @@ class Arena extends Phaser.Scene
         this.load.image('hp_bar_side', 'hp_bar_side.png');
         this.load.image('hp_bar_middle', 'hp_bar_middle.png');
 
+        this.load.image('arrow_move', 'arrow_move.png');
+
         this.load.image('skull', 'skull.png');
+        this.load.image('blood_drop0', 'blood_drop0.png');
+        this.load.image('blood_drop1', 'blood_drop1.png');
+        this.load.image('blood_drop2', 'blood_drop2.png');
+        this.load.image('blood_drop3', 'blood_drop3.png');
+        this.load.image('blood_puddle0', 'blood_puddle0.png');
+        this.load.image('blood_puddle1', 'blood_puddle1.png');
+        this.load.image('blood_puddle2', 'blood_puddle2.png');
+        this.load.image('blood_puddle3', 'blood_puddle3.png');
+        this.load.image('blood_puddle4', 'blood_puddle4.png');
+        this.load.image('blood_puddle5', 'blood_puddle5.png');
+        this.load.image('blood_puddle6', 'blood_puddle6.png');
     }
 
     create ()
     {
-        this.add.image(ARENA_WIDTH, ARENA_HEIGHT, 'arena_bg').setPosition(ARENA_WIDTH / 2, ARENA_HEIGHT / 2);
+        this.add.image(ARENA_WIDTH, ARENA_HEIGHT, 'arena_bg').setPosition(ARENA_WIDTH / 2, ARENA_HEIGHT / 2).setDepth(-2);
 
         this.matchStateText = this.add.text(ARENA_WIDTH / 2, ARENA_HEIGHT * 0.9, 'Initializing...', {fontSize: 12, color: 'white'}).setOrigin(0.5, 0.5);
 
@@ -463,25 +650,17 @@ class Arena extends Phaser.Scene
             x:  Phaser.Input.Keyboard.KeyCodes.X,
             f:  Phaser.Input.Keyboard.KeyCodes.F,
         });
-        let toggleStance = (stance: STANCE) => {
-            if (stance == STANCE.neutral) {
-                return STANCE.aggressive;
-            } else if (stance == STANCE.aggressive) {
-                return STANCE.defensive;
-            }
-            return STANCE.neutral;
-        };
         this.input?.keyboard?.on('keydown-FOUR', () => {
             const hero = this.heroes[this.playerTeam()][0];
-            hero.setStance(toggleStance(hero.stance));
+            hero.toggleNextStance();
         });
         this.input?.keyboard?.on('keydown-R', () => {
             const hero = this.heroes[this.playerTeam()][1];
-            hero.setStance(toggleStance(hero.stance));
+            hero.toggleNextStance();
         });
         this.input?.keyboard?.on('keydown-F', () => {
             const hero = this.heroes[this.playerTeam()][2];
-            hero.setStance(toggleStance(hero.stance));
+            hero.toggleNextStance();
         });
         this.input?.keyboard?.on('keydown-Z', () => {
             //const stances = this.heroes[this.playerTeam()].map((hero) => hero.stance);
@@ -502,7 +681,46 @@ class Arena extends Phaser.Scene
                         });
                     }
                 } else {
-                    console.log('TODO: submit moves in testing battles?');
+                    // mock response
+                    this.setMatchState(MatchState.SubmittingMove);
+                    // mock delay for response
+                    this.time.delayedCall(1000, () => {
+                        // randomize opponent moves
+                        for (let enemy of this.heroes[this.opponentTeam()]) {
+                            switch (enemy.stance) {
+                                case STANCE.defensive:
+                                    enemy.nextStance = Phaser.Math.Between(0, 1) as STANCE;
+                                    break;
+                                case STANCE.neutral:
+                                    enemy.nextStance = Phaser.Math.Between(0, 2) as STANCE;
+                                    break;
+                                case STANCE.aggressive:
+                                    enemy.nextStance = Phaser.Math.Between(1, 2) as STANCE;
+                                    break;
+                            }
+                            // don't update arrow yet
+                            enemy.target = new Rank(Math.floor(2.9 * Math.random()) as HeroIndex, this.playerTeam());
+                        }
+                        for (let team = 0; team < 2; ++team) {
+                            for (let i = 0; i < 3; ++i) {
+                                const hero = this.heroes[team][i];
+                                // mock damages too
+                                const mockStanceContrib = (stance: STANCE) => {
+                                    if (stance == STANCE.aggressive) {
+                                        return 7/5;
+                                    } else if (stance == STANCE.defensive) {
+                                        return 3/5;
+                                    }
+                                    return 1;
+                                };
+                                const enemy = this.heroes[hero.target!.team][hero.target!.index];
+                                const mockDmg = Math.floor(25 * mockStanceContrib(hero.stance) / mockStanceContrib(enemy.stance));
+                                enemy.dmg += mockDmg;
+                                console.log(`mock dmg: [${i}] -> [${hero.target!.index}] = ${mockDmg}`);
+                            }
+                        }
+                        this.runCombatAnims();
+                    });
                 }
             } else {
                 console.log(`invalid move: ${JSON.stringify(this.heroes[this.playerTeam()].map((hero) => hero.target))}`);

@@ -74,6 +74,7 @@ export type BBoardDerivedState = {
   readonly p2Cmds: bigint[] | undefined;
   readonly p2Dmg: bigint[];
   readonly p2Stances: STANCE[];
+  readonly round: bigint;
   // readonly p2Dmg0: bigint;
   // readonly p2Dmg1: bigint;
   // readonly p2Dmg2: bigint;

@@ -102,6 +102,7 @@ export class BBoardAPI implements DeployedBBoardAPI {
         return {
           state,
           instance: ledgerState.instance,
+          round: ledgerState.round,
           p1Heroes: ledgerState.p1Heroes,
           p1Cmds: ledgerState.p1Cmds.is_some ? ledgerState.p1Cmds.value : undefined,
           p1Dmg: [ledgerState.p1Dmg0, ledgerState.p1Dmg1, ledgerState.p1Dmg2],
