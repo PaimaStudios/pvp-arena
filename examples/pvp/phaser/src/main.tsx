@@ -1,6 +1,6 @@
 import { NetworkId, setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 import '@midnight-ntwrk/dapp-connector-api';
-import { ITEM, RESULT, STANCE, Hero, ARMOR } from '@midnight-ntwrk/pvp-contract';
+import { ITEM, RESULT, STANCE, Hero, ARMOR, pureCircuits } from '@midnight-ntwrk/pvp-contract';
 import { type BBoardDerivedState, type DeployedBBoardAPI, BBoardAPI } from '@midnight-ntwrk/pvp-api';
 import './globals';
 import { type ContractAddress } from '@midnight-ntwrk/compact-runtime';
@@ -18,7 +18,8 @@ export const logger = pino.pino({
 });
 console.log(`networkId = ${networkId}`);
 
-const MAX_HP = 300;
+const MAX_HP = 300000;
+const HP_DIV = 1000;
 
 const ARENA_WIDTH = 480;
 const ARENA_HEIGHT = 360;
@@ -52,6 +53,34 @@ var createButton = function (scene: any, text: any) {
     });
 }
 
+function hpDiv(dmg: number): number {
+    return Math.floor((dmg / HP_DIV));
+}
+
+class DamageText extends Phaser.GameObjects.Text {
+    xSpeed: number;
+    ySpeed: number;
+    lifetime: number;
+    constructor(arena: Arena, x: number, y: number, dmg: number) {
+        super(arena, x, y, hpDiv(dmg).toString(), {fontSize: 12, color: 'white'});
+        this.xSpeed = Math.random() * 0.1 - 0.05;
+        this.ySpeed = -0.95;
+        this.lifetime = 2;
+    }
+
+    preUpdate() {
+        this.x += this.xSpeed;
+        this.y += this.ySpeed;
+        this.lifetime -= 0.025;
+
+        if (this.lifetime <= 0) {
+            this.destroy();
+        } else if (this.lifetime < 1) {
+            this.alpha = this.lifetime;
+        }
+    }
+}
+
 class BloodDrop extends Phaser.GameObjects.Sprite {
     arena: Arena;
     xPrev: number;
@@ -76,12 +105,9 @@ class BloodDrop extends Phaser.GameObjects.Sprite {
         this.zSpeed = - (Math.random() * 0.9 + 0.3);
         this.z = -10;
         this.setAlpha(0.5);
-
-        arena.add.existing(this);
     }
 
     preUpdate() {
-        //console.log(`not moving?! `);
         this.x += this.xSpeed;
         this.y += this.ySpeed + this.zSpeed;
         this.z += this.zSpeed;
@@ -130,6 +156,36 @@ class Rank {
     }
 }
 
+// only converts bigint, but this is the only problem we have with printing ledger types
+function safeJSONString(obj: object): string {
+    // hacky but just doing it manually since otherwise: 'string' can't be used to index type '{}'
+    // let newObj = {}
+    // for (let [key, val] of Object.entries(obj)) {
+    //     if (typeof val == 'bigint') {
+    //         newObj[key] = Number(val);
+    //     } else {
+    //         newObj[key] = val;
+    //     }
+    // }
+    // return JSON.stringify(newObj);
+    let str = '{';
+    let first = true;
+    for (let [key, val] of Object.entries(obj)) {
+        if (!first) {
+            str += ', ';
+        }
+        first = false;
+        str += `"${key}": `;
+        if (typeof val == 'bigint') {
+            str += Number(val).toString();
+        } else {
+            str += JSON.stringify(val);
+        }
+    }
+    str += '}';
+    return str;
+}
+
 class HeroActor extends Phaser.GameObjects.Container {
     arena: Arena;
     hero: Hero;
@@ -138,19 +194,22 @@ class HeroActor extends Phaser.GameObjects.Container {
     rank: Rank;
     target: Rank | undefined;
     targetLine: Phaser.GameObjects.Line;
-    dmg: number;
+    uiDmg: number;
+    realDmg: number;
     stance: STANCE;
     nextStance: STANCE;
     arrow: Phaser.GameObjects.Image;
 
     constructor(arena: Arena, hero: Hero, rank: Rank) {
+        console.log(`Hero created: ${rank.team}|${rank.index} => ${safeJSONString(pureCircuits.calc_stats(hero))}`);
         super(arena, rank.x(STANCE.neutral), rank.y());
 
         this.arena = arena;
         this.hero = hero;
         this.rank = rank;
         this.target = undefined;
-        this.dmg = 0;
+        this.uiDmg = 0;
+        this.realDmg = 0;
         this.stance = STANCE.neutral;
         this.nextStance = this.stance;
 
@@ -201,8 +260,18 @@ class HeroActor extends Phaser.GameObjects.Container {
     }
 
     // true = killed
-    public attack(dmg: number): boolean {
-        this.dmg = Math.min(MAX_HP, this.dmg + dmg);
+    public attack(attacker: HeroActor, dmg: number): boolean {
+        const n = 1 + (dmg * (2 + Math.random())) / 9000;
+        console.log(`attack(${hpDiv(dmg)}) -> ${n}`);
+        for (let i = 0; i < n; ++i) {
+            // TODO: this feels weird/ugly/hacky - maybe the constructor shouldn't add itself
+            this.arena.add.existing(new BloodDrop(this.arena, this.x, this.y, Phaser.Math.Angle.Between(attacker.rank.x(attacker.stance), attacker.rank.y(), this.rank.x(this.stance), this.rank.y())));
+        }
+
+        this.arena.add.existing(new DamageText(this.arena,  (this.x + attacker.x) / 2, (this.y + attacker.y) / 2 - 24, dmg));
+
+        this.uiDmg = Math.min(MAX_HP, this.uiDmg + dmg);
+        this.hpBar.setHp(1 - (this.uiDmg / MAX_HP));
         if (this.isAlive()) {
             return false;
         }
@@ -211,7 +280,8 @@ class HeroActor extends Phaser.GameObjects.Container {
     }
 
     public isAlive(): boolean {
-        return this.dmg < MAX_HP;
+        // TODO: UI or real dmg?
+        return this.uiDmg < MAX_HP;
     }
 
     public toggleNextStance() {
@@ -466,7 +536,7 @@ class Arena extends Phaser.Scene
                 for (let i = 0; i < 3; ++i) {
                     const hero = this.heroes[team][i];
                     // update damage now, but no graphical effect shown 
-                    hero.dmg = Number(dmgs[i]);
+                    hero.realDmg = Number(dmgs[i]);
                     hero.nextStance = stances[i];
                     hero.target = new Rank(newTargets[team][i] as HeroIndex, team == 0 ? 1 : 0);
                 }
@@ -545,13 +615,16 @@ class Arena extends Phaser.Scene
                         // do graphical part of hp change (TODO: this should prob be in Hero)
                         // TODO: this is ALL damage done the entire turn to enemy so only
                         // the first attack will appear to change it. need to fix this, can't rely on just this
-                        enemy.hpBar.setHp(1 - (enemy.dmg / 300));
-                        
-                        // TODO: base on how much damage was done
-                        const n = 1 + 2 * Math.random();
-                        for (let i = 0; i < n; ++i) {
-                            // TODO: this feels weird/ugly/hacky - maybe the constructor shouldn't add itself
-                            new BloodDrop(this, enemy.x, enemy.y, Phaser.Math.Angle.Between(hero.rank.x(hero.stance), hero.rank.y(), enemy.rank.x(enemy.stance), enemy.rank.y()));
+                        const stance_strs = ['def', 'neu', 'atk'];
+                        for (let hero_stance = 0; hero_stance < 3; ++hero_stance) {
+                            for (let enemy_stance = 0; enemy_stance < 3; ++enemy_stance) {
+                                const dmg = pureCircuits.calc_item_dmg_against(pureCircuits.calc_stats(hero.hero), hero_stance as STANCE, pureCircuits.calc_stats(enemy.hero), enemy_stance as STANCE);
+                                console.log(`dmg [${stance_strs[hero_stance]}] -> [${stance_strs[enemy_stance]}] = ${hpDiv(Number(dmg))}`);
+                            }
+                        }
+                        const dmg = pureCircuits.calc_item_dmg_against(pureCircuits.calc_stats(hero.hero), hero.nextStance, pureCircuits.calc_stats(enemy.hero), enemy.nextStance);
+                        if (enemy.attack(hero, Number(dmg))) {
+                            // TODO: death anim? or this is resolved after?
                         }
                     },
                     persist: false,
@@ -701,24 +774,6 @@ class Arena extends Phaser.Scene
                             // don't update arrow yet
                             enemy.target = new Rank(Math.floor(2.9 * Math.random()) as HeroIndex, this.playerTeam());
                         }
-                        for (let team = 0; team < 2; ++team) {
-                            for (let i = 0; i < 3; ++i) {
-                                const hero = this.heroes[team][i];
-                                // mock damages too
-                                const mockStanceContrib = (stance: STANCE) => {
-                                    if (stance == STANCE.aggressive) {
-                                        return 7/5;
-                                    } else if (stance == STANCE.defensive) {
-                                        return 3/5;
-                                    }
-                                    return 1;
-                                };
-                                const enemy = this.heroes[hero.target!.team][hero.target!.index];
-                                const mockDmg = Math.floor(25 * mockStanceContrib(hero.stance) / mockStanceContrib(enemy.stance));
-                                enemy.dmg += mockDmg;
-                                console.log(`mock dmg: [${i}] -> [${hero.target!.index}] = ${mockDmg}`);
-                            }
-                        }
                         this.runCombatAnims();
                     });
                 }
@@ -726,37 +781,7 @@ class Arena extends Phaser.Scene
                 console.log(`invalid move: ${JSON.stringify(this.heroes[this.playerTeam()].map((hero) => hero.target))}`);
             }
         });
-        // //p2
-        // this.input?.keyboard?.on('keydown-FIVE', () => {
-        //     const hero = this.heroes[1][0];
-        //     hero.setStance(toggleStance(hero.stance));
-        // });
-        // this.input?.keyboard?.on('keydown-T', () => {
-        //     const hero = this.heroes[1][1];
-        //     hero.setStance(toggleStance(hero.stance));
-        // });
-        // this.input?.keyboard?.on('keydown-G', () => {
-        //     const hero = this.heroes[1][2];
-        //     hero.setStance(toggleStance(hero.stance));
-        // });
 
-        //this.cursors = this.input?.keyboard?.createCursorKeys();
-
-        // let heroes: Hero[][] = [
-        //     [
-        //         { lhs: ITEM.axe, rhs: ITEM.sword, helmet: ARMOR.leather, chest: ARMOR.leather, skirt: ARMOR.nothing, greaves: ARMOR.leather },
-        //         { lhs: ITEM.bow, rhs: ITEM.nothing, helmet: ARMOR.nothing, chest: ARMOR.nothing, skirt: ARMOR.leather, greaves: ARMOR.metal },
-        //         { lhs: ITEM.shield, rhs: ITEM.axe, helmet: ARMOR.metal, chest: ARMOR.metal, skirt: ARMOR.metal, greaves: ARMOR.nothing },
-        //     ], [
-        //         { lhs: ITEM.spear, rhs: ITEM.spear, helmet: ARMOR.leather, chest: ARMOR.metal, skirt: ARMOR.leather, greaves: ARMOR.leather},
-        //         { lhs: ITEM.spear, rhs: ITEM.shield, helmet: ARMOR.metal, chest: ARMOR.metal, skirt: ARMOR.metal, greaves: ARMOR.metal },
-        //         { lhs: ITEM.sword, rhs: ITEM.sword, helmet: ARMOR.nothing, chest: ARMOR.nothing, skirt: ARMOR.nothing, greaves: ARMOR.nothing },
-        //     ]
-        // ];
-        // let stances: STANCE[][] = [
-        //     [STANCE.aggressive, STANCE.neutral, STANCE.defensive],
-        //     [STANCE.defensive, STANCE.aggressive, STANCE.neutral]
-        // ];
         if (this.api == undefined) {
             let mockHeroes: Hero[][] = [
                 [
@@ -780,32 +805,7 @@ class Arena extends Phaser.Scene
             }
             this.setMatchState(MatchState.WaitingOnPlayer);
         }
-
-
-        // img.setPosition(240, 180);
-        // const text = this.add.text(400, 300, 'Hello World', { fixedWidth: 150, fixedHeight: 36 })
-        // text.setOrigin(0.5, 0.5)
-    
-        // text.setInteractive().on('pointerdown', () => {
-        //     const rexUI = (this.scene as any).rexUI as RexUIPlugin;
-        //     rexUI.edit(text)
-        // })
         const rexUI = (this.scene as any).rexUI as RexUIPlugin;
-
-
-        // const particles = this.add.particles(0, 0, 'red', {
-        //     speed: 100,
-        //     scale: { start: 1, end: 0 },
-        //     blendMode: 'ADD'
-        // });
-
-        // const logo = this.physics.add.image(400, 100, 'logo');
-
-        // logo.setVelocity(100, 200);
-        // logo.setBounce(1, 1);
-        // logo.setCollideWorldBounds(true);
-
-        // particles.startFollow(logo);
     }
 
     update() {
