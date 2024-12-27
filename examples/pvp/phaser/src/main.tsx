@@ -1,7 +1,7 @@
 import { NetworkId, setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 import '@midnight-ntwrk/dapp-connector-api';
-import { ITEM, RESULT, STANCE, Hero, ARMOR, pureCircuits } from '@midnight-ntwrk/pvp-contract';
-import { type BBoardDerivedState, type DeployedBBoardAPI, BBoardAPI } from '@midnight-ntwrk/pvp-api';
+import { ITEM, RESULT, STANCE, Hero, ARMOR, pureCircuits, GAME_STATE } from '@midnight-ntwrk/pvp-contract';
+import { type BBoardDerivedState, type DeployedBBoardAPI } from '@midnight-ntwrk/pvp-api';
 import './globals';
 import { type ContractAddress } from '@midnight-ntwrk/compact-runtime';
 import { LedgerState } from '@midnight-ntwrk/ledger';
@@ -24,7 +24,115 @@ const HP_DIV = 1000;
 const ARENA_WIDTH = 480;
 const ARENA_HEIGHT = 360;
 
+const MOCK_DELAY = 500;
 
+class MockBBoardAPI implements DeployedBBoardAPI {
+    readonly deployedContractAddress: ContractAddress;
+    readonly state$: Observable<BBoardDerivedState>;
+    subscriber: Subscriber<BBoardDerivedState> | undefined;
+    mockState: BBoardDerivedState;
+
+
+    constructor() {
+        this.deployedContractAddress = 'mocked address, do not use';
+        this.state$ = new Observable<BBoardDerivedState>((subscriber) => {
+            this.subscriber = subscriber;
+        });
+        this.mockState = {
+            instance: BigInt(0),
+            round: BigInt(0),
+            state: GAME_STATE.p1_commit,
+            p1Heroes: [
+                { lhs: ITEM.axe, rhs: ITEM.sword, helmet: ARMOR.leather, chest: ARMOR.leather, skirt: ARMOR.nothing, greaves: ARMOR.leather },
+                { lhs: ITEM.bow, rhs: ITEM.nothing, helmet: ARMOR.nothing, chest: ARMOR.nothing, skirt: ARMOR.leather, greaves: ARMOR.metal },
+                { lhs: ITEM.shield, rhs: ITEM.axe, helmet: ARMOR.metal, chest: ARMOR.metal, skirt: ARMOR.metal, greaves: ARMOR.nothing },
+            ],
+            p1Cmds: [BigInt(0), BigInt(0), BigInt(0)],
+            p1Dmg: [BigInt(0), BigInt(0), BigInt(0)],
+            p1Stances: [STANCE.neutral, STANCE.neutral, STANCE.neutral],
+            isP1: true,
+            p2Heroes: [
+                { lhs: ITEM.spear, rhs: ITEM.spear, helmet: ARMOR.leather, chest: ARMOR.metal, skirt: ARMOR.leather, greaves: ARMOR.leather},
+                { lhs: ITEM.spear, rhs: ITEM.shield, helmet: ARMOR.metal, chest: ARMOR.metal, skirt: ARMOR.metal, greaves: ARMOR.metal },
+                { lhs: ITEM.sword, rhs: ITEM.sword, helmet: ARMOR.nothing, chest: ARMOR.nothing, skirt: ARMOR.nothing, greaves: ARMOR.nothing },
+            ],
+            p2Cmds: [BigInt(0), BigInt(0), BigInt(0)],
+            p2Dmg: [BigInt(0), BigInt(0), BigInt(0)],
+            p2Stances: [STANCE.neutral, STANCE.neutral, STANCE.neutral],
+        };
+        setTimeout(() => {
+            this.subscriber?.next(this.mockState);
+        }, MOCK_DELAY);
+    }
+  
+    async reg_p2(): Promise<void> {
+        // does nothing
+    }
+
+    async p1Commit(commands: bigint[], stances: STANCE[]): Promise<void> {
+        setTimeout(() => {
+            this.mockState = {
+                ...this.mockState,
+                p1Cmds: commands,
+                p1Stances: stances,
+                state: GAME_STATE.p2_commit,
+            };
+            this.subscriber?.next(this.mockState);
+            setTimeout(() => {
+                // just randomly attack/move
+                // TODO: take death into account
+                this.mockState = {
+                    ...this.mockState,
+                    p2Cmds: [
+                        BigInt(Phaser.Math.Between(0, 2)),
+                        BigInt(Phaser.Math.Between(0, 2)),
+                        BigInt(Phaser.Math.Between(0, 2)),
+                    ],
+                    p2Stances: this.mockState.p2Stances.map((stance) => {
+                        switch (stance) {
+                            case STANCE.defensive:
+                                return Phaser.Math.Between(0, 1) as STANCE;
+                            case STANCE.aggressive:
+                                return Phaser.Math.Between(1, 2) as STANCE;
+                        }
+                        return Phaser.Math.Between(0, 2) as STANCE;
+                    }),
+                    state: GAME_STATE.p1_reveal,
+                };
+                this.subscriber?.next(this.mockState);
+            }, MOCK_DELAY);
+        }, MOCK_DELAY);
+    }
+
+    async p2Commit(commands: bigint[], stances: STANCE[]): Promise<void> {
+        // should never be called (TODO: let you have a p2 testing environment too?)
+        throw new Error("do not call this");
+    }
+
+    async p1Reveal(): Promise<void> {
+        setTimeout(() => {
+            this.mockState = {
+                ...this.mockState,
+                state: GAME_STATE.p2_reveal,
+            };
+            this.subscriber?.next(this.mockState);
+            setTimeout(() => {
+                // TODO: calculate real damages reflected in the (mock) ledger state
+                this.mockState = {
+                    ...this.mockState,
+                    state: GAME_STATE.p1_commit,
+                    round: this.mockState.round + BigInt(1),
+                };
+                this.subscriber?.next(this.mockState);
+            }, 2000);
+        }, MOCK_DELAY);
+    }
+
+    async p2Reveal(): Promise<void> {
+        // should never be called (TODO: let you have a p2 testing environment too?)
+        throw new Error("do not call this");
+    }
+}
 
 // phaser part
 
@@ -33,6 +141,7 @@ import RexUIPlugin from 'phaser3-rex-plugins/templates/ui/ui-plugin'
 //import KeyboardPlugin from 'phaser3-';
 import RoundRectanglePlugin from 'phaser3-rex-plugins/plugins/roundrectangle-plugin.js';
 import { extend } from 'fp-ts/lib/pipeable';
+import { Subscriber, Observable } from 'rxjs';
 
 const COLOR_MAIN = 0x4e342e;
 const COLOR_LIGHT = 0x7b5e57;
@@ -168,22 +277,34 @@ function safeJSONString(obj: object): string {
     //     }
     // }
     // return JSON.stringify(newObj);
-    let str = '{';
-    let first = true;
-    for (let [key, val] of Object.entries(obj)) {
-        if (!first) {
-            str += ', ';
+    if (typeof obj == 'bigint') {
+        return Number(obj).toString();
+    } else if (Array.isArray(obj)) {
+        let str = '[';
+        let innerFirst = true;
+        for (let i = 0; i < obj.length; ++i) {
+            if (!innerFirst) {
+                str += ', ';
+            }
+            innerFirst = false;
+            str += safeJSONString(obj[i]);
         }
-        first = false;
-        str += `"${key}": `;
-        if (typeof val == 'bigint') {
-            str += Number(val).toString();
-        } else {
-            str += JSON.stringify(val);
+        str += ']';
+        return str;
+    } else if (typeof obj == 'object') {
+        let str = '{';
+        let first = true;
+        for (let [key, val] of Object.entries(obj)) {
+            if (!first) {
+                str += ', ';
+            }
+            first = false;
+            str += `"${key}": ${safeJSONString(val)}`;
         }
+        str += '}';
+        return str;
     }
-    str += '}';
-    return str;
+    return JSON.stringify(obj);
 }
 
 class HeroActor extends Phaser.GameObjects.Container {
@@ -440,7 +561,7 @@ class MainMenu extends Phaser.Scene {
         });
         // create an off-chain testing world for testing graphical stuff without having to wait a long time
         this.input?.keyboard?.on('keydown-T', () => {
-            this.scene.add('Arena', new Arena(undefined, true));
+            this.scene.add('Arena', new Arena(new MockBBoardAPI(), true));
             this.scene.start('Arena');
         });
     }
@@ -451,7 +572,29 @@ enum MatchState {
     WaitingOnPlayer,
     WaitingOnOpponent,
     SubmittingMove,
+    WaitingOtherPlayerReveal,
+    RevealingMove,
     CombatResolving,
+}
+
+function gameStateStr(state: GAME_STATE): string {
+    switch (state) {
+        case GAME_STATE.p1_commit:
+            return 'p1_commit';
+        case GAME_STATE.p2_commit:
+            return 'p2_commit';
+        case GAME_STATE.p1_reveal:
+            return 'p1_reveal';
+        case GAME_STATE.p2_reveal:
+            return 'p2_reveal';
+        case GAME_STATE.p1_win:
+            return 'p1_win';
+        case GAME_STATE.p1_win:
+            return 'p2_win';
+        case GAME_STATE.tie:
+            return 'tie';
+    }
+    return '???';
 }
 
 class Arena extends Phaser.Scene
@@ -460,13 +603,13 @@ class Arena extends Phaser.Scene
     keys: any;
     heroes: HeroActor[][];
     // this is undefined in testing battles (offline) only, will always be defined in real battles (on-chain)
-    api: BBoardAPI | undefined;
+    api: DeployedBBoardAPI;
     isP1: boolean;
     matchState: MatchState;
     matchStateText: Phaser.GameObjects.Text | undefined;
     round: number;
 
-    constructor(api: BBoardAPI | undefined, isP1: boolean) {
+    constructor(api: DeployedBBoardAPI, isP1: boolean) {
         super('Arena');
         this.heroes = [];
         this.api = api;
@@ -497,10 +640,16 @@ class Arena extends Phaser.Scene
                 this.matchStateText?.setText('Make your move');
                 break;
             case MatchState.WaitingOnOpponent:
-                this.matchStateText?.setText('Waiting on opponent...');
+                this.matchStateText?.setText('Waiting on opponent (submit)...');
                 break;
             case MatchState.SubmittingMove:
                 this.matchStateText?.setText('Submitting move...');
+                break;
+            case MatchState.RevealingMove:
+                this.matchStateText?.setText('Revealing move...');
+                break;
+            case MatchState.WaitingOtherPlayerReveal:
+                this.matchStateText?.setText('Waiting on opponent (reveal)...');
                 break;
             case MatchState.CombatResolving:
                 this.matchStateText?.setText('Battle!');
@@ -509,8 +658,8 @@ class Arena extends Phaser.Scene
     }
 
     onStateChange(state: BBoardDerivedState) {
-        //console.log(`new state: ${JSON.stringify(state)}`);
-        console.log('new state');
+        console.log(`new state: ${safeJSONString(state)}`);
+        console.log(`NOW: ${gameStateStr(state.state)}`);
 
         if (this.heroes.length == 0) {
             for (let team = 0; team < 2; ++team) {
@@ -546,13 +695,42 @@ class Arena extends Phaser.Scene
         // TODO: it's weird we have both this and the combat animations to control MatchState
         // we should consolidate this
         switch (state.state) {
-            case RESULT.continue:
-                this.setMatchState(MatchState.WaitingOnPlayer);
+            case GAME_STATE.p1_commit:
+                this.setMatchState(this.isP1 ? MatchState.WaitingOnPlayer : MatchState.WaitingOnOpponent);
                 break;
-            case RESULT.waiting:
-                this.setMatchState(MatchState.WaitingOnOpponent);
+            case GAME_STATE.p2_commit:
+                this.setMatchState(this.isP1 ? MatchState.WaitingOnOpponent : MatchState.WaitingOnPlayer);
                 break;
+            case GAME_STATE.p1_reveal:
+                if (this.isP1) {
+                    console.log('revealing move (as p1)');
+                    this.setMatchState(MatchState.RevealingMove);
+                    // TODO: what happens if player cancels or closes window?
+                    this.api!.p1Reveal().then(() => {
+                        // ??? (probably nothing - resolved by onStateChange)
+                    });
+                } else {
+                    this.setMatchState(MatchState.WaitingOtherPlayerReveal);
+                }
+                break;
+            case GAME_STATE.p2_reveal:
+                if (this.isP1) {
+                    this.setMatchState(MatchState.WaitingOtherPlayerReveal);
+                } else {
+                    console.log('revealing move (as p2)');
+                    this.setMatchState(MatchState.RevealingMove);
+                    // TODO: what happens if player cancels or closes window?
+                    this.api!.p2Reveal().then(() => {
+                        // ??? (probably nothing - resolved by onStateChange)
+                    });
+                }
+                break;
+            case GAME_STATE.p1_win:
+            case GAME_STATE.p2_win:
+            case GAME_STATE.tie:
+                console.log('match ended');
                 // TODO: match end logic
+                break;
         }
 
         if (this.round < state.round) {
@@ -705,7 +883,7 @@ class Arena extends Phaser.Scene
     {
         this.add.image(ARENA_WIDTH, ARENA_HEIGHT, 'arena_bg').setPosition(ARENA_WIDTH / 2, ARENA_HEIGHT / 2).setDepth(-2);
 
-        this.matchStateText = this.add.text(ARENA_WIDTH / 2, ARENA_HEIGHT * 0.9, 'Initializing...', {fontSize: 12, color: 'white'}).setOrigin(0.5, 0.5);
+        this.matchStateText = this.add.text(ARENA_WIDTH / 2, ARENA_HEIGHT * 0.9, '', {fontSize: 12, color: 'white'}).setOrigin(0.5, 0.5);
 
         //this.cursors = this?.input?.keyboard?.addCapture('1,2,3,8,9,0,X,C');
         this.keys = this.input?.keyboard?.addKeys({
@@ -724,121 +902,84 @@ class Arena extends Phaser.Scene
             f:  Phaser.Input.Keyboard.KeyCodes.F,
         });
         this.input?.keyboard?.on('keydown-FOUR', () => {
-            const hero = this.heroes[this.playerTeam()][0];
-            hero.toggleNextStance();
+            if (this.matchState == MatchState.WaitingOnPlayer) {
+                const hero = this.heroes[this.playerTeam()][0];
+                hero.toggleNextStance();
+            }
         });
         this.input?.keyboard?.on('keydown-R', () => {
-            const hero = this.heroes[this.playerTeam()][1];
-            hero.toggleNextStance();
+            if (this.matchState == MatchState.WaitingOnPlayer) {
+                const hero = this.heroes[this.playerTeam()][1];
+                hero.toggleNextStance();
+            }
         });
         this.input?.keyboard?.on('keydown-F', () => {
-            const hero = this.heroes[this.playerTeam()][2];
-            hero.toggleNextStance();
+            if (this.matchState == MatchState.WaitingOnPlayer) {
+                const hero = this.heroes[this.playerTeam()][2];
+                hero.toggleNextStance();
+            }
         });
         this.input?.keyboard?.on('keydown-Z', () => {
-            //const stances = this.heroes[this.playerTeam()].map((hero) => hero.stance);
-            const moves = this.heroes[this.playerTeam()].filter((hero) => hero.target != undefined && hero.target.team == this.opponentTeam()).map((hero) => BigInt(hero.target!.index));
-            // TODO: need to check vs number of alive heroes
-            if (moves.length == 3) {
-                if (this.api != undefined) {
+            if (this.matchState == MatchState.WaitingOnPlayer) {
+                const stances = this.heroes[this.playerTeam()].map((hero) => hero.nextStance);
+                const moves = this.heroes[this.playerTeam()].filter((hero) => hero.target != undefined && hero.target.team == this.opponentTeam()).map((hero) => BigInt(hero.target!.index));
+                // TODO: need to check vs number of alive heroes
+                if (moves.length == 3) {
                     this.setMatchState(MatchState.SubmittingMove);
                     if (this.isP1) {
                         console.log('submitting move (as p1)');
-                        this.api.p1Command(moves).then((result) => {
+                        this.api.p1Commit(moves, stances).then(() => {
                             // ???
                         });
                     } else {
                         console.log('submitting move (as p2)');
-                        this.api.p2Command(moves).then((result) => {
+                        this.api.p2Commit(moves, stances).then(() => {
                             // ???
                         });
                     }
                 } else {
-                    // mock response
-                    this.setMatchState(MatchState.SubmittingMove);
-                    // mock delay for response
-                    this.time.delayedCall(1000, () => {
-                        // randomize opponent moves
-                        for (let enemy of this.heroes[this.opponentTeam()]) {
-                            switch (enemy.stance) {
-                                case STANCE.defensive:
-                                    enemy.nextStance = Phaser.Math.Between(0, 1) as STANCE;
-                                    break;
-                                case STANCE.neutral:
-                                    enemy.nextStance = Phaser.Math.Between(0, 2) as STANCE;
-                                    break;
-                                case STANCE.aggressive:
-                                    enemy.nextStance = Phaser.Math.Between(1, 2) as STANCE;
-                                    break;
-                            }
-                            // don't update arrow yet
-                            enemy.target = new Rank(Math.floor(2.9 * Math.random()) as HeroIndex, this.playerTeam());
-                        }
-                        this.runCombatAnims();
-                    });
+                    console.log(`invalid move: ${JSON.stringify(this.heroes[this.playerTeam()].map((hero) => hero.target))}`);
                 }
-            } else {
-                console.log(`invalid move: ${JSON.stringify(this.heroes[this.playerTeam()].map((hero) => hero.target))}`);
             }
         });
-
-        if (this.api == undefined) {
-            let mockHeroes: Hero[][] = [
-                [
-                    { lhs: ITEM.axe, rhs: ITEM.sword, helmet: ARMOR.leather, chest: ARMOR.leather, skirt: ARMOR.nothing, greaves: ARMOR.leather },
-                    { lhs: ITEM.bow, rhs: ITEM.nothing, helmet: ARMOR.nothing, chest: ARMOR.nothing, skirt: ARMOR.leather, greaves: ARMOR.metal },
-                    { lhs: ITEM.shield, rhs: ITEM.axe, helmet: ARMOR.metal, chest: ARMOR.metal, skirt: ARMOR.metal, greaves: ARMOR.nothing },
-                ], [
-                    { lhs: ITEM.spear, rhs: ITEM.spear, helmet: ARMOR.leather, chest: ARMOR.metal, skirt: ARMOR.leather, greaves: ARMOR.leather},
-                    { lhs: ITEM.spear, rhs: ITEM.shield, helmet: ARMOR.metal, chest: ARMOR.metal, skirt: ARMOR.metal, greaves: ARMOR.metal },
-                    { lhs: ITEM.sword, rhs: ITEM.sword, helmet: ARMOR.nothing, chest: ARMOR.nothing, skirt: ARMOR.nothing, greaves: ARMOR.nothing },
-                ]
-            ];
-            for (let team = 0; team < 2; ++team) {
-                let hero_actors = [];
-                for (let i = 0; i < 3; ++i) {
-                    const rank = new Rank(i as HeroIndex, team as Team);
-                    // TODO: how to do these loops so typescript knows that team/i are 0-1 and 0-2?
-                    hero_actors.push(new HeroActor(this, mockHeroes[team][i], rank));
-                }
-                this.heroes.push(hero_actors);
-            }
-            this.setMatchState(MatchState.WaitingOnPlayer);
-        }
         const rexUI = (this.scene as any).rexUI as RexUIPlugin;
+
+        this.setMatchState(MatchState.Initializing);
     }
 
     update() {
-        if (this.keys.n1.isDown) {
-            this.heroes[this.playerTeam()][0].setTarget(new Rank(0, this.opponentTeam()));
-        }
-        if (this.keys.n2.isDown) {
-            this.heroes[this.playerTeam()][0].setTarget(new Rank(1, this.opponentTeam()));
-        }
-        if (this.keys.n3.isDown) {
-            this.heroes[this.playerTeam()][0].setTarget(new Rank(2, this.opponentTeam()));
-        }
-        if (this.keys.q.isDown) {
-            this.heroes[this.playerTeam()][1].setTarget(new Rank(0, this.opponentTeam()));
-        }
-        if (this.keys.w.isDown) {
-            this.heroes[this.playerTeam()][1].setTarget(new Rank(1, this.opponentTeam()));
-        }
-        if (this.keys.e.isDown) {
-            this.heroes[this.playerTeam()][1].setTarget(new Rank(2, this.opponentTeam()));
-        }
-        if (this.keys.a.isDown) {
-            this.heroes[this.playerTeam()][2].setTarget(new Rank(0, this.opponentTeam()));
-        }
-        if (this.keys.s.isDown) {
-            this.heroes[this.playerTeam()][2].setTarget(new Rank(1, this.opponentTeam()));
-        }
-        if (this.keys.d.isDown) {
-            this.heroes[this.playerTeam()][2].setTarget(new Rank(2, this.opponentTeam()));
-        }
-        if (this.keys.x.isDown) {
-            for (let i = 0; i < 3; ++i) {
-                this.heroes[this.playerTeam()][i].setTarget(undefined);
+        if (this.matchState == MatchState.WaitingOnPlayer) {
+            if (this.keys.n1.isDown) {
+                this.heroes[this.playerTeam()][0].setTarget(new Rank(0, this.opponentTeam()));
+            }
+            if (this.keys.n2.isDown) {
+                this.heroes[this.playerTeam()][0].setTarget(new Rank(1, this.opponentTeam()));
+            }
+            if (this.keys.n3.isDown) {
+                this.heroes[this.playerTeam()][0].setTarget(new Rank(2, this.opponentTeam()));
+            }
+            if (this.keys.q.isDown) {
+                this.heroes[this.playerTeam()][1].setTarget(new Rank(0, this.opponentTeam()));
+            }
+            if (this.keys.w.isDown) {
+                this.heroes[this.playerTeam()][1].setTarget(new Rank(1, this.opponentTeam()));
+            }
+            if (this.keys.e.isDown) {
+                this.heroes[this.playerTeam()][1].setTarget(new Rank(2, this.opponentTeam()));
+            }
+            if (this.keys.a.isDown) {
+                this.heroes[this.playerTeam()][2].setTarget(new Rank(0, this.opponentTeam()));
+            }
+            if (this.keys.s.isDown) {
+                this.heroes[this.playerTeam()][2].setTarget(new Rank(1, this.opponentTeam()));
+            }
+            if (this.keys.d.isDown) {
+                this.heroes[this.playerTeam()][2].setTarget(new Rank(2, this.opponentTeam()));
+            }
+            if (this.keys.x.isDown) {
+                for (let i = 0; i < 3; ++i) {
+                    this.heroes[this.playerTeam()][i].setTarget(undefined);
+                }
             }
         }
     }

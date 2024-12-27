@@ -6,7 +6,7 @@
 
 import { type MidnightProviders } from '@midnight-ntwrk/midnight-js-types';
 import { type FoundContract } from '@midnight-ntwrk/midnight-js-contracts';
-import type { Hero, RESULT, STANCE, BBoardPrivateState, Contract, Witnesses } from '@midnight-ntwrk/pvp-contract';
+import type { Hero, RESULT, STANCE, GAME_STATE, BBoardPrivateState, Contract, Witnesses } from '@midnight-ntwrk/pvp-contract';
 
 /**
  * The private states consumed throughout the application.
@@ -63,7 +63,6 @@ export type DeployedBBoardContract = FoundContract<BBoardPrivateState, BBoardCon
  * A type that represents the derived combination of public (or ledger), and private state.
  */
 export type BBoardDerivedState = {
-  readonly state: RESULT;
   readonly instance: bigint;
   readonly p1Heroes: Hero[];
   readonly p1Cmds: bigint[] | undefined;
@@ -75,6 +74,7 @@ export type BBoardDerivedState = {
   readonly p2Dmg: bigint[];
   readonly p2Stances: STANCE[];
   readonly round: bigint;
+  readonly state: GAME_STATE;
   // readonly p2Dmg0: bigint;
   // readonly p2Dmg1: bigint;
   // readonly p2Dmg2: bigint;

@@ -19,6 +19,7 @@ import {
   ARMOR,
   Hero,
   STANCE,
+  GAME_STATE,
  // Command,
 } from '@midnight-ntwrk/pvp-contract';
 import * as utils from './utils/index.js';
@@ -37,8 +38,10 @@ export interface DeployedBBoardAPI {
   readonly state$: Observable<BBoardDerivedState>;
 
   reg_p2: () => Promise<void>;
-  p1Command: (commands: bigint[]) => Promise<RESULT>;
-  p2Command: (commands: bigint[]) => Promise<RESULT>;
+  p1Commit: (commands: bigint[], stances: STANCE[]) => Promise<void>;
+  p2Commit: (commands: bigint[], stances: STANCE[]) => Promise<void>;
+  p1Reveal: () => Promise<void>;
+  p2Reveal: () => Promise<void>;
 }
 
 /**
@@ -97,12 +100,11 @@ export class BBoardAPI implements DeployedBBoardAPI {
         );
 
         const isP1 = ledgerState.p1Sig === localSig;
-        const state = (ledgerState.p1Cmds.is_some && isP1) || (ledgerState.p2Cmds.is_some && !isP1) ? RESULT.waiting  : RESULT.continue;
 
         return {
-          state,
           instance: ledgerState.instance,
           round: ledgerState.round,
+          state: ledgerState.gameState,
           p1Heroes: ledgerState.p1Heroes,
           p1Cmds: ledgerState.p1Cmds.is_some ? ledgerState.p1Cmds.value : undefined,
           p1Dmg: [ledgerState.p1Dmg0, ledgerState.p1Dmg1, ledgerState.p1Dmg2],
@@ -150,7 +152,7 @@ export class BBoardAPI implements DeployedBBoardAPI {
     });
   }
 
-  async p1Command(commands: bigint[]): Promise<RESULT> {
+  async p1Commit(commands: bigint[], stances: STANCE[]): Promise<void> {
     this.logger?.info('p1Command');
 
     //console.log(`commands: ${commands.map((c) => c.attack.toString()).join(',')}`);
@@ -158,7 +160,7 @@ export class BBoardAPI implements DeployedBBoardAPI {
     console.log('before[1]');
     var txData;
     try {
-      txData = await this.deployedContract.callTx.p1_command(commands);
+      txData = await this.deployedContract.callTx.p1_commit_commands(commands);
     } catch (err) {
       console.log(`p1Cmd failed: ${JSON.stringify(err)}`);
       throw err;
@@ -166,22 +168,20 @@ export class BBoardAPI implements DeployedBBoardAPI {
     console.log('after[1]');
     this.logger?.trace({
       transactionAdded: {
-        circuit: 'p1_command',
+        circuit: 'p1_commit',
         txHash: txData.public.txHash,
         blockHeight: txData.public.blockHeight,
       },
     });
-
-    return txData.private.result;
   }
 
-  async p2Command(commands: bigint[]): Promise<RESULT> {
+  async p2Commit(commands: bigint[], stances: STANCE[]): Promise<void> {
     this.logger?.info('p2Command');
 
     console.log('before[2]');
     var txData;
     try {
-      txData = await this.deployedContract.callTx.p2_command(commands);
+      txData = await this.deployedContract.callTx.p2_commit_commands(commands);
     } catch (err) {
       console.log(`p2Cmd failed: ${JSON.stringify(err)}`);
       throw err;
@@ -191,13 +191,51 @@ export class BBoardAPI implements DeployedBBoardAPI {
 
     this.logger?.trace({
       transactionAdded: {
-        circuit: 'p2_command',
+        circuit: 'p2_commit',
         txHash: txData.public.txHash,
         blockHeight: txData.public.blockHeight,
       },
     });
+  }
 
-    return txData.private.result;
+  async p1Reveal(): Promise<void> {
+    this.logger?.info('p1Reveal');
+
+    var txData;
+    try {
+      txData = await this.deployedContract.callTx.p1_reveal_commands();
+    } catch (err) {
+      console.log(`p1Reveal failed: ${JSON.stringify(err)}`);
+      throw err;
+    }
+
+    this.logger?.trace({
+      transactionAdded: {
+        circuit: 'p1_reveal_commands',
+        txHash: txData.public.txHash,
+        blockHeight: txData.public.blockHeight,
+      },
+    });
+  }
+
+  async p2Reveal(): Promise<void> {
+    this.logger?.info('p2Reveal');
+
+    var txData;
+    try {
+      txData = await this.deployedContract.callTx.p2_reveal_commands();
+    } catch (err) {
+      console.log(`p2Reveal failed: ${JSON.stringify(err)}`);
+      throw err;
+    }
+
+    this.logger?.trace({
+      transactionAdded: {
+        circuit: 'p2_reveal_commands',
+        txHash: txData.public.txHash,
+        blockHeight: txData.public.blockHeight,
+      },
+    });
   }
 
   /**

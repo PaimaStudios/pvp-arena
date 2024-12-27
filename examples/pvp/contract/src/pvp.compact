@@ -8,6 +8,8 @@ export enum ITEM { nothing, axe, shield, bow, sword, spear }
 
 export enum ARMOR { nothing, leather, metal }
 
+export enum GAME_STATE { p1_commit, p2_commit, p1_reveal, p2_reveal, p1_win, p2_win, tie }
+
 export struct Hero {
     rhs: ITEM,
     lhs: ITEM,
@@ -46,6 +48,8 @@ export ledger p1_stances: Cell<Vector<3, STANCE>>;
 export ledger p1_dmg_0: Cell<Uint<32>>;
 export ledger p1_dmg_1: Cell<Uint<32>>;
 export ledger p1_dmg_2: Cell<Uint<32>>;
+export ledger p1_alive: Cell<Vector<3, Boolean>>;
+export ledger p1_commit: Cell<Bytes<32>>;
 
 export ledger p2_heroes: Cell<Vector<3, Hero>>;
 export ledger p2_stats: Cell<Vector<3, TotalStats>>;
@@ -54,10 +58,12 @@ export ledger p2_stances: Cell<Vector<3, STANCE>>;
 export ledger p2_dmg_0: Cell<Uint<32>>;
 export ledger p2_dmg_1: Cell<Uint<32>>;
 export ledger p2_dmg_2: Cell<Uint<32>>;
+export ledger p2_alive: Cell<Vector<3, Boolean>>;
 //export ledger p2_dmg: Cell<Vector<3, Uint<32>>>;
 
 export ledger instance: Counter;
 export ledger round: Cell<Uint<32>>;
+export ledger game_state: Cell<GAME_STATE>;
 export ledger p1_sig: Cell<Field>;
 export ledger p2_sig: Cell<Maybe<Field>>;
 
@@ -76,11 +82,12 @@ constructor(p1: Vector<3, Hero>, p2: Vector<3, Hero>) {
     p2_dmg_0 = 0;
     p2_dmg_1 = 0;
     p2_dmg_2 = 0;
-    p2_stats = [calc_stats(p1_heroes[0]), calc_stats(p1_heroes[1]), calc_stats(p1_heroes[2])];
+    p1_stats = [calc_stats(p1_heroes[0]), calc_stats(p1_heroes[1]), calc_stats(p1_heroes[2])];
     p2_stats = [calc_stats(p2_heroes[0]), calc_stats(p2_heroes[1]), calc_stats(p2_heroes[2])];
     instance.increment(1);
     p1_sig = calc_sig(player_secret_key(), instance as Field);
     round = 0;
+    game_state = GAME_STATE.p1_commit;
 }
 
 export pure circuit calc_stats(hero: Hero): TotalStats {
@@ -99,14 +106,6 @@ struct Hasher {
     f: Field,
     b: Bytes<32>,
 }
-
-struct Stats {
-    dmg: Uint<32>,
-    armor_dmg: Uint<32>,
-    dex_factor: Uint<32>,
-}
-
-//export circuit item_stats(): Stats {}
 
 export circuit armor_crush_def(armor: ARMOR): Uint<32> {
     if (armor == ARMOR.metal) {
@@ -198,6 +197,17 @@ export circuit item_dex_bonus(item: ITEM): Uint<32> {
     return 0;
 }
 
+pure circuit stance_damage_modifier(stance: STANCE): Uint<32> {
+    if (stance == STANCE.aggressive) {
+        return 8;
+    } else if (stance == STANCE.defensive) {
+        return 2;
+    }
+    return 5;
+    // could in theory optimize, but can't cast here - maybe we should replace it all with Uint to see what improvements there are?
+    //return (2 + 3 * (stance as Uint<32>)) as Uint<32>;
+}
+
 export pure circuit calc_item_dmg_against(stats: TotalStats, stance: STANCE, enemy_stats: TotalStats, enemy_stance: STANCE): Uint<32> {
     return (((100 - enemy_stats.crush_def) * stats.crush_dmg + (100 - enemy_stats.pierce_def) * stats.pierce_dmg + (40 + enemy_stats.weight - stats.weight) * stats.dex_bonus) * (stance_damage_modifier(stance) + stance_damage_modifier(enemy_stance))) as Uint<32>;
 }
@@ -210,40 +220,19 @@ export circuit reg_p2(): Void {
     p2_sig = some<Field>(1);//calc_sig(player_sk(), instance as Field));
 }
 
-export circuit p1_command(cmds: Vector<3, Uint<32>>): RESULT {
+export circuit p1_commit_commands(cmds: Vector<3, Uint<32>>): Void {
+    assert game_state == GAME_STATE.p1_commit "P1 must commit at start of round";
     //assert calc_sig(player_sk(), instance as Field as Bytes<32>) == p1_sig "Not authorized as P1";
-    // TODO: commitments
+    // TODO: commitments (don't bother yet since inputs are public anyway until PR #1 is merged)
     p1_cmds = some<Vector<3, Uint<32>>>(cmds);//[Uint<32> { attack: cmds[0], stance: STANCE.neutral}, Uint<32> { attack: cmds[1], stance: STANCE.neutral}, Uint<32> { attack: cmds[2], stance: STANCE.neutral}]]);
-    if (p2_cmds == none<Vector<3, Uint<32>>>()) {
-        return RESULT.waiting;
-    }
-    return battle_round();
 }
 
-pure circuit stance_damage_modifier(stance: STANCE): Uint<32> {
-    if (stance == STANCE.aggressive) {
-        return 8;
-    } else if (stance == STANCE.defensive) {
-        return 2;
-    }
-    return 5;
-    // could in theory optimize, but can't cast here - maybe we should replace it all with Uint to see what improvements there are?
-    //return (2 + 3 * (stance as Uint<32>)) as Uint<32>;
-}
-
-export circuit p2_command(cmds: Vector<3, Uint<32>>): RESULT {
-    // TODO: commitments
-    p2_cmds = some<Vector<3, Uint<32>>>(cmds);
-    if (p1_cmds == none<Vector<3, Uint<32>>>()) {
-        return RESULT.waiting;
-    }
-    return battle_round();
-}
-
-circuit battle_round(): RESULT {
+export circuit p1_reveal_commands(): Void {
     const DEAD = 300;
 
-    // compact arrays are borderline useless so we have to unroll everything here
+    assert game_state == GAME_STATE.p1_reveal "P1 must reveal after P2 commits";
+
+    // compact arrays are borderline useless so we have to unroll everything here. we also can't pass in TotalStats since overhed too high
     // TODO: it would be better to have it simultaneous. would either need locals (not supported in compact) or cache a p1_alive: Vector<3, Boolean> ledger var
     if (p1_dmg_0 < DEAD) {
         if (p1_cmds.value[0] == 0) {
@@ -272,6 +261,19 @@ circuit battle_round(): RESULT {
             p2_dmg_2 = (p2_dmg_2 + ((100 - p2_stats[2].crush_def) * p1_stats[2].crush_dmg + (100 - p2_stats[2].pierce_def) * p1_stats[2].pierce_dmg + (40 + p2_stats[2].weight - p1_stats[2].weight) * p1_stats[2].dex_bonus) * (stance_damage_modifier(p1_stances[2]) + stance_damage_modifier(p2_stances[2]))) as Uint<32>;
         }
     }
+}
+
+export circuit p2_commit_commands(cmds: Vector<3, Uint<32>>): Void {
+    assert game_state == GAME_STATE.p2_commit "P2 must commit after P1 commits";
+    // TODO: commitments
+    p2_cmds = some<Vector<3, Uint<32>>>(cmds);
+}
+
+export circuit p2_reveal_commands(): Void {
+    const DEAD = 300;
+
+    assert game_state == GAME_STATE.p2_reveal "P2 must reveal after P1 reveals";
+
     if (p2_dmg_0 < DEAD) {
         if (p2_cmds.value[0] == 0) {
             p1_dmg_0 = (p1_dmg_0 + ((100 - p1_stats[0].crush_def) * p2_stats[0].crush_dmg + (100 - p1_stats[0].pierce_def) * p2_stats[0].pierce_dmg + (40 + p1_stats[0].weight - p2_stats[0].weight) * p2_stats[0].dex_bonus) * (stance_damage_modifier(p2_stances[0]) + stance_damage_modifier(p1_stances[0]))) as Uint<32>;
@@ -304,12 +306,11 @@ circuit battle_round(): RESULT {
 
     if (p2_dmg_0 >= DEAD && p2_dmg_1 >= DEAD && p2_dmg_2 >= DEAD) {
         if (p1_dmg_0 >= DEAD && p1_dmg_1 >= DEAD && p1_dmg_2 >= DEAD) {
-            return RESULT.tie;
+            game_state = GAME_STATE.tie;
         }
-        return RESULT.p1_win;
+        game_state = GAME_STATE.p1_win;
+    } else if (p1_dmg_0 >= DEAD && p1_dmg_1 >= DEAD && p1_dmg_2 >= DEAD) {
+        game_state = GAME_STATE.p2_win;
     }
-    if (p1_dmg_0 >= DEAD && p1_dmg_1 >= DEAD && p1_dmg_2 >= DEAD) {
-        return RESULT.p2_win;
-    }
-    return RESULT.continue;
+    game_state = GAME_STATE.p1_commit;
 } 
