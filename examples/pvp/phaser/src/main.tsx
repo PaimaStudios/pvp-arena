@@ -38,24 +38,26 @@ class MockBBoardAPI implements DeployedBBoardAPI {
         this.state$ = new Observable<BBoardDerivedState>((subscriber) => {
             this.subscriber = subscriber;
         });
+        const p1Heroes: Hero[] = [
+            { lhs: ITEM.axe, rhs: ITEM.sword, helmet: ARMOR.leather, chest: ARMOR.leather, skirt: ARMOR.nothing, greaves: ARMOR.leather },
+            { lhs: ITEM.bow, rhs: ITEM.nothing, helmet: ARMOR.nothing, chest: ARMOR.nothing, skirt: ARMOR.leather, greaves: ARMOR.metal },
+            { lhs: ITEM.shield, rhs: ITEM.axe, helmet: ARMOR.metal, chest: ARMOR.metal, skirt: ARMOR.metal, greaves: ARMOR.nothing },
+        ];
+        const p2Heroes: Hero[] = [
+            { lhs: ITEM.spear, rhs: ITEM.spear, helmet: ARMOR.leather, chest: ARMOR.metal, skirt: ARMOR.leather, greaves: ARMOR.leather},
+            { lhs: ITEM.spear, rhs: ITEM.shield, helmet: ARMOR.metal, chest: ARMOR.metal, skirt: ARMOR.metal, greaves: ARMOR.metal },
+            { lhs: ITEM.sword, rhs: ITEM.sword, helmet: ARMOR.nothing, chest: ARMOR.nothing, skirt: ARMOR.nothing, greaves: ARMOR.nothing },
+        ];
         this.mockState = {
             instance: BigInt(0),
             round: BigInt(0),
             state: GAME_STATE.p1_commit,
-            p1Heroes: [
-                { lhs: ITEM.axe, rhs: ITEM.sword, helmet: ARMOR.leather, chest: ARMOR.leather, skirt: ARMOR.nothing, greaves: ARMOR.leather },
-                { lhs: ITEM.bow, rhs: ITEM.nothing, helmet: ARMOR.nothing, chest: ARMOR.nothing, skirt: ARMOR.leather, greaves: ARMOR.metal },
-                { lhs: ITEM.shield, rhs: ITEM.axe, helmet: ARMOR.metal, chest: ARMOR.metal, skirt: ARMOR.metal, greaves: ARMOR.nothing },
-            ],
+            p1Heroes,
             p1Cmds: [BigInt(0), BigInt(0), BigInt(0)],
             p1Dmg: [BigInt(0), BigInt(0), BigInt(0)],
             p1Stances: [STANCE.neutral, STANCE.neutral, STANCE.neutral],
             isP1: true,
-            p2Heroes: [
-                { lhs: ITEM.spear, rhs: ITEM.spear, helmet: ARMOR.leather, chest: ARMOR.metal, skirt: ARMOR.leather, greaves: ARMOR.leather},
-                { lhs: ITEM.spear, rhs: ITEM.shield, helmet: ARMOR.metal, chest: ARMOR.metal, skirt: ARMOR.metal, greaves: ARMOR.metal },
-                { lhs: ITEM.sword, rhs: ITEM.sword, helmet: ARMOR.nothing, chest: ARMOR.nothing, skirt: ARMOR.nothing, greaves: ARMOR.nothing },
-            ],
+            p2Heroes,
             p2Cmds: [BigInt(0), BigInt(0), BigInt(0)],
             p2Dmg: [BigInt(0), BigInt(0), BigInt(0)],
             p2Stances: [STANCE.neutral, STANCE.neutral, STANCE.neutral],
@@ -70,6 +72,7 @@ class MockBBoardAPI implements DeployedBBoardAPI {
     }
 
     async p1Commit(commands: bigint[], stances: STANCE[]): Promise<void> {
+        console.log(`p1Commit(${safeJSONString(commands)}, ${JSON.stringify(stances)})`);
         setTimeout(() => {
             this.mockState = {
                 ...this.mockState,
@@ -78,24 +81,34 @@ class MockBBoardAPI implements DeployedBBoardAPI {
                 state: GAME_STATE.p2_commit,
             };
             this.subscriber?.next(this.mockState);
+            // mock p2 commit
             setTimeout(() => {
                 // just randomly attack/move
                 // TODO: take death into account
                 this.mockState = {
                     ...this.mockState,
-                    p2Cmds: [
-                        BigInt(Phaser.Math.Between(0, 2)),
-                        BigInt(Phaser.Math.Between(0, 2)),
-                        BigInt(Phaser.Math.Between(0, 2)),
-                    ],
-                    p2Stances: this.mockState.p2Stances.map((stance) => {
-                        switch (stance) {
-                            case STANCE.defensive:
-                                return Phaser.Math.Between(0, 1) as STANCE;
-                            case STANCE.aggressive:
-                                return Phaser.Math.Between(1, 2) as STANCE;
+                    p2Cmds: this.mockState.p2Cmds!.map((cmd, i) => {
+                        if (this.mockState.p2Dmg[i] < MAX_HP) {
+                            const availableTargets = [0, 1, 2].filter((j) => this.mockState.p1Dmg[j] < MAX_HP);
+                            const ret = BigInt(availableTargets[Phaser.Math.Between(0, availableTargets.length - 1)]);
+                            console.log(`availableTargets(${i}) = ${availableTargets} -> ${ret}`);
+                            return ret;
                         }
-                        return Phaser.Math.Between(0, 2) as STANCE;
+                        // arbitrary but causes breaking errors early since dead units should never have their commands read
+                        return BigInt(1000000);
+                    }),
+                    p2Stances: this.mockState.p2Stances.map((stance, i) => {
+                        if (this.mockState.p2Dmg[i] < MAX_HP) {
+                            switch (stance) {
+                                case STANCE.defensive:
+                                    return Phaser.Math.Between(0, 1) as STANCE;
+                                case STANCE.aggressive:
+                                    return Phaser.Math.Between(1, 2) as STANCE;
+                                case STANCE.neutral:
+                                    return Phaser.Math.Between(0, 2) as STANCE;
+                            }
+                        }
+                        return stance;
                     }),
                     state: GAME_STATE.p1_reveal,
                 };
@@ -116,12 +129,39 @@ class MockBBoardAPI implements DeployedBBoardAPI {
                 state: GAME_STATE.p2_reveal,
             };
             this.subscriber?.next(this.mockState);
+            // mock p2 reveal
             setTimeout(() => {
-                // TODO: calculate real damages reflected in the (mock) ledger state
+                console.log(`MockState: ${safeJSONString(this.mockState)}`);
+                let p1Dmg = this.mockState.p1Dmg;
+                let p2Dmg = this.mockState.p2Dmg;
+                for (let i = 0; i < 3; ++i) {
+                    if (this.mockState.p1Dmg[i] < MAX_HP) {
+                        const p1Cmd = Number(this.mockState.p1Cmds![i]);
+                        p2Dmg[p1Cmd] = BigInt(Math.min(MAX_HP, Number(p2Dmg[p1Cmd] + pureCircuits.calc_item_dmg_against(
+                            pureCircuits.calc_stats(this.mockState.p1Heroes[i]),
+                            this.mockState.p1Stances[i],
+                            pureCircuits.calc_stats(this.mockState.p2Heroes[p1Cmd]),
+                            this.mockState.p2Stances[p1Cmd],
+                        ))));
+                    }
+                    if (this.mockState.p2Dmg[i] < MAX_HP) {
+                        const p2Cmd = Number(this.mockState.p2Cmds![i]);
+                        p1Dmg[p2Cmd] = BigInt(Math.min(MAX_HP, Number(p1Dmg[p2Cmd] + pureCircuits.calc_item_dmg_against(
+                            pureCircuits.calc_stats(this.mockState.p2Heroes[i]),
+                            this.mockState.p2Stances[i],
+                            pureCircuits.calc_stats(this.mockState.p1Heroes[p2Cmd]),
+                            this.mockState.p1Stances[p2Cmd],
+                        ))));
+                    }
+                }
+                const p1Dead = p1Dmg.every((hp) => hp >= BigInt(MAX_HP));
+                const p2Dead = p2Dmg.every((hp) => hp >= BigInt(MAX_HP));
                 this.mockState = {
                     ...this.mockState,
-                    state: GAME_STATE.p1_commit,
+                    state: p1Dead ? (p2Dead ? GAME_STATE.tie : GAME_STATE.p2_win) : (p2Dead ? GAME_STATE.p1_win : GAME_STATE.p1_commit),
                     round: this.mockState.round + BigInt(1),
+                    p1Dmg,
+                    p2Dmg,
                 };
                 this.subscriber?.next(this.mockState);
             }, 2000);
@@ -209,8 +249,7 @@ class BloodDrop extends Phaser.GameObjects.Sprite {
         const spd2 = 0.3 + Math.random() * 0.8;
         // probably fine but might need to look at Phaser.Math.SinCosTableGenerator
         this.xSpeed = spd * Math.cos(dir) + spd2 * Math.cos(dir2);
-        // don't care if positive or negative since we're just looking for random
-        this.ySpeed = spd * Math.sin(dir) - spd2 * Math.sin(dir2);
+        this.ySpeed = spd * Math.sin(dir) + spd2 * Math.sin(dir2);
         this.zSpeed = - (Math.random() * 0.9 + 0.3);
         this.z = -10;
         this.setAlpha(0.5);
@@ -228,7 +267,7 @@ class BloodDrop extends Phaser.GameObjects.Sprite {
         this.yPrev = this.y;
 
         if (this.z >= 0) {
-            this.arena.add.image(this.x, this.y, `blood_puddle${Phaser.Math.Between(3, 6)}`).setAlpha(0.5).setDepth(-1);
+            this.arena.add.image(this.x, this.y, `blood_puddle${Phaser.Math.Between(3, 6)}`).setAlpha(0.5).setDepth(-2);
             this.destroy();
         }
     }
@@ -315,6 +354,7 @@ class HeroActor extends Phaser.GameObjects.Container {
     rank: Rank;
     target: Rank | undefined;
     targetLine: Phaser.GameObjects.Line;
+    preTurnDmg: number;
     uiDmg: number;
     realDmg: number;
     stance: STANCE;
@@ -329,6 +369,7 @@ class HeroActor extends Phaser.GameObjects.Container {
         this.hero = hero;
         this.rank = rank;
         this.target = undefined;
+        this.preTurnDmg = 0;
         this.uiDmg = 0;
         this.realDmg = 0;
         this.stance = STANCE.neutral;
@@ -382,7 +423,7 @@ class HeroActor extends Phaser.GameObjects.Container {
 
     // true = killed
     public attack(attacker: HeroActor, dmg: number): boolean {
-        const n = 1 + (dmg * (2 + Math.random())) / 9000;
+        const n = 1 + (dmg * (2 + Math.random())) / 100000;
         console.log(`attack(${hpDiv(dmg)}) -> ${n}`);
         for (let i = 0; i < n; ++i) {
             // TODO: this feels weird/ugly/hacky - maybe the constructor shouldn't add itself
@@ -392,17 +433,43 @@ class HeroActor extends Phaser.GameObjects.Container {
         this.arena.add.existing(new DamageText(this.arena,  (this.x + attacker.x) / 2, (this.y + attacker.y) / 2 - 24, dmg));
 
         this.uiDmg = Math.min(MAX_HP, this.uiDmg + dmg);
-        this.hpBar.setHp(1 - (this.uiDmg / MAX_HP));
+        this.updateHpBar();
         if (this.isAlive()) {
             return false;
         }
-        this.visible = false;
         return true;
     }
 
+    public onTurnEnd() {
+        if (this.uiDmg != this.realDmg) {
+            console.error(`uiDmg[${this.rank.team}][${this.rank.index}] out of sync. Real: ${this.realDmg} Ui: ${this.uiDmg}`);
+            this.uiDmg = this.uiDmg;
+            this.updateHpBar();
+        }
+        this.arena.tweens.add(this.hpBar.tweenDamage(() => {
+            this.preTurnDmg = this.realDmg;
+            this.updateHpBar();
+            if (!this.isAlive()) {
+                this.arena.tweens.add({
+                    targets: this,
+                    alpha: 0,
+                    duration: 150,
+                    onComplete: () => {
+                            this.visible = false;
+                            this.arena.add.image(this.x, this.y, 'skull').setFlipX(this.rank.team == 1).setDepth(-1);
+                    }
+                });
+            }
+        }));
+    }
+
+    private updateHpBar() {
+        this.hpBar.setHp(1 - Math.min(1, this.uiDmg / MAX_HP), (this.uiDmg - this.preTurnDmg) / MAX_HP);
+    }
+
     public isAlive(): boolean {
-        // TODO: UI or real dmg?
-        return this.uiDmg < MAX_HP;
+        console.log(`isAlive(${this.rank.team}, ${this.rank.index}) => ${this.preTurnDmg < MAX_HP} | ${this.preTurnDmg, this.uiDmg, this.realDmg}`);
+        return this.preTurnDmg < MAX_HP;
     }
 
     public toggleNextStance() {
@@ -483,6 +550,7 @@ class HpBar extends Phaser.GameObjects.Container {
     // left: Phaser.GameObjects.Image;
     // right: Phaser.GameObjects.Image;
     middle: Phaser.GameObjects.Image;
+    turnDmg: Phaser.GameObjects.Image;
     //back: Phaser.GameObjects.Image;
     width: number;
 
@@ -493,16 +561,31 @@ class HpBar extends Phaser.GameObjects.Container {
         this.add(arena.add.image(-w / 2, 0, 'hp_bar_back').setOrigin(0, 0.5).setScale(w, 1));
         this.middle = arena.add.image(-w  / 2, 0, 'hp_bar_middle').setOrigin(0, 0.5);
         this.add(this.middle);
+        this.turnDmg = arena.add.image(-w  / 2, 0, 'hp_bar_middle').setOrigin(0, 0.5).setAlpha(0.5);
+        this.add(this.turnDmg);
         this.add(arena.add.image(-w / 2 - 1, 0, 'hp_bar_side'));
         this.add(arena.add.image(w / 2 + 1, 0, 'hp_bar_side').setFlipX(true));
-        this.setHp(1.0);
+        this.setHp(1, 0);
 
         //arena.add.existing(this);
     }
 
     // from 0.0 to 1.0
-    setHp(hp: number) {
+    setHp(hp: number, lostHp: number) {
+        console.log(`setHp(${hp}, ${lostHp})`);
         this.middle.setScale(hp * this.width, 1);
+        this.turnDmg
+            .setScale(lostHp * this.width, 1)
+            .setX((-this.width / 2) + ((hp) * this.width));
+    }
+
+    tweenDamage(onComplete: () => void | undefined): Phaser.Types.Tweens.TweenBuilderConfig {
+        return {
+            targets: this.turnDmg,
+            scaleX: 0,
+            duration: 150,
+            onComplete,
+        };
     }
 }
 
@@ -526,7 +609,7 @@ class MainMenu extends Phaser.Scene {
 
     create ()
     {
-        this.add.image(ARENA_WIDTH, ARENA_HEIGHT, 'arena_bg').setPosition(ARENA_WIDTH / 2, ARENA_HEIGHT / 2).setDepth(-2);
+        this.add.image(ARENA_WIDTH, ARENA_HEIGHT, 'arena_bg').setPosition(ARENA_WIDTH / 2, ARENA_HEIGHT / 2).setDepth(-3);
         this.add.text(ARENA_WIDTH / 2 + 2, ARENA_HEIGHT / 4 + 2, 'PVP ARENA', {fontSize: 64, color: 'black'}).setOrigin(0.5, 0.5);
         this.add.text(ARENA_WIDTH / 2, ARENA_HEIGHT / 4, 'PVP ARENA', {fontSize: 64, color: 'white'}).setOrigin(0.5, 0.5);
         this.text = this.add.text(ARENA_WIDTH / 2, ARENA_HEIGHT * 0.65, 'Press J to join, C to create', {fontSize: 12, color: 'white'}).setOrigin(0.5, 0.5);
@@ -538,6 +621,7 @@ class MainMenu extends Phaser.Scene {
                     console.log('====================\napi done from creating\n===============');
                     console.log(`contract address: ${api.deployedContractAddress}`);
                     navigator.clipboard.writeText(api.deployedContractAddress);
+                    this.scene.remove('Arena');
                     const arena = new Arena(api, true);
                     this.scene.add('Arena', arena);
                     this.scene.start('Arena');
@@ -552,6 +636,7 @@ class MainMenu extends Phaser.Scene {
                     this.waiting = true;
                     this.deployProvider.join(contractAddress).then((api) => {
                         console.log('=====================\napi done from joining\n======================');
+                        this.scene.remove('Arena');
                         const arena = new Arena(api, false);
                         this.scene.add('Arena', arena);
                         this.scene.start('Arena');
@@ -561,6 +646,7 @@ class MainMenu extends Phaser.Scene {
         });
         // create an off-chain testing world for testing graphical stuff without having to wait a long time
         this.input?.keyboard?.on('keydown-T', () => {
+            this.scene.remove('Arena');
             this.scene.add('Arena', new Arena(new MockBBoardAPI(), true));
             this.scene.start('Arena');
         });
@@ -575,6 +661,9 @@ enum MatchState {
     WaitingOtherPlayerReveal,
     RevealingMove,
     CombatResolving,
+    GameOverP1Win,
+    GameOverP2Win,
+    GameOverTie,
 }
 
 function gameStateStr(state: GAME_STATE): string {
@@ -599,12 +688,11 @@ function gameStateStr(state: GAME_STATE): string {
 
 class Arena extends Phaser.Scene
 {
-    cursors: any;//Phaser.Types.Input.Keyboard.KeyboardPlugin | undefined;
-    keys: any;
     heroes: HeroActor[][];
     // this is undefined in testing battles (offline) only, will always be defined in real battles (on-chain)
     api: DeployedBBoardAPI;
     isP1: boolean;
+    onChainState: GAME_STATE;
     matchState: MatchState;
     matchStateText: Phaser.GameObjects.Text | undefined;
     round: number;
@@ -614,6 +702,7 @@ class Arena extends Phaser.Scene
         this.heroes = [];
         this.api = api;
         this.isP1 = isP1;
+        this.onChainState = GAME_STATE.p1_commit;
         this.matchState = MatchState.Initializing;
         this.round = 0;
 
@@ -654,6 +743,15 @@ class Arena extends Phaser.Scene
             case MatchState.CombatResolving:
                 this.matchStateText?.setText('Battle!');
                 break;
+            case MatchState.GameOverP1Win:
+                this.matchStateText?.setText(this.isP1 ? 'You won! - Press Space to return to menu' : 'Opponent won! - Press Space to return to menu');
+                break;
+            case MatchState.GameOverP2Win:
+                this.matchStateText?.setText(!this.isP1 ? 'You won! - Press Space to return to menu' : 'Opponent won! - Press Space to return to menu');
+                break;
+            case MatchState.GameOverTie:
+                this.matchStateText?.setText('Battle tied! - Press Space to return to menu');
+                break;
         }
     }
 
@@ -661,6 +759,7 @@ class Arena extends Phaser.Scene
         console.log(`new state: ${safeJSONString(state)}`);
         console.log(`NOW: ${gameStateStr(state.state)}`);
 
+        // create heroes initially
         if (this.heroes.length == 0) {
             for (let team = 0; team < 2; ++team) {
                 let hero_actors = [];
@@ -673,10 +772,11 @@ class Arena extends Phaser.Scene
             }
         }
 
+        // update commands/stances/damages
         if (state.p1Cmds != undefined && state.p2Cmds != undefined) {
             const newTargets = [
                 state.p1Cmds.map(Number),
-                state.p1Cmds.map(Number)
+                state.p2Cmds.map(Number)
             ];
             for (let team = 0; team < 2; ++team) {
                 const heroes = team == 0 ? state.p1Heroes : state.p2Heroes;
@@ -684,7 +784,7 @@ class Arena extends Phaser.Scene
                 const stances = team == 0 ? state.p1Stances : state.p2Stances;
                 for (let i = 0; i < 3; ++i) {
                     const hero = this.heroes[team][i];
-                    // update damage now, but no graphical effect shown 
+                    // update damage now, but no graphical effect shown
                     hero.realDmg = Number(dmgs[i]);
                     hero.nextStance = stances[i];
                     hero.target = new Rank(newTargets[team][i] as HeroIndex, team == 0 ? 1 : 0);
@@ -694,7 +794,18 @@ class Arena extends Phaser.Scene
         
         // TODO: it's weird we have both this and the combat animations to control MatchState
         // we should consolidate this
-        switch (state.state) {
+        this.onChainState = state.state;
+
+        if (this.round < state.round) {
+            this.runCombatAnims();
+            this.round = Number(state.round);
+        } else {
+            this.runStateChange();
+        }
+    }
+
+    runStateChange() {
+        switch (this.onChainState) {
             case GAME_STATE.p1_commit:
                 this.setMatchState(this.isP1 ? MatchState.WaitingOnPlayer : MatchState.WaitingOnOpponent);
                 break;
@@ -726,16 +837,14 @@ class Arena extends Phaser.Scene
                 }
                 break;
             case GAME_STATE.p1_win:
-            case GAME_STATE.p2_win:
-            case GAME_STATE.tie:
-                console.log('match ended');
-                // TODO: match end logic
+                this.setMatchState(MatchState.GameOverP1Win);
                 break;
-        }
-
-        if (this.round < state.round) {
-            this.runCombatAnims();
-            this.round = Number(state.round);
+            case GAME_STATE.p2_win:
+                this.setMatchState(MatchState.GameOverP2Win);
+                break;
+            case GAME_STATE.tie:
+                this.setMatchState(MatchState.GameOverTie);
+                break;
         }
     }
 
@@ -743,25 +852,23 @@ class Arena extends Phaser.Scene
         this.setMatchState(MatchState.CombatResolving);
         const tweens: Phaser.Types.Tweens.TweenBuilderConfig[] = [];
         // stance change tweens
-        for (let team = 0; team < 2; ++team) {
-            for (let i = 0; i < 3; ++i) {
-                const hero = this.heroes[team][i];
-                tweens.push({
-                    targets: hero,
-                    delay: 150,
-                    duration: 350,
-                    ease: 'Linear',
-                    x: hero.rank.x(hero.nextStance),
-                    onStart: () => {
-                        hero.arrow.visible = false;
-                    },
-                    onComplete: () => {
-                        hero.stance = hero.nextStance;
-                        //hero
-                        hero.updateTargetLine();
-                    },
-                });
-            }
+        const aliveUnits = this.getAllAliveUnits();
+        for (const hero of aliveUnits) {
+            tweens.push({
+                targets: hero,
+                delay: 150,
+                duration: 350,
+                ease: 'Linear',
+                x: hero.rank.x(hero.nextStance),
+                onStart: () => {
+                    hero.arrow.visible = false;
+                },
+                onComplete: () => {
+                    hero.stance = hero.nextStance;
+                    //hero
+                    hero.updateTargetLine();
+                },
+            });
         }
         tweens.push({
             targets: null,
@@ -769,65 +876,100 @@ class Arena extends Phaser.Scene
         });
 
         // attack tweens
-        for (let team = 0; team < 2; ++team) {
-            for (let i = 0; i < 3; ++i) {
-                const hero = this.heroes[team][i];
-                const enemy = this.heroes[hero.target!.team][hero.target!.index];
-                tweens.push({
-                    targets: hero,
-                    duration: 150,
-                    onComplete: () => {
-                        // get rid of line before attack
-                        hero.setTarget(undefined);
-                    },
-                });
-                const dist = (new Phaser.Math.Vector2(hero.rank.x(hero.nextStance), hero.y)).distance(new Phaser.Math.Vector2(enemy.rank.x(enemy.nextStance), enemy.y));
-                tweens.push({
-                    targets: hero,
-                    ease: 'Quad.easeInOut',
-                    x: hero.target!.x(this.getHero(hero.target!).nextStance),
-                    y: hero.target!.y(),
-                    duration: 40 + dist * 2,
-                    onComplete: () => {
-                        console.log(`half of tween [${team}][${i}]`);
-                        // do graphical part of hp change (TODO: this should prob be in Hero)
-                        // TODO: this is ALL damage done the entire turn to enemy so only
-                        // the first attack will appear to change it. need to fix this, can't rely on just this
-                        const stance_strs = ['def', 'neu', 'atk'];
-                        for (let hero_stance = 0; hero_stance < 3; ++hero_stance) {
-                            for (let enemy_stance = 0; enemy_stance < 3; ++enemy_stance) {
-                                const dmg = pureCircuits.calc_item_dmg_against(pureCircuits.calc_stats(hero.hero), hero_stance as STANCE, pureCircuits.calc_stats(enemy.hero), enemy_stance as STANCE);
-                                console.log(`dmg [${stance_strs[hero_stance]}] -> [${stance_strs[enemy_stance]}] = ${hpDiv(Number(dmg))}`);
-                            }
+        for (const hero of aliveUnits) {
+            // can't use hero.x / enemy.x etc since those aren't where they'll be after they move to their new stance
+            const heroX = hero.rank.x(hero.nextStance);
+            const heroY = hero.rank.y(); // technically the same right now but could be different in the future
+            const enemy = this.heroes[hero.target!.team][hero.target!.index];
+            const enemyX = enemy.rank.x(enemy.nextStance);
+            const enemyY = enemy.rank.y();
+            // get rid of line/prepare delay
+            tweens.push({
+                targets: hero,
+                duration: 150,
+                onComplete: () => {
+                    // get rid of line before attack
+                    hero.setTarget(undefined);
+                },
+            });
+            // move to enemy
+            const dist = (new Phaser.Math.Vector2(heroX, heroY)).distance(new Phaser.Math.Vector2(enemyX, enemyY));
+            tweens.push({
+                targets: hero,
+                ease: 'Quad.easeInOut',
+                x: hero.target!.x(this.getHero(hero.target!).nextStance),
+                y: hero.target!.y(),
+                duration: 40 + dist * 2,
+                onComplete: () => {
+                    console.log(`half of tween [${hero.rank.team}][${hero.rank.index}]`);
+                    // do graphical part of hp change (TODO: this should prob be in Hero)
+                    // TODO: this is ALL damage done the entire turn to enemy so only
+                    // the first attack will appear to change it. need to fix this, can't rely on just this
+                    const stance_strs = ['def', 'neu', 'atk'];
+                    for (let hero_stance = 0; hero_stance < 3; ++hero_stance) {
+                        for (let enemy_stance = 0; enemy_stance < 3; ++enemy_stance) {
+                            const dmg = pureCircuits.calc_item_dmg_against(pureCircuits.calc_stats(hero.hero), hero_stance as STANCE, pureCircuits.calc_stats(enemy.hero), enemy_stance as STANCE);
+                            console.log(`dmg [${stance_strs[hero_stance]}] -> [${stance_strs[enemy_stance]}] = ${hpDiv(Number(dmg))}`);
                         }
-                        const dmg = pureCircuits.calc_item_dmg_against(pureCircuits.calc_stats(hero.hero), hero.nextStance, pureCircuits.calc_stats(enemy.hero), enemy.nextStance);
-                        if (enemy.attack(hero, Number(dmg))) {
-                            // TODO: death anim? or this is resolved after?
-                        }
-                    },
-                    persist: false,
-                });
-                tweens.push({
-                    targets: hero,
-                    ease: 'Quad.easeInOut',
-                    x: hero.rank.x(hero.nextStance),
-                    y: hero.y,
-                    duration: 60 + dist * 3,
-                    onComplete: (tween) => {
-                        console.log(`tween.targets = ${JSON.stringify(tween.targets)}`);
-                        console.log(`completed tween [${team}][${i}]`);
-                    },
-                    persist: false,
-                });
-            }
+                    }
+                    const dmg = pureCircuits.calc_item_dmg_against(pureCircuits.calc_stats(hero.hero), hero.nextStance, pureCircuits.calc_stats(enemy.hero), enemy.nextStance);
+                    if (enemy.attack(hero, Number(dmg))) {
+                        // TODO: death anim? or this is resolved after?
+                    }
+                },
+                persist: false,
+            });
+            // enemy knockback
+            const angle = Phaser.Math.Angle.Between(heroX, heroY, enemyX, enemyY);
+            tweens.push({
+                targets: enemy,
+                x: enemyX + Math.cos(angle) * 16,
+                y: enemyY + Math.sin(angle) * 16,
+                alpha: 0.4,
+                duration: 50,
+            });
+            tweens.push({
+                targets: enemy,
+                x: enemyX,
+                y: enemyY,
+                alpha: 1,
+                duration: 80,
+            });
+            // move back
+            tweens.push({
+                targets: hero,
+                ease: 'Quad.easeInOut',
+                x: hero.rank.x(hero.nextStance),
+                y: hero.y,
+                duration: 60 + dist * 3,
+                onComplete: (tween) => {
+                    console.log(`tween.targets = ${JSON.stringify(tween.targets)}`);
+                    console.log(`completed tween [${hero.rank.team}][${hero.rank.index}]`);
+                },
+                persist: false,
+            });
         }
         tweens.push({
             targets: null,
             onComplete: () => {
-                this.setMatchState(MatchState.WaitingOnPlayer);
+                // const deadUnits = aliveUnits.filter((h) => !h.isAlive());
+                // this.tweens.add({
+                //     targets: deadUnits,
+                //     alpha: 0,
+                //     onComplete: (_tween: Phaser.Tweens.Tween, targets: HeroActor[]) => {
+                //         for (let target of targets) {
+                //             target.visible = false;
+                //             this.add.image(target.x, target.y, 'skull').setFlipX(target.rank.team == 1).setDepth(-1);
+                //         }
+                //     },
+                // });
+                this.getAllAliveUnits().forEach((h) => h.onTurnEnd());
+
+                this.runStateChange();
             }
         });
         this.tweens.chain({
+            // this doesn't seem to do anything (always overridden?) but if you pass null it errors
             targets: this.heroes[0],
             tweens,
         });
@@ -881,65 +1023,142 @@ class Arena extends Phaser.Scene
 
     create ()
     {
-        this.add.image(ARENA_WIDTH, ARENA_HEIGHT, 'arena_bg').setPosition(ARENA_WIDTH / 2, ARENA_HEIGHT / 2).setDepth(-2);
+        this.add.image(ARENA_WIDTH, ARENA_HEIGHT, 'arena_bg').setPosition(ARENA_WIDTH / 2, ARENA_HEIGHT / 2).setDepth(-3);
 
         this.matchStateText = this.add.text(ARENA_WIDTH / 2, ARENA_HEIGHT * 0.9, '', {fontSize: 12, color: 'white'}).setOrigin(0.5, 0.5);
 
-        //this.cursors = this?.input?.keyboard?.addCapture('1,2,3,8,9,0,X,C');
-        this.keys = this.input?.keyboard?.addKeys({
-            n1: Phaser.Input.Keyboard.KeyCodes.ONE,
-            n2: Phaser.Input.Keyboard.KeyCodes.TWO,
-            n3: Phaser.Input.Keyboard.KeyCodes.THREE,
-            n4: Phaser.Input.Keyboard.KeyCodes.FOUR,
-            q:  Phaser.Input.Keyboard.KeyCodes.Q,
-            w:  Phaser.Input.Keyboard.KeyCodes.W,
-            e:  Phaser.Input.Keyboard.KeyCodes.E,
-            r:  Phaser.Input.Keyboard.KeyCodes.R,
-            a:  Phaser.Input.Keyboard.KeyCodes.A,
-            s:  Phaser.Input.Keyboard.KeyCodes.S,
-            d:  Phaser.Input.Keyboard.KeyCodes.D,
-            x:  Phaser.Input.Keyboard.KeyCodes.X,
-            f:  Phaser.Input.Keyboard.KeyCodes.F,
+        this.input?.keyboard?.on('keydown-ONE', () => {
+            if (this.matchState == MatchState.WaitingOnPlayer) {
+                const hero = this.heroes[this.playerTeam()][0];
+                const enemy = this.heroes[this.opponentTeam()][0]
+                if (hero.isAlive() && enemy.isAlive()) {
+                    hero.setTarget(enemy.rank);
+                }
+            }
+        });
+        this.input?.keyboard?.on('keydown-TWO', () => {
+            if (this.matchState == MatchState.WaitingOnPlayer) {
+                const hero = this.heroes[this.playerTeam()][0];
+                const enemy = this.heroes[this.opponentTeam()][1]
+                if (hero.isAlive() && enemy.isAlive()) {
+                    hero.setTarget(enemy.rank);
+                }
+            }
+        });
+        this.input?.keyboard?.on('keydown-THREE', () => {
+            if (this.matchState == MatchState.WaitingOnPlayer) {
+                const hero = this.heroes[this.playerTeam()][0];
+                const enemy = this.heroes[this.opponentTeam()][2]
+                if (hero.isAlive() && enemy.isAlive()) {
+                    hero.setTarget(enemy.rank);
+                }
+            }
+        });
+        this.input?.keyboard?.on('keydown-Q', () => {
+            if (this.matchState == MatchState.WaitingOnPlayer) {
+                const hero = this.heroes[this.playerTeam()][1];
+                const enemy = this.heroes[this.opponentTeam()][0]
+                if (hero.isAlive() && enemy.isAlive()) {
+                    hero.setTarget(enemy.rank);
+                }
+            }
+        });
+        this.input?.keyboard?.on('keydown-W', () => {
+            if (this.matchState == MatchState.WaitingOnPlayer) {
+                const hero = this.heroes[this.playerTeam()][1];
+                const enemy = this.heroes[this.opponentTeam()][1]
+                if (hero.isAlive() && enemy.isAlive()) {
+                    hero.setTarget(enemy.rank);
+                }
+            }
+        });
+        this.input?.keyboard?.on('keydown-E', () => {
+            if (this.matchState == MatchState.WaitingOnPlayer) {
+                const hero = this.heroes[this.playerTeam()][1];
+                const enemy = this.heroes[this.opponentTeam()][2]
+                if (hero.isAlive() && enemy.isAlive()) {
+                    hero.setTarget(enemy.rank);
+                }
+            }
+        });
+        this.input?.keyboard?.on('keydown-A', () => {
+            if (this.matchState == MatchState.WaitingOnPlayer) {
+                const hero = this.heroes[this.playerTeam()][2];
+                const enemy = this.heroes[this.opponentTeam()][0]
+                if (hero.isAlive() && enemy.isAlive()) {
+                    hero.setTarget(enemy.rank);
+                }
+            }
+        });
+        this.input?.keyboard?.on('keydown-S', () => {
+            if (this.matchState == MatchState.WaitingOnPlayer) {
+                const hero = this.heroes[this.playerTeam()][2];
+                const enemy = this.heroes[this.opponentTeam()][1]
+                if (hero.isAlive() && enemy.isAlive()) {
+                    hero.setTarget(enemy.rank);
+                }
+            }
+        });
+        this.input?.keyboard?.on('keydown-D', () => {
+            if (this.matchState == MatchState.WaitingOnPlayer) {
+                const hero = this.heroes[this.playerTeam()][2];
+                const enemy = this.heroes[this.opponentTeam()][2]
+                if (hero.isAlive() && enemy.isAlive()) {
+                    hero.setTarget(enemy.rank);
+                }
+            }
         });
         this.input?.keyboard?.on('keydown-FOUR', () => {
             if (this.matchState == MatchState.WaitingOnPlayer) {
                 const hero = this.heroes[this.playerTeam()][0];
-                hero.toggleNextStance();
+                if (hero.isAlive()) {
+                    hero.toggleNextStance();
+                }
             }
         });
         this.input?.keyboard?.on('keydown-R', () => {
             if (this.matchState == MatchState.WaitingOnPlayer) {
                 const hero = this.heroes[this.playerTeam()][1];
-                hero.toggleNextStance();
+                if (hero.isAlive()) {
+                    hero.toggleNextStance();
+                }
             }
         });
         this.input?.keyboard?.on('keydown-F', () => {
             if (this.matchState == MatchState.WaitingOnPlayer) {
                 const hero = this.heroes[this.playerTeam()][2];
-                hero.toggleNextStance();
+                if (hero.isAlive()) {
+                    hero.toggleNextStance();
+                }
             }
         });
         this.input?.keyboard?.on('keydown-Z', () => {
             if (this.matchState == MatchState.WaitingOnPlayer) {
                 const stances = this.heroes[this.playerTeam()].map((hero) => hero.nextStance);
-                const moves = this.heroes[this.playerTeam()].filter((hero) => hero.target != undefined && hero.target.team == this.opponentTeam()).map((hero) => BigInt(hero.target!.index));
-                // TODO: need to check vs number of alive heroes
-                if (moves.length == 3) {
+                const moves = this.heroes[this.playerTeam()].filter((hero) => hero.isAlive() && hero.target != undefined && hero.target.team == this.opponentTeam()).map((hero) => BigInt(hero.target!.index));
+                if (moves.length == this.getAliveHeroes(this.playerTeam()).length) {
                     this.setMatchState(MatchState.SubmittingMove);
+                    // still must send moves for dead units to make sure indexing works, so pad with 0's
+                    const paddedMoves = this.heroes[this.playerTeam()].map((hero) => BigInt(hero.isAlive() ? hero.target!.index : 0));
                     if (this.isP1) {
                         console.log('submitting move (as p1)');
-                        this.api.p1Commit(moves, stances).then(() => {
+                        this.api.p1Commit(paddedMoves, stances).then(() => {
                             // ???
                         });
                     } else {
                         console.log('submitting move (as p2)');
-                        this.api.p2Commit(moves, stances).then(() => {
+                        this.api.p2Commit(paddedMoves, stances).then(() => {
                             // ???
                         });
                     }
                 } else {
-                    console.log(`invalid move: ${JSON.stringify(this.heroes[this.playerTeam()].map((hero) => hero.target))}`);
+                    console.log(`invalid move: |${moves.length} < ${this.getAliveHeroes(this.playerTeam()).length}| ${JSON.stringify(this.heroes[this.playerTeam()].map((hero) => hero.target))}`);
                 }
+            }
+        });
+        this.input?.keyboard?.on('keydown-SPACE', () => {
+            if (this.matchState == MatchState.GameOverP1Win || this.matchState == MatchState.GameOverP2Win || this.matchState == MatchState.GameOverTie) {
+                this.scene.start('MainMenu');
             }
         });
         const rexUI = (this.scene as any).rexUI as RexUIPlugin;
@@ -948,40 +1167,6 @@ class Arena extends Phaser.Scene
     }
 
     update() {
-        if (this.matchState == MatchState.WaitingOnPlayer) {
-            if (this.keys.n1.isDown) {
-                this.heroes[this.playerTeam()][0].setTarget(new Rank(0, this.opponentTeam()));
-            }
-            if (this.keys.n2.isDown) {
-                this.heroes[this.playerTeam()][0].setTarget(new Rank(1, this.opponentTeam()));
-            }
-            if (this.keys.n3.isDown) {
-                this.heroes[this.playerTeam()][0].setTarget(new Rank(2, this.opponentTeam()));
-            }
-            if (this.keys.q.isDown) {
-                this.heroes[this.playerTeam()][1].setTarget(new Rank(0, this.opponentTeam()));
-            }
-            if (this.keys.w.isDown) {
-                this.heroes[this.playerTeam()][1].setTarget(new Rank(1, this.opponentTeam()));
-            }
-            if (this.keys.e.isDown) {
-                this.heroes[this.playerTeam()][1].setTarget(new Rank(2, this.opponentTeam()));
-            }
-            if (this.keys.a.isDown) {
-                this.heroes[this.playerTeam()][2].setTarget(new Rank(0, this.opponentTeam()));
-            }
-            if (this.keys.s.isDown) {
-                this.heroes[this.playerTeam()][2].setTarget(new Rank(1, this.opponentTeam()));
-            }
-            if (this.keys.d.isDown) {
-                this.heroes[this.playerTeam()][2].setTarget(new Rank(2, this.opponentTeam()));
-            }
-            if (this.keys.x.isDown) {
-                for (let i = 0; i < 3; ++i) {
-                    this.heroes[this.playerTeam()][i].setTarget(undefined);
-                }
-            }
-        }
     }
 
     getHero(rank: Rank): HeroActor {
@@ -990,6 +1175,10 @@ class Arena extends Phaser.Scene
 
     getAliveHeroes(team: Team): HeroActor[] {
         return this.heroes[team].filter((h) => h.isAlive());
+    }
+
+    getAllAliveUnits(): HeroActor[] {
+        return this.heroes.flat(1).filter((h) => h.isAlive())
     }
 }
 
