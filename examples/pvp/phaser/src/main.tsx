@@ -359,7 +359,10 @@ class HeroActor extends Phaser.GameObjects.Container {
     realDmg: number;
     stance: STANCE;
     nextStance: STANCE;
-    arrow: Phaser.GameObjects.Image;
+    right_arrow: Phaser.GameObjects.Image;
+    left_arrow: Phaser.GameObjects.Image;
+    select_circle: Phaser.GameObjects.Image;
+    tick: number;
 
     constructor(arena: Arena, hero: Hero, rank: Rank) {
         console.log(`Hero created: ${rank.team}|${rank.index} => ${safeJSONString(pureCircuits.calc_stats(hero))}`);
@@ -374,6 +377,7 @@ class HeroActor extends Phaser.GameObjects.Container {
         this.realDmg = 0;
         this.stance = STANCE.neutral;
         this.nextStance = this.stance;
+        this.tick = 0;
 
         const isP2 = this.rank.team == 1;
 
@@ -383,6 +387,15 @@ class HeroActor extends Phaser.GameObjects.Container {
             .setVisible(false);
         this.targetLine = line;
         this.add(line);
+
+        this.left_arrow = arena.add.image(-32, 0, 'arrow_move').setVisible(false).setFlipX(true);
+        this.add(this.left_arrow);
+        this.right_arrow = arena.add.image(32, 0, 'arrow_move').setVisible(false);
+        this.add(this.right_arrow);
+
+        // depth doesn't seem to matter here - it's overridden by Container's I think so it's based on add() order
+        this.select_circle = arena.add.image(0, 8, 'select_circle').setVisible(false).setDepth(-1);
+        this.add(this.select_circle);
 
         //this.body_images = [];
         if (hero.lhs == ITEM.bow || hero.rhs == ITEM.bow) {
@@ -412,13 +425,50 @@ class HeroActor extends Phaser.GameObjects.Container {
         this.hpBar = new HpBar(arena, 0, -31, 40);
         this.add(this.hpBar);
 
-        this.arrow = arena.add.image(0, 0, 'arrow_move').setVisible(false);
-        this.add(this.arrow);
-
         arena.add.existing(this);
+
+        this.setSize(32, 48);
+        arena.input.enableDebug(this);
+        this.on('pointerup', () => {
+            if (this.arena.matchState == MatchState.WaitingOnPlayer) {
+                if ((this.arena.isP1 ? 0 : 1) == this.rank.team) {
+                    if (this.select_circle.visible) {
+                        this.deselect();
+                    } else {
+                        for (const hero of this.arena.getAllAliveUnits()) {
+                            hero.deselect();
+                        }
+                        this.select();
+                    }
+                } else if (arena.selected != undefined) {
+                    arena.selected.setTarget(this.rank);
+                }
+            }
+        });
+        this.left_arrow.on('pointerup', () => {
+            const leftStance = this.stance == STANCE.neutral ? STANCE.defensive : STANCE.neutral;
+            this.nextStance = this.nextStance == leftStance ? this.stance : leftStance;
+            this.updateNextStanceArrow();
+        });
+        this.right_arrow.on('pointerup', () => {
+            const rightStance = this.stance == STANCE.neutral ? STANCE.aggressive : STANCE.neutral;
+            this.nextStance = this.nextStance == rightStance ? this.stance : rightStance;
+            this.updateNextStanceArrow();
+        });
     }
 
     preUpdate(): void {
+        this.select_circle.angle = this.tick / 5;
+        const circleScale = 1 + 0.09 * Math.sin(this.tick / 64);
+        this.select_circle.setScale(circleScale, circleScale);
+        const arrowScale = 0.65 + 0.09 * Math.sin(this.tick / 48 + 1);
+        if (this.left_arrow.alpha != 1) {
+            this.left_arrow.setScale(arrowScale, arrowScale);
+        }
+        if (this.right_arrow.alpha != 1) {
+            this.right_arrow.setScale(arrowScale, arrowScale);
+        }
+        this.tick += 1;
     }
 
     // true = killed
@@ -480,13 +530,31 @@ class HeroActor extends Phaser.GameObjects.Container {
         } else {
             this.nextStance = STANCE.neutral;
         }
-        if (this.nextStance == this.stance) {
-            this.arrow.visible = false;
+        this.updateNextStanceArrow();
+    }
+
+    private updateNextStanceArrow() {
+        if (this.stance == STANCE.defensive) {
+            this.left_arrow.visible = false;
         } else {
-            const pointsLeft = this.nextStance == STANCE.defensive || (this.stance == STANCE.aggressive && this.nextStance == STANCE.neutral);
-            this.arrow.visible = true;
-            this.arrow.setPosition(pointsLeft ? -32 : 32, 0);
-            this.arrow.setFlipX(pointsLeft);
+            this.left_arrow.visible = true;
+            const leftStance = this.stance == STANCE.neutral ? STANCE.defensive : STANCE.neutral;
+            if (this.nextStance == leftStance) {
+                this.left_arrow.setAlpha(1).setScale(1, 1);
+            } else {
+                this.left_arrow.setAlpha(0.75).setScale(0.5, 0.5);
+            }
+        }
+        if (this.stance == STANCE.aggressive) {
+            this.right_arrow.visible = false;
+        } else {
+            this.right_arrow.visible = true;
+            const rightStance = this.stance == STANCE.neutral ? STANCE.aggressive : STANCE.neutral;
+            if (this.nextStance == rightStance) {
+                this.right_arrow.setAlpha(1).setScale(1, 1);
+            } else {
+                this.right_arrow.setAlpha(0.75).setScale(0.5, 0.5);
+            }
         }
     }
 
@@ -506,6 +574,45 @@ class HeroActor extends Phaser.GameObjects.Container {
                 .setVisible(true);
         } else {
             this.targetLine.setVisible(false);
+        }
+    }
+
+    public select() {
+        this.select_circle.visible = true;
+        this.arena.selected = this;
+
+        if (this.stance != STANCE.defensive) {
+            this.left_arrow.setInteractive({useHandCursor: true});
+            this.left_arrow.visible = true;
+        }
+        if (this.stance != STANCE.aggressive) {
+            this.right_arrow.setInteractive({useHandCursor: true});
+            this.right_arrow.visible = true;
+        }
+
+        this.updateNextStanceArrow();
+        for (const enemy of this.arena.getAliveHeroes(this.arena.opponentTeam())) {
+            enemy.setInteractive({useHandCursor: true});
+        }
+    }
+
+    public deselect() {
+        this.select_circle.visible = false;
+        this.arena.selected = undefined;
+
+        // // TODO: hacky
+        if (this.left_arrow.alpha != 1) {
+            this.left_arrow.visible = false;
+        }
+        if (this.right_arrow.alpha != 1) {
+            this.right_arrow.visible = false;
+        }
+        //this.left_arrow.visible = false;
+        this.left_arrow.disableInteractive(true);
+        //this.right_arrow.visible = false;
+        this.right_arrow.disableInteractive(true);
+        for (const enemy of this.arena.getAliveHeroes(this.arena.opponentTeam())) {
+            enemy.disableInteractive();
         }
     }
 }
@@ -583,7 +690,7 @@ class HpBar extends Phaser.GameObjects.Container {
         return {
             targets: this.turnDmg,
             scaleX: 0,
-            duration: 150,
+            duration: 450,
             onComplete,
         };
     }
@@ -689,6 +796,7 @@ function gameStateStr(state: GAME_STATE): string {
 class Arena extends Phaser.Scene
 {
     heroes: HeroActor[][];
+    selected: HeroActor | undefined;
     // this is undefined in testing battles (offline) only, will always be defined in real battles (on-chain)
     api: DeployedBBoardAPI;
     isP1: boolean;
@@ -700,6 +808,7 @@ class Arena extends Phaser.Scene
     constructor(api: DeployedBBoardAPI, isP1: boolean) {
         super('Arena');
         this.heroes = [];
+        this.selected = undefined;
         this.api = api;
         this.isP1 = isP1;
         this.onChainState = GAME_STATE.p1_commit;
@@ -727,12 +836,20 @@ class Arena extends Phaser.Scene
                 break;
             case MatchState.WaitingOnPlayer:
                 this.matchStateText?.setText('Make your move');
+                for (const hero of this.getAliveHeroes(this.playerTeam())) {
+                    hero.setInteractive({useHandCursor: true});
+                }
                 break;
             case MatchState.WaitingOnOpponent:
                 this.matchStateText?.setText('Waiting on opponent (submit)...');
                 break;
             case MatchState.SubmittingMove:
                 this.matchStateText?.setText('Submitting move...');
+                this.selected?.deselect();
+                this.selected = undefined;
+                for (const hero of this.getAliveHeroes(this.playerTeam())) {
+                    hero.disableInteractive();
+                }
                 break;
             case MatchState.RevealingMove:
                 this.matchStateText?.setText('Revealing move...');
@@ -861,12 +978,16 @@ class Arena extends Phaser.Scene
                 ease: 'Linear',
                 x: hero.rank.x(hero.nextStance),
                 onStart: () => {
-                    hero.arrow.visible = false;
+                    // TODO: put in function
+                    hero.left_arrow.visible = false;
+                    hero.right_arrow.visible = false;
                 },
                 onComplete: () => {
                     hero.stance = hero.nextStance;
-                    //hero
-                    hero.updateTargetLine();
+                    // TODO: smarter way
+                    for (const h of this.getAllAliveUnits()) {
+                        h.updateTargetLine();
+                    }
                 },
             });
         }
@@ -1006,6 +1127,7 @@ class Arena extends Phaser.Scene
         this.load.image('hp_bar_middle', 'hp_bar_middle.png');
 
         this.load.image('arrow_move', 'arrow_move.png');
+        this.load.image('select_circle', 'select_circle.png');
 
         this.load.image('skull', 'skull.png');
         this.load.image('blood_drop0', 'blood_drop0.png');
