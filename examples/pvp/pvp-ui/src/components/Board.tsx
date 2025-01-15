@@ -18,7 +18,7 @@ import DeleteIcon from '@mui/icons-material/DeleteOutlined';
 import WriteIcon from '@mui/icons-material/EditNoteOutlined';
 import CopyIcon from '@mui/icons-material/ContentPasteOutlined';
 import StopIcon from '@mui/icons-material/HighlightOffOutlined';
-import { type BBoardDerivedState, type DeployedBBoardAPI } from '@midnight-ntwrk/pvp-api';
+import { type PVPArenaDerivedState, type DeployedPVPArenaAPI } from '@midnight-ntwrk/pvp-api';
 import { useDeployedBoardContext } from '../hooks';
 import { type BoardDeployment } from '../contexts';
 import { type Observable } from 'rxjs';
@@ -32,7 +32,7 @@ export interface BoardProps {
   boardDeployment$?: Observable<BoardDeployment>;
 }
 
-function compute_info(bs: BBoardDerivedState | undefined, isP1: boolean): string {
+function compute_info(bs: PVPArenaDerivedState | undefined, isP1: boolean): string {
   if (bs == undefined) {
     return '. . .';
   }
@@ -74,15 +74,15 @@ function item_str(item: ITEM): string {
  *
  * When a `boardDeployment$` observable is received, the component begins by rendering a skeletal view of
  * itself, along with a loading background. It does this until the board deployment receives a
- * `DeployedBBoardAPI` instance, upon which it will then subscribe to its `state$` observable in order
+ * `DeployedPVPArenaAPI` instance, upon which it will then subscribe to its `state$` observable in order
  * to start receiving the changes in the bulletin board state (i.e., when a user posts a new message).
  */
 export const Board: React.FC<Readonly<BoardProps>> = ({ boardDeployment$ }) => {
   const boardApiProvider = useDeployedBoardContext();
   const [boardDeployment, setBoardDeployment] = useState<BoardDeployment>();
-  const [deployedBoardAPI, setDeployedBoardAPI] = useState<DeployedBBoardAPI>();
+  const [deployedBoardAPI, setDeployedBoardAPI] = useState<DeployedPVPArenaAPI>();
   const [errorMessage, setErrorMessage] = useState<string>();
-  const [boardState, setBoardState] = useState<BBoardDerivedState>();
+  const [boardState, setBoardState] = useState<PVPArenaDerivedState>();
   const [messagePrompt, setMessagePrompt] = useState<string>();
   const [isWorking, setIsWorking] = useState(!!boardDeployment$);
 
@@ -96,7 +96,7 @@ export const Board: React.FC<Readonly<BoardProps>> = ({ boardDeployment$ }) => {
   );
 
   // Callback to handle the posting of a message. The message text is captured in the `messagePrompt`
-  // state, and we just need to forward it to the `post` method of the `DeployedBBoardAPI` instance
+  // state, and we just need to forward it to the `post` method of the `DeployedPVPArenaAPI` instance
   // that we received in the `deployedBoardAPI` state.
   const onPostCommands = useCallback(async () => {
     console.log(`onPostCommands(${messagePrompt})`);
@@ -153,7 +153,7 @@ export const Board: React.FC<Readonly<BoardProps>> = ({ boardDeployment$ }) => {
     };
   }, [boardDeployment$]);
 
-  // Subscribes to the `state$` observable on a `DeployedBBoardAPI` if we receive one, allowing the
+  // Subscribes to the `state$` observable on a `DeployedPVPArenaAPI` if we receive one, allowing the
   // component to receive updates to the change in contract state; otherwise we update the UI to
   // reflect the error was received instead.
   useEffect(() => {

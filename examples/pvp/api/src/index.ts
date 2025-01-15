@@ -6,11 +6,11 @@
 
 import { type ContractAddress, convert_bigint_to_Uint8Array } from '@midnight-ntwrk/compact-runtime';
 import { type Logger } from 'pino';
-import type { BBoardDerivedState, BBoardContract, BBoardProviders, DeployedBBoardContract } from './common-types.js';
+import type { PVPArenaDerivedState, PVPArenaContract, PVPArenaProviders, DeployedPVPArenaContract } from './common-types.js';
 import {
-  type BBoardPrivateState,
+  type PVPArenaPrivateState,
   Contract,
-  createBBoardPrivateState,
+  createPVPArenaPrivateState,
   ledger,
   pureCircuits,
   witnesses,
@@ -28,14 +28,14 @@ import { combineLatest, map, tap, from, type Observable } from 'rxjs';
 import { toHex } from '@midnight-ntwrk/midnight-js-utils';
 
 /** @internal */
-const pvpContractInstance: BBoardContract = new Contract(witnesses);
+const pvpContractInstance: PVPArenaContract = new Contract(witnesses);
 
 /**
  * An API for a deployed bulletin board.
  */
-export interface DeployedBBoardAPI {
+export interface DeployedPVPArenaAPI {
   readonly deployedContractAddress: ContractAddress;
-  readonly state$: Observable<BBoardDerivedState>;
+  readonly state$: Observable<PVPArenaDerivedState>;
 
   reg_p2: () => Promise<void>;
   p1Commit: (commands: bigint[], stances: STANCE[]) => Promise<void>;
@@ -45,12 +45,12 @@ export interface DeployedBBoardAPI {
 }
 
 /**
- * Provides an implementation of {@link DeployedBBoardAPI} by adapting a deployed bulletin board
+ * Provides an implementation of {@link DeployedPVPArenaAPI} by adapting a deployed bulletin board
  * contract.
  *
  * @remarks
- * The `BBoardPrivateState` is managed at the DApp level by a private state provider. As such, this
- * private state is shared between all instances of {@link BBoardAPI}, and their underlying deployed
+ * The `PVPArenaPrivateState` is managed at the DApp level by a private state provider. As such, this
+ * private state is shared between all instances of {@link PVPArenaAPI}, and their underlying deployed
  * contracts. The private state defines a `'secretKey'` property that effectively identifies the current
  * user, and is used to determine if the current user is the poster of the message as the observable
  * contract state changes.
@@ -60,12 +60,12 @@ export interface DeployedBBoardAPI {
  * the deployed bulletin board contracts, and allows for a unique secret key to be generated for each bulletin
  * board that the user interacts with.
  */
-// TODO: Update BBoardAPI to use contract level private state storage.
-export class BBoardAPI implements DeployedBBoardAPI {
+// TODO: Update PVPArenaAPI to use contract level private state storage.
+export class PVPArenaAPI implements DeployedPVPArenaAPI {
   /** @internal */
   private constructor(
-    public readonly deployedContract: DeployedBBoardContract,
-    providers: BBoardProviders,
+    public readonly deployedContract: DeployedPVPArenaContract,
+    providers: PVPArenaProviders,
     private readonly logger?: Logger,
   ) {
     this.deployedContractAddress = deployedContract.deployTxData.public.contractAddress;
@@ -90,7 +90,7 @@ export class BBoardAPI implements DeployedBBoardAPI {
         //    since the private state of the bulletin board application never changes, we can query the
         //    private state once and always use the same value with `combineLatest`. In applications
         //    where the private state is expected to change, we would need to make this an `Observable`.
-        from(providers.privateStateProvider.get('pvpPrivateState') as Promise<BBoardPrivateState>),
+        from(providers.privateStateProvider.get('pvpPrivateState') as Promise<PVPArenaPrivateState>),
       ],
       // ...and combine them to produce the required derived state.
       (ledgerState, privateState) => {
@@ -128,7 +128,7 @@ export class BBoardAPI implements DeployedBBoardAPI {
    * Gets an observable stream of state changes based on the current public (ledger),
    * and private state data.
    */
-  readonly state$: Observable<BBoardDerivedState>;
+  readonly state$: Observable<PVPArenaDerivedState>;
 
   /**
    * Attempts to post a given message to the bulletin board.
@@ -243,18 +243,18 @@ export class BBoardAPI implements DeployedBBoardAPI {
    *
    * @param providers The bulletin board providers.
    * @param logger An optional 'pino' logger to use for logging.
-   * @returns A `Promise` that resolves with a {@link BBoardAPI} instance that manages the newly deployed
-   * {@link DeployedBBoardContract}; or rejects with a deployment error.
+   * @returns A `Promise` that resolves with a {@link PVPArenaAPI} instance that manages the newly deployed
+   * {@link DeployedPVPArenaContract}; or rejects with a deployment error.
    */
-  static async deploy(providers: BBoardProviders, logger?: Logger): Promise<BBoardAPI> {
+  static async deploy(providers: PVPArenaProviders, logger?: Logger): Promise<PVPArenaAPI> {
     logger?.info('deployContract');
 
     // EXERCISE 5: FILL IN THE CORRECT ARGUMENTS TO deployContract
-    const deployedBBoardContract = await deployContract(providers, {
+    const deployedPVPArenaContract = await deployContract(providers, {
       // EXERCISE ANSWER
       privateStateKey: 'pvpPrivateState', // EXERCISE ANSWER
       contract: pvpContractInstance,
-      initialPrivateState: await BBoardAPI.getPrivateState(providers), // EXERCISE ANSWER
+      initialPrivateState: await PVPArenaAPI.getPrivateState(providers), // EXERCISE ANSWER
       args: [            [
         { lhs: ITEM.axe, rhs: ITEM.sword, helmet: ARMOR.leather, chest: ARMOR.leather, skirt: ARMOR.nothing, greaves: ARMOR.leather },
         { lhs: ITEM.bow, rhs: ITEM.nothing, helmet: ARMOR.nothing, chest: ARMOR.nothing, skirt: ARMOR.leather, greaves: ARMOR.metal },
@@ -268,11 +268,11 @@ export class BBoardAPI implements DeployedBBoardAPI {
 
     logger?.trace({
       contractDeployed: {
-        finalizedDeployTxData: deployedBBoardContract.deployTxData.public,
+        finalizedDeployTxData: deployedPVPArenaContract.deployTxData.public,
       },
     });
 
-    return new BBoardAPI(deployedBBoardContract, providers, logger);
+    return new PVPArenaAPI(deployedPVPArenaContract, providers, logger);
   }
 
   /**
@@ -281,33 +281,33 @@ export class BBoardAPI implements DeployedBBoardAPI {
    * @param providers The bulletin board providers.
    * @param contractAddress The contract address of the deployed bulletin board contract to search for and join.
    * @param logger An optional 'pino' logger to use for logging.
-   * @returns A `Promise` that resolves with a {@link BBoardAPI} instance that manages the joined
-   * {@link DeployedBBoardContract}; or rejects with an error.
+   * @returns A `Promise` that resolves with a {@link PVPArenaAPI} instance that manages the joined
+   * {@link DeployedPVPArenaContract}; or rejects with an error.
    */
-  static async join(providers: BBoardProviders, contractAddress: ContractAddress, logger?: Logger): Promise<BBoardAPI> {
+  static async join(providers: PVPArenaProviders, contractAddress: ContractAddress, logger?: Logger): Promise<PVPArenaAPI> {
     logger?.info({
       joinContract: {
         contractAddress,
       },
     });
 
-    const deployedBBoardContract = await findDeployedContract(providers, {
+    const deployedPVPArenaContract = await findDeployedContract(providers, {
       contractAddress,
       contract: pvpContractInstance,
       privateStateKey: 'pvpPrivateState',
-      initialPrivateState: await BBoardAPI.getPrivateState(providers),
+      initialPrivateState: await PVPArenaAPI.getPrivateState(providers),
     });
 
     logger?.trace({
       contractJoined: {
-        finalizedDeployTxData: deployedBBoardContract.deployTxData.public,
+        finalizedDeployTxData: deployedPVPArenaContract.deployTxData.public,
       },
     });
 
-    return new BBoardAPI(deployedBBoardContract, providers, logger);
+    return new PVPArenaAPI(deployedPVPArenaContract, providers, logger);
   }
 
-  private static async getPrivateState(providers: BBoardProviders): Promise<BBoardPrivateState> {
+  private static async getPrivateState(providers: PVPArenaProviders): Promise<PVPArenaPrivateState> {
     const existingPrivateState = await providers.privateStateProvider.get('pvpPrivateState');
     // hacky convert bytes[32] to bigint
     const randSrc = utils.randomBytes(32);
@@ -317,7 +317,7 @@ export class BBoardAPI implements DeployedBBoardAPI {
     //   randBigInt += BigInt(randSrc[i]) * scalar;
     //   scalar *= BigInt(256);
     // }
-    return existingPrivateState ?? createBBoardPrivateState(randSrc);
+    return existingPrivateState ?? createPVPArenaPrivateState(randSrc);
   }
 }
 

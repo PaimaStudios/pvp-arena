@@ -6,7 +6,7 @@
 
 import { type MidnightProviders } from '@midnight-ntwrk/midnight-js-types';
 import { type FoundContract } from '@midnight-ntwrk/midnight-js-contracts';
-import type { Hero, RESULT, STANCE, GAME_STATE, BBoardPrivateState, Contract, Witnesses } from '@midnight-ntwrk/pvp-contract';
+import type { Hero, RESULT, STANCE, GAME_STATE, PVPArenaPrivateState, Contract, Witnesses } from '@midnight-ntwrk/pvp-contract';
 
 /**
  * The private states consumed throughout the application.
@@ -26,9 +26,9 @@ import type { Hero, RESULT, STANCE, GAME_STATE, BBoardPrivateState, Contract, Wi
  */
 export type PrivateStates = {
   /**
-   * Key used to provide the private state for {@link BBoardContract} deployments.
+   * Key used to provide the private state for {@link PVPArenaContract} deployments.
    */
-  readonly pvpPrivateState: BBoardPrivateState;
+  readonly pvpPrivateState: PVPArenaPrivateState;
 };
 
 /**
@@ -36,33 +36,33 @@ export type PrivateStates = {
  *
  * @public
  */
-export type BBoardContract = Contract<BBoardPrivateState, Witnesses<BBoardPrivateState>>;
+export type PVPArenaContract = Contract<PVPArenaPrivateState, Witnesses<PVPArenaPrivateState>>;
 
 /**
- * The keys of the circuits exported from {@link BBoardContract}.
+ * The keys of the circuits exported from {@link PVPArenaContract}.
  *
  * @public
  */
-export type BBoardCircuitKeys = Exclude<keyof BBoardContract['impureCircuits'], number | symbol>;
+export type PVPArenaCircuitKeys = Exclude<keyof PVPArenaContract['impureCircuits'], number | symbol>;
 
 /**
- * The providers required by {@link BBoardContract}.
+ * The providers required by {@link PVPArenaContract}.
  *
  * @public
  */
-export type BBoardProviders = MidnightProviders<BBoardCircuitKeys, PrivateStates>;
+export type PVPArenaProviders = MidnightProviders<PVPArenaCircuitKeys, PrivateStates>;
 
 /**
- * A {@link BBoardContract} that has been deployed to the network.
+ * A {@link PVPArenaContract} that has been deployed to the network.
  *
  * @public
  */
-export type DeployedBBoardContract = FoundContract<BBoardPrivateState, BBoardContract>;
+export type DeployedPVPArenaContract = FoundContract<PVPArenaPrivateState, PVPArenaContract>;
 
 /**
  * A type that represents the derived combination of public (or ledger), and private state.
  */
-export type BBoardDerivedState = {
+export type PVPArenaDerivedState = {
   readonly instance: bigint;
   readonly p1Heroes: Hero[];
   readonly p1Cmds: bigint[] | undefined;

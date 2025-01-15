@@ -1,4 +1,4 @@
-import { type DeployedBBoardAPI, BBoardAPI, type BBoardProviders } from '@midnight-ntwrk/pvp-api';
+import { type DeployedPVPArenaAPI, PVPArenaAPI, type PVPArenaProviders } from '@midnight-ntwrk/pvp-api';
 import { type ContractAddress } from '@midnight-ntwrk/compact-runtime';
 import {
   BehaviorSubject,
@@ -37,7 +37,7 @@ import semver from 'semver';
 import { getLedgerNetworkId, getZswapNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 
 export class BrowserDeploymentManager {
-  #initializedProviders: Promise<BBoardProviders> | undefined;
+  #initializedProviders: Promise<PVPArenaProviders> | undefined;
 
   /**
    * Initializes a new {@link BrowserDeployedBoardManager} instance.
@@ -47,25 +47,25 @@ export class BrowserDeploymentManager {
   constructor(private readonly logger: Logger) {
   }
 
-  async create(): Promise<BBoardAPI> {
+  async create(): Promise<PVPArenaAPI> {
     console.log('getting providers');
     const providers = await this.getProviders();
     console.log('trying to create');
-    return BBoardAPI.deploy(providers, this.logger).then((api) => {
+    return PVPArenaAPI.deploy(providers, this.logger).then((api) => {
       console.log('got create api');
       return api;
     });
   }
-  async join(contractAddress: ContractAddress): Promise<BBoardAPI> {
+  async join(contractAddress: ContractAddress): Promise<PVPArenaAPI> {
     console.log('getting providers');
     const providers = await this.getProviders();
     console.log('trying to join');
     // TODO: do we need error handling?
-    return BBoardAPI.join(providers, contractAddress, this.logger)
+    return PVPArenaAPI.join(providers, contractAddress, this.logger)
       .then((api) => { console.log('got join api'); return api.reg_p2().then(() => { console.log('registered p2'); return api; }) });
   }
 
-  private getProviders(): Promise<BBoardProviders> {
+  private getProviders(): Promise<PVPArenaProviders> {
     // We use a cached `Promise` to hold the providers. This will:
     //
     // 1. Cache and re-use the providers (including the configured connector API), and
@@ -77,7 +77,7 @@ export class BrowserDeploymentManager {
 }
 
 /** @internal */
-const initializeProviders = async (logger: Logger): Promise<BBoardProviders> => {
+const initializeProviders = async (logger: Logger): Promise<PVPArenaProviders> => {
   const { wallet, uris } = await connectToWallet(logger);
   const walletState = await wallet.state();
 
