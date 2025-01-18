@@ -8,7 +8,7 @@ export enum ITEM { nothing, axe, shield, bow, sword, spear }
 
 export enum ARMOR { nothing, leather, metal }
 
-export enum GAME_STATE { p1_commit, p2_commit, p1_reveal, p2_reveal, p1_win, p2_win, tie }
+export enum GAME_STATE { p1_selecting_first_heroes, p2_selecting_heroes, p1_selecting_last_hero, p1_commit, p2_commit, p1_reveal, p2_reveal, p1_win, p2_win, tie }
 
 export struct Hero {
     rhs: ITEM,
@@ -40,7 +40,7 @@ export enum STANCE { defensive, neutral, aggressive }
 //     stance: STANCE,
 // }
 
-export ledger p1_heroes: Cell<Vector<3, Hero>>;
+export ledger p1_heroes: Cell<Vector<3, Maybe<Hero>>>;
 export ledger p1_stats: Cell<Vector<3, TotalStats>>;
 export ledger p1_cmds: Cell<Maybe<Vector<3, Uint<32>>>>;
 export ledger p1_stances: Cell<Vector<3, STANCE>>;
@@ -51,7 +51,7 @@ export ledger p1_dmg_2: Cell<Uint<32>>;
 export ledger p1_alive: Cell<Vector<3, Boolean>>;
 export ledger p1_commit: Cell<Bytes<32>>;
 
-export ledger p2_heroes: Cell<Vector<3, Hero>>;
+export ledger p2_heroes: Cell<Vector<3, Maybe<Hero>>>;
 export ledger p2_stats: Cell<Vector<3, TotalStats>>;
 export ledger p2_cmds: Cell<Maybe<Vector<3, Uint<32>>>>;
 export ledger p2_stances: Cell<Vector<3, STANCE>>;
@@ -69,9 +69,9 @@ export ledger p2_sig: Cell<Maybe<Field>>;
 
 witness player_secret_key(): Bytes<32>;
 
-constructor(p1: Vector<3, Hero>, p2: Vector<3, Hero>) {
-    p1_heroes = p1;
-    p2_heroes = p2;
+constructor() {
+    p1_heroes = [none<Hero>(), none<Hero>(), none<Hero>()];
+    p2_heroes = [none<Hero>(), none<Hero>(), none<Hero>()];
     //p1_dmg = [0, 0, 0];
     //p2_dmg = [0, 0, 0];
     p1_stances = [STANCE.neutral, STANCE.neutral, STANCE.neutral];
@@ -82,12 +82,10 @@ constructor(p1: Vector<3, Hero>, p2: Vector<3, Hero>) {
     p2_dmg_0 = 0;
     p2_dmg_1 = 0;
     p2_dmg_2 = 0;
-    p1_stats = [calc_stats(p1_heroes[0]), calc_stats(p1_heroes[1]), calc_stats(p1_heroes[2])];
-    p2_stats = [calc_stats(p2_heroes[0]), calc_stats(p2_heroes[1]), calc_stats(p2_heroes[2])];
     instance.increment(1);
     p1_sig = calc_sig(player_secret_key(), instance as Field);
     round = 0;
-    game_state = GAME_STATE.p1_commit;
+    game_state = GAME_STATE.p1_selecting_first_heroes;
 }
 
 export pure circuit calc_stats(hero: Hero): TotalStats {
@@ -216,8 +214,26 @@ export circuit calc_sig(sk: Bytes<32>, instance: Field): Field {
     return transient_hash<Hasher>(Hasher { transient_hash<Vector<2, Field>>([1234567890, instance]), sk});
 }
 
-export circuit reg_p2(): Void {
+export circuit p1_select_first_heroes(first_p1_heroes: Vector<2, Hero>): Void {
+    assert game_state == GAME_STATE.p1_selecting_first_heroes "P1 must select first heroes rigth after contract creation";
+    p1_heroes = [some<Hero>(first_p1_heroes[0]), some<Hero>(first_p1_heroes[1]), none<Hero>()];
+    game_state = GAME_STATE.p2_selecting_heroes;
+}
+
+export circuit p2_select_heroes(all_p2_heroes: Vector<3, Hero>): Void {
+    assert game_state == GAME_STATE.p2_selecting_heroes "P2 must select heroes right after match creation";
     p2_sig = some<Field>(1);//calc_sig(player_sk(), instance as Field));
+    // TODO: can you map some here?
+    p2_heroes = [some<Hero>(all_p2_heroes[0]), some<Hero>(all_p2_heroes[1]), some<Hero>(all_p2_heroes[2])];
+    p2_stats = [calc_stats(p2_heroes[0].value), calc_stats(p2_heroes[1].value), calc_stats(p2_heroes[2].value)];
+    game_state = GAME_STATE.p1_selecting_last_hero;
+}
+
+export circuit p1_select_last_hero(last_p1_hero: Hero): Void {
+    assert game_state == GAME_STATE.p1_selecting_last_hero "P1 must select remaining heroes after P2 selects heroes";
+    p1_heroes = [p1_heroes[0], p1_heroes[1], some<Hero>(last_p1_hero)];
+    p1_stats = [calc_stats(p1_heroes[0].value), calc_stats(p1_heroes[1].value), calc_stats(p1_heroes[2].value)];
+    game_state = GAME_STATE.p1_commit;
 }
 
 export circuit p1_commit_commands(cmds: Vector<3, Uint<32>>): Void {

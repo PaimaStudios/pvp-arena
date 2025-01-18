@@ -7,6 +7,17 @@ import { MAX_HP } from './index';
 
 const MOCK_DELAY = 500;
 
+function generateRandomHero(): Hero {
+    return {
+        lhs: Phaser.Math.Between(0, 5) as ITEM,
+        rhs: Phaser.Math.Between(0, 5) as ITEM,
+        helmet: Phaser.Math.Between(0, 2) as ARMOR,
+        chest: Phaser.Math.Between(0, 2) as ARMOR,
+        skirt: Phaser.Math.Between(0, 2) as ARMOR,
+        greaves: Phaser.Math.Between(0, 2) as ARMOR,
+    };
+}
+
 export class MockPVPArenaAPI implements DeployedPVPArenaAPI {
     readonly deployedContractAddress: ContractAddress;
     readonly state$: Observable<PVPArenaDerivedState>;
@@ -19,26 +30,16 @@ export class MockPVPArenaAPI implements DeployedPVPArenaAPI {
         this.state$ = new Observable<PVPArenaDerivedState>((subscriber) => {
             this.subscriber = subscriber;
         });
-        const p1Heroes: Hero[] = [
-            { lhs: ITEM.axe, rhs: ITEM.sword, helmet: ARMOR.leather, chest: ARMOR.leather, skirt: ARMOR.nothing, greaves: ARMOR.leather },
-            { lhs: ITEM.bow, rhs: ITEM.nothing, helmet: ARMOR.nothing, chest: ARMOR.nothing, skirt: ARMOR.leather, greaves: ARMOR.metal },
-            { lhs: ITEM.shield, rhs: ITEM.axe, helmet: ARMOR.metal, chest: ARMOR.metal, skirt: ARMOR.metal, greaves: ARMOR.nothing },
-        ];
-        const p2Heroes: Hero[] = [
-            { lhs: ITEM.spear, rhs: ITEM.spear, helmet: ARMOR.leather, chest: ARMOR.metal, skirt: ARMOR.leather, greaves: ARMOR.leather},
-            { lhs: ITEM.spear, rhs: ITEM.shield, helmet: ARMOR.metal, chest: ARMOR.metal, skirt: ARMOR.metal, greaves: ARMOR.metal },
-            { lhs: ITEM.sword, rhs: ITEM.sword, helmet: ARMOR.nothing, chest: ARMOR.nothing, skirt: ARMOR.nothing, greaves: ARMOR.nothing },
-        ];
         this.mockState = {
             instance: BigInt(0),
             round: BigInt(0),
-            state: GAME_STATE.p1_commit,
-            p1Heroes,
+            state: GAME_STATE.p1_selecting_first_heroes,
+            p1Heroes: [],
             p1Cmds: [BigInt(0), BigInt(0), BigInt(0)],
             p1Dmg: [BigInt(0), BigInt(0), BigInt(0)],
             p1Stances: [STANCE.neutral, STANCE.neutral, STANCE.neutral],
             isP1: true,
-            p2Heroes,
+            p2Heroes: [],
             p2Cmds: [BigInt(0), BigInt(0), BigInt(0)],
             p2Dmg: [BigInt(0), BigInt(0), BigInt(0)],
             p2Stances: [STANCE.neutral, STANCE.neutral, STANCE.neutral],
@@ -47,9 +48,45 @@ export class MockPVPArenaAPI implements DeployedPVPArenaAPI {
             this.subscriber?.next(this.mockState);
         }, MOCK_DELAY);
     }
+
+    async p1_select_first_heroes(first_p1_heroes: Hero[]): Promise<void> {
+        setTimeout(() => {
+            this.mockState = {
+                ...this.mockState,
+                p1Heroes: first_p1_heroes,
+                state: GAME_STATE.p2_selecting_heroes,
+            };
+            this.subscriber?.next(this.mockState);
+            // mock p2 select heroes
+            setTimeout(() => {
+                this.mockState = {
+                    ...this.mockState,
+                    p2Heroes: [
+                        generateRandomHero(),
+                        generateRandomHero(),
+                        generateRandomHero(),
+                    ],
+                    state: GAME_STATE.p1_selecting_last_hero,
+                };
+                this.subscriber?.next(this.mockState);
+            }, MOCK_DELAY);
+        }, MOCK_DELAY)
+    }
   
-    async reg_p2(): Promise<void> {
-        // does nothing
+    async p2_select_heroes(all_p2_heroes: Hero[]): Promise<void> {
+        // should never be called (TODO: let you have a p2 testing environment too?)
+        throw new Error("do not call this");
+    }
+
+    async p1_select_last_hero(last_p1_hero: Hero): Promise<void> {
+        setTimeout(() => {
+            this.mockState = {
+                ...this.mockState,
+                p1Heroes: [...this.mockState.p1Heroes, last_p1_hero],
+                state: GAME_STATE.p1_commit,
+            };
+            this.subscriber?.next(this.mockState);
+        }, MOCK_DELAY)
     }
 
     async p1Commit(commands: bigint[], stances: STANCE[]): Promise<void> {

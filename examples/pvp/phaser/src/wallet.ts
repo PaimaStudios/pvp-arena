@@ -62,7 +62,7 @@ export class BrowserDeploymentManager {
     console.log('trying to join');
     // TODO: do we need error handling?
     return PVPArenaAPI.join(providers, contractAddress, this.logger)
-      .then((api) => { console.log('got join api'); return api.reg_p2().then(() => { console.log('registered p2'); return api; }) });
+      .then((api) => { console.log('got join api'); return api; });
   }
 
   private getProviders(): Promise<PVPArenaProviders> {

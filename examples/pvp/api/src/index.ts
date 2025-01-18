@@ -37,7 +37,9 @@ export interface DeployedPVPArenaAPI {
   readonly deployedContractAddress: ContractAddress;
   readonly state$: Observable<PVPArenaDerivedState>;
 
-  reg_p2: () => Promise<void>;
+  p1_select_first_heroes: (first_p1_heroes: Hero[]) => Promise<void>
+  p2_select_heroes: (all_p2_heroes: Hero[]) => Promise<void>
+  p1_select_last_hero: (last_p1_hero: Hero) => Promise<void>
   p1Commit: (commands: bigint[], stances: STANCE[]) => Promise<void>;
   p2Commit: (commands: bigint[], stances: STANCE[]) => Promise<void>;
   p1Reveal: () => Promise<void>;
@@ -105,12 +107,12 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
           instance: ledgerState.instance,
           round: ledgerState.round,
           state: ledgerState.gameState,
-          p1Heroes: ledgerState.p1Heroes,
+          p1Heroes: ledgerState.p1Heroes.filter((h) => h.is_some).map((h) => h.value),
           p1Cmds: ledgerState.p1Cmds.is_some ? ledgerState.p1Cmds.value : undefined,
           p1Dmg: [ledgerState.p1Dmg0, ledgerState.p1Dmg1, ledgerState.p1Dmg2],
           p1Stances: ledgerState.p1Stances,
           isP1,
-          p2Heroes: ledgerState.p2Heroes,
+          p2Heroes: ledgerState.p2Heroes.filter((h) => h.is_some).map((h) => h.value),
           p2Cmds: ledgerState.p2Cmds.is_some ? ledgerState.p2Cmds.value : undefined,
           p2Dmg: [ledgerState.p2Dmg0, ledgerState.p2Dmg1, ledgerState.p2Dmg2],
           p2Stances: ledgerState.p2Stances,
@@ -129,23 +131,65 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
    * and private state data.
    */
   readonly state$: Observable<PVPArenaDerivedState>;
-
   /**
-   * Attempts to post a given message to the bulletin board.
+   * Select the remaining hero for Player 1
    *
-   * @param message The message to post.
+   * @param all_p2_heroes All 3 Player 2 heroes.
    *
    * @remarks
-   * This method can fail during local circuit execution if the bulletin board is currently occupied.
+   * This method can fail if called more than once or if validation fails
    */
-  async reg_p2(): Promise<void> {
+  async p1_select_first_heroes(first_p1_heroes: Hero[]): Promise<void> {
     //this.logger?.info(`postingMessage: ${message}`);
 
-    const txData = await this.deployedContract.callTx.reg_p2();
+    const txData = await this.deployedContract.callTx.p1_select_first_heroes(first_p1_heroes);
 
     this.logger?.trace({
       transactionAdded: {
-        circuit: 'reg_p2',
+        circuit: 'p1_select_first_heroes',
+        txHash: txData.public.txHash,
+        blockHeight: txData.public.blockHeight,
+      },
+    });
+  }
+  /**
+   * Joins the contract as Player 2 and selects all your heroes to fight.
+   *
+   * @param all_p2_heroes All 3 Player 2 heroes.
+   *
+   * @remarks
+   * This method can fail if called more than once
+   */
+  async p2_select_heroes(all_p2_heroes: Hero[]): Promise<void> {
+    //this.logger?.info(`postingMessage: ${message}`);
+
+    const txData = await this.deployedContract.callTx.p2_select_heroes(all_p2_heroes);
+
+    this.logger?.trace({
+      transactionAdded: {
+        circuit: 'p2_select_heroes',
+        txHash: txData.public.txHash,
+        blockHeight: txData.public.blockHeight,
+      },
+    });
+  }
+
+  /**
+   * Select the remaining hero for Player 1
+   *
+   * @param all_p2_heroes All 3 Player 2 heroes.
+   *
+   * @remarks
+   * This method can fail if called more than once or if validation fails
+   */
+  async p1_select_last_hero(last_p1_hero: Hero): Promise<void> {
+    //this.logger?.info(`postingMessage: ${message}`);
+
+    const txData = await this.deployedContract.callTx.p1_select_last_hero(last_p1_hero);
+
+    this.logger?.trace({
+      transactionAdded: {
+        circuit: 'p1_select_last_hero',
         txHash: txData.public.txHash,
         blockHeight: txData.public.blockHeight,
       },
@@ -255,17 +299,8 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
       privateStateKey: 'pvpPrivateState', // EXERCISE ANSWER
       contract: pvpContractInstance,
       initialPrivateState: await PVPArenaAPI.getPrivateState(providers), // EXERCISE ANSWER
-      args: [            [
-        { lhs: ITEM.axe, rhs: ITEM.sword, helmet: ARMOR.leather, chest: ARMOR.leather, skirt: ARMOR.nothing, greaves: ARMOR.leather },
-        { lhs: ITEM.bow, rhs: ITEM.nothing, helmet: ARMOR.nothing, chest: ARMOR.nothing, skirt: ARMOR.leather, greaves: ARMOR.metal },
-        { lhs: ITEM.shield, rhs: ITEM.axe, helmet: ARMOR.metal, chest: ARMOR.metal, skirt: ARMOR.metal, greaves: ARMOR.nothing },
-    ], [
-        { lhs: ITEM.spear, rhs: ITEM.spear, helmet: ARMOR.leather, chest: ARMOR.metal, skirt: ARMOR.leather, greaves: ARMOR.leather},
-        { lhs: ITEM.spear, rhs: ITEM.shield, helmet: ARMOR.metal, chest: ARMOR.metal, skirt: ARMOR.metal, greaves: ARMOR.metal },
-        { lhs: ITEM.sword, rhs: ITEM.sword, helmet: ARMOR.nothing, chest: ARMOR.nothing, skirt: ARMOR.nothing, greaves: ARMOR.nothing },
-    ]],
+      //args: [],
     });
-
     logger?.trace({
       contractDeployed: {
         finalizedDeployTxData: deployedPVPArenaContract.deployTxData.public,

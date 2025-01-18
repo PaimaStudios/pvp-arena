@@ -54,30 +54,7 @@ export class HeroActor extends Phaser.GameObjects.Container {
         this.select_circle = arena.add.image(0, 8, 'select_circle').setVisible(false).setDepth(-1);
         this.add(this.select_circle);
 
-        //this.body_images = [];
-        if (hero.lhs == ITEM.bow || hero.rhs == ITEM.bow) {
-            this.add(arena.add.image(0, 0, 'hero_quiver').setFlipX(isP2));
-        }
-        this.add(arena.add.image(0, 0, 'hero_body').setFlipX(isP2));
-        if (hero.lhs != ITEM.nothing) {
-            this.add(arena.add.image(0, 0, itemSprite(hero.lhs, false)).setFlipX(isP2));
-        }
-        if (hero.helmet != ARMOR.nothing) {
-            this.add(arena.add.image(0, 0, armorSprite(hero.helmet, 'helmet')).setFlipX(isP2));
-        }
-        if (hero.chest != ARMOR.nothing) {
-            this.add(arena.add.image(0, 0, armorSprite(hero.chest, 'chest')).setFlipX(isP2));
-        }
-        if (hero.skirt != ARMOR.nothing) {
-            this.add(arena.add.image(0, 0, armorSprite(hero.skirt, 'skirt')).setFlipX(isP2));
-        }
-        if (hero.greaves != ARMOR.nothing) {
-            this.add(arena.add.image(0, 0, armorSprite(hero.greaves, 'greaves')).setFlipX(isP2));
-        }
-        this.add(arena.add.image(0, 0, 'hero_arm_r').setFlipX(isP2));
-        if (hero.rhs != ITEM.nothing) {
-            this.add(arena.add.image(0, 0, itemSprite(hero.rhs, true)).setFlipX(isP2));
-        }
+        addHeroImages(this, hero, isP2);
 
         this.hpBar = new HpBar(arena, 0, -31, 40);
         this.add(this.hpBar);
@@ -88,7 +65,7 @@ export class HeroActor extends Phaser.GameObjects.Container {
         arena.input.enableDebug(this);
         this.on('pointerup', () => {
             if (this.arena.matchState == MatchState.WaitingOnPlayer) {
-                if ((this.arena.isP1 ? 0 : 1) == this.rank.team) {
+                if ((this.arena.config.isP1 ? 0 : 1) == this.rank.team) {
                     if (this.select_circle.visible) {
                         this.deselect();
                     } else {
@@ -271,6 +248,32 @@ export class HeroActor extends Phaser.GameObjects.Container {
         for (const enemy of this.arena.getAliveHeroes(this.arena.opponentTeam())) {
             enemy.disableInteractive();
         }
+    }
+}
+
+export function addHeroImages(container: Phaser.GameObjects.Container, hero: Hero, isP2: boolean) {
+    if (hero.lhs == ITEM.bow || hero.rhs == ITEM.bow) {
+        container.add(container.scene.add.image(0, 0, 'hero_quiver').setFlipX(isP2));
+    }
+    container.add(container.scene.add.image(0, 0, 'hero_body').setFlipX(isP2));
+    if (hero.lhs != ITEM.nothing) {
+        container.add(container.scene.add.image(0, 0, itemSprite(hero.lhs, false)).setFlipX(isP2));
+    }
+    if (hero.helmet != ARMOR.nothing) {
+        container.add(container.scene.add.image(0, 0, armorSprite(hero.helmet, 'helmet')).setFlipX(isP2));
+    }
+    if (hero.chest != ARMOR.nothing) {
+        container.add(container.scene.add.image(0, 0, armorSprite(hero.chest, 'chest')).setFlipX(isP2));
+    }
+    if (hero.skirt != ARMOR.nothing) {
+        container.add(container.scene.add.image(0, 0, armorSprite(hero.skirt, 'skirt')).setFlipX(isP2));
+    }
+    if (hero.greaves != ARMOR.nothing) {
+        container.add(container.scene.add.image(0, 0, armorSprite(hero.greaves, 'greaves')).setFlipX(isP2));
+    }
+    container.add(container.scene.add.image(0, 0, 'hero_arm_r').setFlipX(isP2));
+    if (hero.rhs != ITEM.nothing) {
+        container.add(container.scene.add.image(0, 0, itemSprite(hero.rhs, true)).setFlipX(isP2));
     }
 }
 

@@ -6,40 +6,46 @@ import RexUIPlugin from 'phaser3-rex-plugins/templates/ui/ui-plugin'
 import { GAME_WIDTH, GAME_HEIGHT, gameStateStr, safeJSONString, MatchState } from '../main';
 import { HeroActor } from './hero';
 import { HeroIndex, hpDiv, Rank, Team } from './index';
+import { init } from 'fp-ts/lib/ReadonlyNonEmptyArray';
+
+export type BattleConfig = {
+    isP1: boolean,
+    api: DeployedPVPArenaAPI,
+};
 
 export class Arena extends Phaser.Scene
 {
     heroes: HeroActor[][];
     selected: HeroActor | undefined;
     // this is undefined in testing battles (offline) only, will always be defined in real battles (on-chain)
-    api: DeployedPVPArenaAPI;
-    isP1: boolean;
+    config: BattleConfig;
+    // we store the initial on-chain state as there won't be any state changes to trigger onStateChange
+    // and also we must wait until create() is called to actually have Phaser things be created to apply this state
+    initialState: PVPArenaDerivedState;
     onChainState: GAME_STATE;
     matchState: MatchState;
     matchStateText: Phaser.GameObjects.Text | undefined;
     round: number;
 
-    constructor(api: DeployedPVPArenaAPI, isP1: boolean) {
+    constructor(config: BattleConfig, initialState: PVPArenaDerivedState) {
         super('Arena');
         this.heroes = [];
         this.selected = undefined;
-        this.api = api;
-        this.isP1 = isP1;
+        this.config = config;
+        this.initialState = initialState;
         this.onChainState = GAME_STATE.p1_commit;
         this.matchState = MatchState.Initializing;
         this.round = 0;
 
-        if (api != undefined) {
-            const subscription = api.state$.subscribe((state) => this.onStateChange(state));
-        }
+        const subscription = config.api.state$.subscribe((state) => this.onStateChange(state));
     }
 
     playerTeam(): Team {
-        return this.isP1 ? 0 : 1;
+        return this.config.isP1 ? 0 : 1;
     }
 
     opponentTeam(): Team {
-        return this.isP1 ? 1 : 0;
+        return this.config.isP1 ? 1 : 0;
     }
 
     setMatchState(state: MatchState) {
@@ -75,10 +81,10 @@ export class Arena extends Phaser.Scene
                 this.matchStateText?.setText('Battle!');
                 break;
             case MatchState.GameOverP1Win:
-                this.matchStateText?.setText(this.isP1 ? 'You won! - Press Space to return to menu' : 'Opponent won! - Press Space to return to menu');
+                this.matchStateText?.setText(this.config.isP1 ? 'You won! - Press Space to return to menu' : 'Opponent won! - Press Space to return to menu');
                 break;
             case MatchState.GameOverP2Win:
-                this.matchStateText?.setText(!this.isP1 ? 'You won! - Press Space to return to menu' : 'Opponent won! - Press Space to return to menu');
+                this.matchStateText?.setText(!this.config.isP1 ? 'You won! - Press Space to return to menu' : 'Opponent won! - Press Space to return to menu');
                 break;
             case MatchState.GameOverTie:
                 this.matchStateText?.setText('Battle tied! - Press Space to return to menu');
@@ -138,17 +144,17 @@ export class Arena extends Phaser.Scene
     runStateChange() {
         switch (this.onChainState) {
             case GAME_STATE.p1_commit:
-                this.setMatchState(this.isP1 ? MatchState.WaitingOnPlayer : MatchState.WaitingOnOpponent);
+                this.setMatchState(this.config.isP1 ? MatchState.WaitingOnPlayer : MatchState.WaitingOnOpponent);
                 break;
             case GAME_STATE.p2_commit:
-                this.setMatchState(this.isP1 ? MatchState.WaitingOnOpponent : MatchState.WaitingOnPlayer);
+                this.setMatchState(this.config.isP1 ? MatchState.WaitingOnOpponent : MatchState.WaitingOnPlayer);
                 break;
             case GAME_STATE.p1_reveal:
-                if (this.isP1) {
+                if (this.config.isP1) {
                     console.log('revealing move (as p1)');
                     this.setMatchState(MatchState.RevealingMove);
                     // TODO: what happens if player cancels or closes window?
-                    this.api!.p1Reveal().then(() => {
+                    this.config.api.p1Reveal().then(() => {
                         // ??? (probably nothing - resolved by onStateChange)
                     });
                 } else {
@@ -156,13 +162,13 @@ export class Arena extends Phaser.Scene
                 }
                 break;
             case GAME_STATE.p2_reveal:
-                if (this.isP1) {
+                if (this.config.isP1) {
                     this.setMatchState(MatchState.WaitingOtherPlayerReveal);
                 } else {
                     console.log('revealing move (as p2)');
                     this.setMatchState(MatchState.RevealingMove);
                     // TODO: what happens if player cancels or closes window?
-                    this.api!.p2Reveal().then(() => {
+                    this.config.api.p2Reveal().then(() => {
                         // ??? (probably nothing - resolved by onStateChange)
                     });
                 }
@@ -310,8 +316,7 @@ export class Arena extends Phaser.Scene
         });
     }
 
-    preload ()
-    {
+    preload() {
         this.load.setBaseURL('/');
 
         this.load.image('arena_bg', 'arena_bg.png');
@@ -357,8 +362,7 @@ export class Arena extends Phaser.Scene
         this.load.image('blood_puddle6', 'blood_puddle6.png');
     }
 
-    create ()
-    {
+    create() {
         this.add.image(GAME_WIDTH, GAME_HEIGHT, 'arena_bg').setPosition(GAME_WIDTH / 2, GAME_HEIGHT / 2).setDepth(-3);
 
         this.matchStateText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.9, '', {fontSize: 12, color: 'white'}).setOrigin(0.5, 0.5);
@@ -476,14 +480,14 @@ export class Arena extends Phaser.Scene
                     this.setMatchState(MatchState.SubmittingMove);
                     // still must send moves for dead units to make sure indexing works, so pad with 0's
                     const paddedMoves = this.heroes[this.playerTeam()].map((hero) => BigInt(hero.isAlive() ? hero.target!.index : 0));
-                    if (this.isP1) {
+                    if (this.config.isP1) {
                         console.log('submitting move (as p1)');
-                        this.api.p1Commit(paddedMoves, stances).then(() => {
+                        this.config.api.p1Commit(paddedMoves, stances).then(() => {
                             // ???
                         });
                     } else {
                         console.log('submitting move (as p2)');
-                        this.api.p2Commit(paddedMoves, stances).then(() => {
+                        this.config.api.p2Commit(paddedMoves, stances).then(() => {
                             // ???
                         });
                     }
@@ -500,6 +504,8 @@ export class Arena extends Phaser.Scene
         const rexUI = (this.scene as any).rexUI as RexUIPlugin;
 
         this.setMatchState(MatchState.Initializing);
+
+        this.onStateChange(this.initialState);
     }
 
     update() {

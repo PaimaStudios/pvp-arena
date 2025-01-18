@@ -108,6 +108,12 @@ export enum MatchState {
 
 export function gameStateStr(state: GAME_STATE): string {
     switch (state) {
+        case GAME_STATE.p1_selecting_first_heroes:
+            return 'p1_selecting_first_heroes';
+        case GAME_STATE.p2_selecting_heroes:
+            return 'p2_selecting_heroes';
+        case GAME_STATE.p1_selecting_last_hero:
+            return 'p1_selecting_last_hero';
         case GAME_STATE.p1_commit:
             return 'p1_commit';
         case GAME_STATE.p2_commit:
