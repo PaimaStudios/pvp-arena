@@ -96,7 +96,7 @@ export pure circuit calc_stats(hero: Hero): TotalStats {
         (item_crush_def(hero.lhs) + item_crush_def(hero.rhs) + armor_crush_def(hero.helmet) + armor_crush_def(hero.chest) + armor_crush_def(hero.skirt) + armor_crush_def(hero.greaves)) as Uint<32>,
         (item_pierce_def(hero.lhs) + item_pierce_def(hero.rhs) + armor_pierce_def(hero.helmet) + armor_pierce_def(hero.chest) + armor_pierce_def(hero.skirt) + armor_pierce_def(hero.greaves)) as Uint<32>,
         (item_dex_bonus(hero.lhs) + item_dex_bonus(hero.rhs)) as Uint<32>,
-        (armor_weight(hero.helmet) + armor_weight(hero.helmet) + armor_weight(hero.helmet) + armor_weight(hero.helmet)) as Uint<32>
+        (armor_weight(hero.helmet) + armor_weight(hero.chest) + armor_weight(hero.skirt) + armor_weight(hero.greaves)) as Uint<32>
     };
 }
 

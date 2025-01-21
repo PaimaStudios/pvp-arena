@@ -6,6 +6,7 @@ import RexUIPlugin from 'phaser3-rex-plugins/templates/ui/ui-plugin'
 import { GAME_WIDTH, GAME_HEIGHT, gameStateStr, safeJSONString, MatchState } from '../main';
 import { HeroActor } from './hero';
 import { HeroIndex, hpDiv, Rank, Team } from './index';
+import { Button } from '../menus/button';
 import { init } from 'fp-ts/lib/ReadonlyNonEmptyArray';
 
 export type BattleConfig = {
@@ -26,6 +27,7 @@ export class Arena extends Phaser.Scene
     matchState: MatchState;
     matchStateText: Phaser.GameObjects.Text | undefined;
     round: number;
+    submitButton: Button | undefined;
 
     constructor(config: BattleConfig, initialState: PVPArenaDerivedState) {
         super('Arena');
@@ -36,6 +38,7 @@ export class Arena extends Phaser.Scene
         this.onChainState = GAME_STATE.p1_commit;
         this.matchState = MatchState.Initializing;
         this.round = 0;
+        this.submitButton = undefined;
 
         const subscription = config.api.state$.subscribe((state) => this.onStateChange(state));
     }
@@ -110,7 +113,8 @@ export class Arena extends Phaser.Scene
         }
 
         // update commands/stances/damages
-        if (state.p1Cmds != undefined && state.p2Cmds != undefined) {
+        if (state.p1Cmds != undefined && state.p2Cmds != undefined && state.state) {
+            console.log(`***** UPDATING CMDS ****`);
             const newTargets = [
                 state.p1Cmds.map(Number),
                 state.p2Cmds.map(Number)
@@ -499,8 +503,32 @@ export class Arena extends Phaser.Scene
         this.input?.keyboard?.on('keydown-SPACE', () => {
             if (this.matchState == MatchState.GameOverP1Win || this.matchState == MatchState.GameOverP2Win || this.matchState == MatchState.GameOverTie) {
                 this.scene.start('MainMenu');
+                this.scene.remove('Arena');
             }
         });
+
+        this.submitButton = new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.9, 64, 24, 'Submit', 16, () => {
+            const stances = this.heroes[this.playerTeam()].map((hero) => hero.nextStance);
+            this.setMatchState(MatchState.SubmittingMove);
+            // still must send moves for dead units to make sure indexing works, so pad with 0's
+            const paddedMoves = this.heroes[this.playerTeam()].map((hero) => BigInt(hero.isAlive() ? hero.target!.index : 0));
+            if (this.config.isP1) {
+                console.log('submitting move (as p1)');
+                this.config.api.p1Commit(paddedMoves, stances).then(() => {
+                    // ???
+                });
+            } else {
+                console.log('submitting move (as p2)');
+                this.config.api.p2Commit(paddedMoves, stances).then(() => {
+                    // ???
+                });
+            }
+            this.submitButton!.visible = false;
+            this.matchStateText!.visible = true;
+        });
+        this.submitButton!.visible = false;
+        this.add.existing(this.submitButton);
+
         const rexUI = (this.scene as any).rexUI as RexUIPlugin;
 
         this.setMatchState(MatchState.Initializing);
@@ -521,5 +549,10 @@ export class Arena extends Phaser.Scene
 
     getAllAliveUnits(): HeroActor[] {
         return this.heroes.flat(1).filter((h) => h.isAlive())
+    }
+
+    public enableSubmitButton() {
+        this.submitButton!.visible = true;
+        this.matchStateText!.visible = false;
     }
 }

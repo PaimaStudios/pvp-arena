@@ -193,9 +193,15 @@ export class HeroActor extends Phaser.GameObjects.Container {
     }
 
     public setTarget(target: Rank | undefined) {
+        const targetStr = target == undefined ? 'undefined' : `${target?.team}:${target?.index}`;
+        console.log(`${this.rank.team}:${this.rank.index} . setTargget (${targetStr})`);
         this.target = target;
 
         this.updateTargetLine();
+
+        if (this.arena.getAliveHeroes(this.arena.playerTeam()).every((h) => h.targetLine.visible)) {
+            this.arena.enableSubmitButton();
+        }
     }
 
     public updateTargetLine() {

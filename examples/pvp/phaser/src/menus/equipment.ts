@@ -1,8 +1,9 @@
-import { ITEM, RESULT, STANCE, Hero, ARMOR, pureCircuits, GAME_STATE } from '@midnight-ntwrk/pvp-contract';
+import { ITEM, RESULT, STANCE, Hero, ARMOR, pureCircuits, GAME_STATE, TotalStats } from '@midnight-ntwrk/pvp-contract';
 import { Arena, BattleConfig } from '../battle/arena';
 import { GAME_WIDTH, GAME_HEIGHT, safeJSONString, gameStateStr } from '../main';
 import { addHeroImages } from '../battle/hero';
 import { type HeroIndex, Rank, type Team } from '../battle';
+import { Button } from './button';
 import { MockPVPArenaAPI } from '../battle/mockapi';
 import { PVPArenaAPI, PVPArenaDerivedState } from '@midnight-ntwrk/pvp-api';
 import { Physics } from 'phaser';
@@ -10,9 +11,19 @@ import { Physics } from 'phaser';
 class SelectHeroActor extends Phaser.GameObjects.Container {
     hero: Hero;
     rank: Rank;
+    statsDisplay: StatsDisplay | undefined;
 
-    constructor(scene: Phaser.Scene, rank: Rank) {
+    select_circle: Phaser.GameObjects.Image;
+    tick: number;
+
+    constructor(scene: EquipmentMenu, rank: Rank) {
         super(scene, rank.x(STANCE.defensive), rank.y());
+        this.select_circle = scene.add.image(0, 8, 'select_circle').setAlpha(0);
+        if (rank.team != (scene.config.isP1 ? 0 : 1)) {
+            this.select_circle.setVisible(false);
+        }
+        this.add(this.select_circle);
+        this.tick = 0;
         scene.add.existing(this);
         this.hero = {
             rhs: ITEM.nothing,
@@ -23,13 +34,44 @@ class SelectHeroActor extends Phaser.GameObjects.Container {
             greaves: ARMOR.nothing,
         };
         this.rank = rank;
+        this.statsDisplay = undefined;
 
         this.refresh();
+    }
+
+    preUpdate(): void {
+        this.select_circle.setPosition(this.x, this.y);
+        this.select_circle.angle = this.tick / 5;
+        const circleScale = 1 + 0.09 * Math.sin(this.tick / 64);
+        this.select_circle.setScale(circleScale, circleScale);
+        this.tick += 1;
     }
 
     refresh() {
         this.removeAll();
         addHeroImages(this, this.hero, this.rank.team == 1);
+        if (this.statsDisplay != undefined) {
+            this.statsDisplay.updateStats(pureCircuits.calc_stats(this.hero));
+        }
+    }
+
+    createStatsDisplay(tweens: Phaser.Types.Tweens.TweenBuilderConfig[]) {
+        this.statsDisplay = new StatsDisplay(this.scene, this.x + (this.rank.team == 0 ? -96 : (96 - 80)), 80 + 90 * this.rank.index);
+        this.statsDisplay.updateStats(pureCircuits.calc_stats(this.hero));
+        this.statsDisplay.alpha = 0;
+        tweens.push({
+            targets: this,
+            x: this.rank.x(STANCE.neutral),
+            duration: 450,
+            onStart: () => {
+                this.refresh();
+            },
+        });
+        tweens.push({
+            targets: [this.statsDisplay!, this.select_circle!],
+            alpha: 1,
+            duration: 450,
+        });
     }
 }
 
@@ -97,11 +139,52 @@ function armor_str(armor: ARMOR): string {
     return 'ERROR';
 }
 
+class StatsDisplay extends Phaser.GameObjects.Container {
+    crushDmg: Phaser.GameObjects.Text;
+    pierceDmg: Phaser.GameObjects.Text;
+    crushDef: Phaser.GameObjects.Text;
+    pierceDef: Phaser.GameObjects.Text;
+    dexBonus: Phaser.GameObjects.Text;
+    weight: Phaser.GameObjects.Text;
+    constructor(scene: Phaser.Scene, x: number, y: number) {
+        super(scene, x, y);
+        this.add(scene.add.graphics({
+            x: 0,
+            y: 0,
+            lineStyle: { width: 2, color: Phaser.Display.Color.GetColor(22, 41, 51) },
+            fillStyle: { color: Phaser.Display.Color.GetColor(123, 146, 158) },
+        }).fillRoundedRect(0, 0, 80, 84, 3).strokeRoundedRect(0, 0, 80, 84, 3));
+        this.crushDmg = scene.add.text(8, 8, '', { fontSize: 8, color: 'white' });
+        this.add(this.crushDmg);
+        this.pierceDmg = scene.add.text(8, 20, '', { fontSize: 8, color: 'white' });
+        this.add(this.pierceDmg);
+        this.crushDef = scene.add.text(8, 32, '', { fontSize: 8, color: 'white' });
+        this.add(this.crushDef);
+        this.pierceDef = scene.add.text(8, 44, '', { fontSize: 8, color: 'white' });
+        this.add(this.pierceDef);
+        this.dexBonus = scene.add.text(8, 56, '', { fontSize: 8, color: 'white' });
+        this.add(this.dexBonus);
+        this.weight = scene.add.text(8, 68, '', { fontSize: 8, color: 'white' });
+        this.add(this.weight);
+        console.log('creating stats display');
+        scene.add.existing(this);
+    }
+
+    updateStats(stats: TotalStats) {
+        this.crushDmg.setText (`CRUSH DMG:  ${stats.crush_dmg}`);
+        this.pierceDmg.setText(`PIERCE DMG: ${stats.pierce_dmg}`);
+        this.crushDef.setText (`CRUSH DEF:  ${stats.crush_def}`);
+        this.pierceDef.setText(`PIERCE DEF: ${stats.pierce_def}`);
+        this.dexBonus.setText (`DEX BONUS:  ${stats.dex_bonus}`);
+        this.weight.setText   (`WEIGHT:     ${stats.weight}`);
+    }
+}
+
 class EquipmentSelector extends Phaser.GameObjects.Container {
     hero: SelectHeroActor;
 
     constructor(scene: EquipmentMenu, hero: SelectHeroActor) {
-        super(scene, GAME_WIDTH / 2, GAME_HEIGHT / 2);
+        super(scene, GAME_WIDTH / 2, GAME_HEIGHT * 0.4/* + hero.rank.index * 32*/);
         this.hero = hero;
         this.add(new SlotSelector(scene, EQUIP_SLOT.rhs, hero));
         this.add(new SlotSelector(scene, EQUIP_SLOT.lhs, hero));
@@ -110,13 +193,27 @@ class EquipmentSelector extends Phaser.GameObjects.Container {
         this.add(new SlotSelector(scene, EQUIP_SLOT.skirt, hero));
         this.add(new SlotSelector(scene, EQUIP_SLOT.greaves, hero));
 
-        const confirm = this.scene.add.image(0, 24 * 7, 'equip_select_button').setFlipX(true);
-        confirm.setInteractive({ useHandCursor: true });
-        confirm.on('pointerup', () => scene.next());
-        this.add(confirm);
-        this.add(scene.add.text(0, 24 * 7, 'Confirm', { fontSize: 10, color: 'white' }).setOrigin(0.5, 0.5))
+        this.add(new Button(scene, 0, 18 * 6, 64, 16, 'Confirm', 10, () => scene.next()));
+
+        this.alpha = 0;
 
         scene.add.existing(this);
+
+        this.createOpeningTweens();
+    }
+
+    private createOpeningTweens() {
+        const tweens: Phaser.Types.Tweens.TweenBuilderConfig[] = [];
+        this.hero.createStatsDisplay(tweens);
+        tweens.push({
+            targets: this,
+            alpha: 1,
+            duration: 100,
+        });
+        this.scene.tweens.chain({
+            targets: this.hero,
+            tweens
+        });
     }
 }
 class SlotSelector extends Phaser.GameObjects.Container {
@@ -126,22 +223,26 @@ class SlotSelector extends Phaser.GameObjects.Container {
     text: Phaser.GameObjects.Text;
 
     constructor(scene: Phaser.Scene, slot: EQUIP_SLOT, hero: SelectHeroActor) {
-        super(scene, 0, (slot as number) * 24);
+        super(scene, 0, (slot as number) * 18);
 
         this.index = 0;
         this.slot = slot;
         this.hero = hero;
 
-        const left = this.scene.add.image(-64, 0, 'equip_select_arrow').setFlipX(true);
+        const left = this.scene.add.image(-54, 0, 'equip_select_arrow').setFlipX(true);
         left.setInteractive({ useHandCursor: true });
         left.on('pointerup', () => this.shift(-1));
+        left.on('pointerover', () => left.setTexture('equip_select_arrow_over'));
+        left.on('pointerout', () => left.setTexture('equip_select_arrow'));
         this.add(left);
-        const right = this.scene.add.image(64, 0, 'equip_select_arrow');
+        const right = this.scene.add.image(54, 0, 'equip_select_arrow');
         right.setInteractive({ useHandCursor: true });
         right.on('pointerup', () => this.shift(1));
+        right.on('pointerover', () => right.setTexture('equip_select_arrow_over'));
+        right.on('pointerout', () => right.setTexture('equip_select_arrow'));
         this.add(right);
 
-        const text = this.scene.add.text(0, 0, '', {fontSize: 10, color: 'white'}).setOrigin(0.5, 0.5);
+        const text = this.scene.add.text(0, 0, '', {fontSize: 8, color: 'white'}).setOrigin(0.5, 0.5);
         this.text = text;
         this.add(text);
 
@@ -212,14 +313,33 @@ export class EquipmentMenu extends Phaser.Scene {
         console.log(`NOW: ${gameStateStr(state.state)}`);
 
         // update heroes
+        let tweens: Phaser.Types.Tweens.TweenBuilderConfig[] = [];
         for (let team = 0; team < 2; ++team) {
             const newHeroes = team == 0 ? state.p1Heroes : state.p2Heroes;
             for (let i = 0; i < newHeroes.length; ++i) {
-                this.heroes[team][i].hero = newHeroes[i];
-                this.heroes[team][i].refresh();
+                const heroActor = this.heroes[team][i];
+                
+                if (heroActor.statsDisplay == undefined) {
+                    heroActor.hero = newHeroes[i];
+                    heroActor.createStatsDisplay(tweens);
+                }
             }
         }
+        tweens.push({
+            targets: null,
+            onComplete: () => {
+                this.runStateChange(state);
+            },
+        });
+        this.tweens.chain({
+            // this doesn't seem to do anything (always overridden?) but if you pass null it errors
+            targets: this.heroes[0][0],
+            tweens,
+        });
+    }
 
+    runStateChange(state: PVPArenaDerivedState) {
+        console.log(`running state change: ${state.state}`);
         switch (state.state) {
             case GAME_STATE.p1_selecting_first_heroes:
             case GAME_STATE.p1_selecting_last_hero:
@@ -236,7 +356,7 @@ export class EquipmentMenu extends Phaser.Scene {
                 break;
             case GAME_STATE.p1_commit:
                 // game started
-                this.scene.remove('Arena');
+                //this.scene.remove('Arena');
                 this.scene.add('Arena', new Arena(this.config, state));
                 this.scene.start('Arena');
                 break;
@@ -266,7 +386,8 @@ export class EquipmentMenu extends Phaser.Scene {
 
         this.load.image('arena_bg', 'arena_bg.png');
         this.load.image('equip_select_arrow', 'equip_select_arrow.png');
-        this.load.image('equip_select_button', 'equip_select_button.png');
+        this.load.image('equip_select_arrow_over', 'equip_select_arrow_over.png');
+        this.load.image('select_circle', 'select_circle.png');
 
         this.load.image('hero_quiver', 'hero_quiver.png');
         this.load.image('hero_axe_l', 'hero_axe_l.png');
@@ -291,7 +412,7 @@ export class EquipmentMenu extends Phaser.Scene {
 
     create() {
         this.add.image(GAME_WIDTH, GAME_HEIGHT, 'arena_bg').setPosition(GAME_WIDTH / 2, GAME_HEIGHT / 2).setDepth(-3);
-        this.add.text(GAME_WIDTH / 2 + 2, GAME_HEIGHT / 5, 'EQUIPMENT SELECT', {fontSize: 16, color: 'white'}).setOrigin(0.5, 0.5);
+        this.add.text(GAME_WIDTH / 2 + 2, GAME_HEIGHT / 5, 'EQUIPMENT SELECT', {fontSize: 24, color: 'white'}).setOrigin(0.5, 0.5);
         this.setupStateText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.9, '', {fontSize: 12, color: 'white'}).setOrigin(0.5, 0.5);
 
         for (let team = 0; team < 2; ++team) {
@@ -306,6 +427,12 @@ export class EquipmentMenu extends Phaser.Scene {
 
     // advances to next step
     next() {
+        this.tweens.add({
+            targets: this.heroes[0][this.selecting].select_circle,
+            alpha: 0,
+            duration: 450,
+        });
+        
         if (this.selector != undefined) {
             this.selector.destroy();
             this.selector = undefined;
