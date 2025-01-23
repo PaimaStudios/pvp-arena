@@ -84,15 +84,38 @@ export class Arena extends Phaser.Scene
                 this.matchStateText?.setText('Battle!');
                 break;
             case MatchState.GameOverP1Win:
-                this.matchStateText?.setText(this.config.isP1 ? 'You won! - Press Space to return to menu' : 'Opponent won! - Press Space to return to menu');
+                if (this.config.isP1) {
+                    this.sound.play('win');
+                    this.displayEndMatchText('You won!');
+                } else {
+                    this.sound.play('lose');
+                    this.displayEndMatchText('Opponent won!');
+                }
                 break;
             case MatchState.GameOverP2Win:
-                this.matchStateText?.setText(!this.config.isP1 ? 'You won! - Press Space to return to menu' : 'Opponent won! - Press Space to return to menu');
+                if (this.config.isP1) {
+                    this.sound.play('lose');
+                    this.displayEndMatchText('Opponent won!');
+                } else {
+                    this.sound.play('win');
+                    this.displayEndMatchText('You won!');
+                }
                 break;
             case MatchState.GameOverTie:
-                this.matchStateText?.setText('Battle tied! - Press Space to return to menu');
+                this.sound.play('select'); // wasn't sure what to play, it's unlikely anyway
+                this.displayEndMatchText('Battle tied!');
                 break;
         }
+    }
+
+    displayEndMatchText(message: string) {
+        this.matchStateText?.destroy();
+        this.matchStateText = undefined;
+        this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.125, message, { fontSize: 64,  }).setOrigin(0.5, 0.5);
+        new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.9, 128, 32, 'Main Menu', 22, () => {
+            this.scene.start('MainMenu');
+            this.scene.remove('Arena');
+        });
     }
 
     onStateChange(state: PVPArenaDerivedState) {
@@ -195,25 +218,28 @@ export class Arena extends Phaser.Scene
         // stance change tweens
         const aliveUnits = this.getAllAliveUnits();
         for (const hero of aliveUnits) {
-            tweens.push({
-                targets: hero,
-                delay: 150,
-                duration: 350,
-                ease: 'Linear',
-                x: hero.rank.x(hero.nextStance),
-                onStart: () => {
-                    // TODO: put in function
-                    hero.left_arrow.visible = false;
-                    hero.right_arrow.visible = false;
-                },
-                onComplete: () => {
-                    hero.stance = hero.nextStance;
-                    // TODO: smarter way
-                    for (const h of this.getAllAliveUnits()) {
-                        h.updateTargetLine();
-                    }
-                },
-            });
+            if (hero.stance != hero.nextStance) {
+                tweens.push({
+                    targets: hero,
+                    delay: 150,
+                    duration: 350,
+                    ease: 'Linear',
+                    x: hero.rank.x(hero.nextStance),
+                    onStart: () => {
+                        this.sound.play('move');
+                        // TODO: put in function
+                        hero.left_arrow.visible = false;
+                        hero.right_arrow.visible = false;
+                    },
+                    onComplete: () => {
+                        hero.stance = hero.nextStance;
+                        // TODO: smarter way
+                        for (const h of this.getAllAliveUnits()) {
+                            h.updateTargetLine();
+                        }
+                    },
+                });
+            }
         }
         tweens.push({
             targets: null,
@@ -245,6 +271,9 @@ export class Arena extends Phaser.Scene
                 x: hero.target!.x(this.getHero(hero.target!).nextStance),
                 y: hero.target!.y(),
                 duration: 40 + dist * 2,
+                onStart: () => {
+                    this.sound.play('move');
+                },
                 onComplete: () => {
                     console.log(`half of tween [${hero.rank.team}][${hero.rank.index}]`);
                     // do graphical part of hp change (TODO: this should prob be in Hero)
@@ -287,6 +316,10 @@ export class Arena extends Phaser.Scene
                 x: hero.rank.x(hero.nextStance),
                 y: hero.y,
                 duration: 60 + dist * 3,
+                // onStart: () => {
+                //     // disabled because it sounds weird right after the damage sound
+                //     //this.sound.play('move');
+                // },
                 onComplete: (tween) => {
                     console.log(`tween.targets = ${JSON.stringify(tween.targets)}`);
                     console.log(`completed tween [${hero.rank.team}][${hero.rank.index}]`);
@@ -364,6 +397,13 @@ export class Arena extends Phaser.Scene
         this.load.image('blood_puddle4', 'blood_puddle4.png');
         this.load.image('blood_puddle5', 'blood_puddle5.png');
         this.load.image('blood_puddle6', 'blood_puddle6.png');
+
+        this.load.audio('move', 'move.wav');
+        this.load.audio('select', 'select.wav');
+        this.load.audio('damage', 'damage.wav');
+        this.load.audio('death', 'death.wav');
+        this.load.audio('win', 'win.wav');
+        this.load.audio('lose', 'lose.wav');
     }
 
     create() {
@@ -371,6 +411,7 @@ export class Arena extends Phaser.Scene
 
         this.matchStateText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.9, '', {fontSize: 12, color: 'white'}).setOrigin(0.5, 0.5);
 
+        // should we get rid of these?
         this.input?.keyboard?.on('keydown-ONE', () => {
             if (this.matchState == MatchState.WaitingOnPlayer) {
                 const hero = this.heroes[this.playerTeam()][0];

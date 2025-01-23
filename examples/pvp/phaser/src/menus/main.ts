@@ -20,6 +20,8 @@ export class MainMenu extends Phaser.Scene {
         this.load.setBaseURL('/');
 
         this.load.image('arena_bg', 'arena_bg.png');
+
+        this.load.audio('select', 'select.wav');
     }
 
     create() {
@@ -27,7 +29,7 @@ export class MainMenu extends Phaser.Scene {
         this.add.text(GAME_WIDTH / 2 + 2, GAME_HEIGHT / 4 + 2, 'PVP ARENA', {fontSize: 64, color: 'black'}).setOrigin(0.5, 0.5);
         this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 4, 'PVP ARENA', {fontSize: 64, color: 'white'}).setOrigin(0.5, 0.5);
         this.text = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.65, '', {fontSize: 12, color: 'white'}).setOrigin(0.5, 0.5).setVisible(false);
-        this.buttons.push(new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.5, 96, 32, 'Create', 20, () => {
+        this.buttons.push(new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.5, 128, 32, 'Create', 20, () => {
             this.setStatusText('Creating match, please wait...');
             this.deployProvider.create().then((api) => {
                 console.log('====================\napi done from creating\n===============');
@@ -39,7 +41,7 @@ export class MainMenu extends Phaser.Scene {
                 this.scene.start('EquipmentMenu');
             });
         }));
-        this.buttons.push(new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.65, 96, 32, 'Join', 20, () => {
+        this.buttons.push(new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.65, 128, 32, 'Join', 20, () => {
             const contractAddress = window.prompt('Enter contract address to join')
             if (contractAddress != null) {
                 this.setStatusText('Joining match, please wait...');
@@ -55,7 +57,7 @@ export class MainMenu extends Phaser.Scene {
             }
         }));
         // create an off-chain testing world for testing graphical stuff without having to wait a long time
-        this.buttons.push(new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.8, 96, 32, 'Testing', 20, () => {
+        this.buttons.push(new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.8, 128, 32, 'Practice', 20, () => {
             this.setStatusText('Entering mocked test arena...');
             setTimeout(() => {
                 this.scene.remove('EquipmentMenu');

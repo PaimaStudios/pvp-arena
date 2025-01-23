@@ -27,7 +27,10 @@ export class Button extends Phaser.GameObjects.Container {
             // hitArea: new Phaser.Geom.Rectangle(x, y, w, h),
             // hitAreaCallback: Phaser.Geom.Rectangle.Contains,
         });
-        this.on('pointerup', onClick);
+        this.on('pointerup', () => {
+            scene.sound.play('select');
+            onClick();
+        });
         this.on('pointerover', () => {
             this.bg.visible = false;
             this.bgOver.visible = true;

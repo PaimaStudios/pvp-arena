@@ -65,6 +65,7 @@ export class HeroActor extends Phaser.GameObjects.Container {
         arena.input.enableDebug(this);
         this.on('pointerup', () => {
             if (this.arena.matchState == MatchState.WaitingOnPlayer) {
+                arena.sound.play('select');
                 if ((this.arena.config.isP1 ? 0 : 1) == this.rank.team) {
                     if (this.select_circle.visible) {
                         this.deselect();
@@ -80,11 +81,13 @@ export class HeroActor extends Phaser.GameObjects.Container {
             }
         });
         this.left_arrow.on('pointerup', () => {
+            arena.sound.play('select');
             const leftStance = this.stance == STANCE.neutral ? STANCE.defensive : STANCE.neutral;
             this.nextStance = this.nextStance == leftStance ? this.stance : leftStance;
             this.updateNextStanceArrow();
         });
         this.right_arrow.on('pointerup', () => {
+            arena.sound.play('select');
             const rightStance = this.stance == STANCE.neutral ? STANCE.aggressive : STANCE.neutral;
             this.nextStance = this.nextStance == rightStance ? this.stance : rightStance;
             this.updateNextStanceArrow();
@@ -107,6 +110,7 @@ export class HeroActor extends Phaser.GameObjects.Container {
 
     // true = killed
     public attack(attacker: HeroActor, dmg: number): boolean {
+        this.arena.sound.play('damage');
         const n = 1 + (dmg * (2 + Math.random())) / 100000;
         console.log(`attack(${hpDiv(dmg)}) -> ${n}`);
         for (let i = 0; i < n; ++i) {
@@ -139,6 +143,7 @@ export class HeroActor extends Phaser.GameObjects.Container {
                     alpha: 0,
                     duration: 150,
                     onComplete: () => {
+                            this.arena.sound.play('death');
                             this.visible = false;
                             this.arena.add.image(this.x, this.y, 'skull').setFlipX(this.rank.team == 1).setDepth(-1);
                     }

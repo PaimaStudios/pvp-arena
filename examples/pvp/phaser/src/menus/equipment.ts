@@ -64,6 +64,7 @@ class SelectHeroActor extends Phaser.GameObjects.Container {
             x: this.rank.x(STANCE.neutral),
             duration: 450,
             onStart: () => {
+                this.scene.sound.play('move');
                 this.refresh();
             },
         });
@@ -231,13 +232,19 @@ class SlotSelector extends Phaser.GameObjects.Container {
 
         const left = this.scene.add.image(-54, 0, 'equip_select_arrow').setFlipX(true);
         left.setInteractive({ useHandCursor: true });
-        left.on('pointerup', () => this.shift(-1));
+        left.on('pointerup', () => {
+            scene.sound.play('select');
+            this.shift(-1);
+        });
         left.on('pointerover', () => left.setTexture('equip_select_arrow_over'));
         left.on('pointerout', () => left.setTexture('equip_select_arrow'));
         this.add(left);
         const right = this.scene.add.image(54, 0, 'equip_select_arrow');
         right.setInteractive({ useHandCursor: true });
-        right.on('pointerup', () => this.shift(1));
+        right.on('pointerup', () => {
+            scene.sound.play('select');
+            this.shift(1);
+        });
         right.on('pointerover', () => right.setTexture('equip_select_arrow_over'));
         right.on('pointerout', () => right.setTexture('equip_select_arrow'));
         this.add(right);
@@ -408,6 +415,9 @@ export class EquipmentMenu extends Phaser.Scene {
                 console.log(`loading hero_${part}_${material}.png`);
             }
         }
+
+        this.load.audio('select', 'select.wav');
+        this.load.audio('move', 'move.wav');
     }
 
     create() {
