@@ -1,6 +1,6 @@
 import { ITEM, RESULT, STANCE, Hero, ARMOR, pureCircuits, GAME_STATE, TotalStats } from '@midnight-ntwrk/pvp-contract';
 import { Arena, BattleConfig } from '../battle/arena';
-import { GAME_WIDTH, GAME_HEIGHT, safeJSONString, gameStateStr } from '../main';
+import { GAME_WIDTH, GAME_HEIGHT, safeJSONString, gameStateStr, fontStyle } from '../main';
 import { addHeroImages } from '../battle/hero';
 import { type HeroIndex, Rank, type Team } from '../battle';
 import { Button } from './button';
@@ -56,7 +56,7 @@ class SelectHeroActor extends Phaser.GameObjects.Container {
     }
 
     createStatsDisplay(tweens: Phaser.Types.Tweens.TweenBuilderConfig[]) {
-        this.statsDisplay = new StatsDisplay(this.scene, this.x + (this.rank.team == 0 ? -96 : (96 - 80)), 80 + 90 * this.rank.index);
+        this.statsDisplay = new StatsDisplay(this.scene, this.x + (this.rank.team == 0 ? (-96 + 40) : (96 - 40)), 80 + 90 * this.rank.index);
         this.statsDisplay.updateStats(pureCircuits.calc_stats(this.hero));
         this.statsDisplay.alpha = 0;
         tweens.push({
@@ -141,43 +141,45 @@ function armor_str(armor: ARMOR): string {
 }
 
 class StatsDisplay extends Phaser.GameObjects.Container {
-    crushDmg: Phaser.GameObjects.Text;
-    pierceDmg: Phaser.GameObjects.Text;
-    crushDef: Phaser.GameObjects.Text;
-    pierceDef: Phaser.GameObjects.Text;
-    dexBonus: Phaser.GameObjects.Text;
-    weight: Phaser.GameObjects.Text;
+    // crushDmg: Phaser.GameObjects.Text;
+    // pierceDmg: Phaser.GameObjects.Text;
+    // crushDef: Phaser.GameObjects.Text;
+    // pierceDef: Phaser.GameObjects.Text;
+    // dexBonus: Phaser.GameObjects.Text;
+    // weight: Phaser.GameObjects.Text;
+    descriptions: Phaser.GameObjects.Text;
+    valuesText: Phaser.GameObjects.Text;
     constructor(scene: Phaser.Scene, x: number, y: number) {
         super(scene, x, y);
-        this.add(scene.add.graphics({
-            x: 0,
-            y: 0,
-            lineStyle: { width: 2, color: Phaser.Display.Color.GetColor(22, 41, 51) },
-            fillStyle: { color: Phaser.Display.Color.GetColor(123, 146, 158) },
-        }).fillRoundedRect(0, 0, 80, 84, 3).strokeRoundedRect(0, 0, 80, 84, 3));
-        this.crushDmg = scene.add.text(8, 8, '', { fontSize: 8, color: 'white' });
-        this.add(this.crushDmg);
-        this.pierceDmg = scene.add.text(8, 20, '', { fontSize: 8, color: 'white' });
-        this.add(this.pierceDmg);
-        this.crushDef = scene.add.text(8, 32, '', { fontSize: 8, color: 'white' });
-        this.add(this.crushDef);
-        this.pierceDef = scene.add.text(8, 44, '', { fontSize: 8, color: 'white' });
-        this.add(this.pierceDef);
-        this.dexBonus = scene.add.text(8, 56, '', { fontSize: 8, color: 'white' });
-        this.add(this.dexBonus);
-        this.weight = scene.add.text(8, 68, '', { fontSize: 8, color: 'white' });
-        this.add(this.weight);
-        console.log('creating stats display');
+        this.add(scene.add.nineslice(0, 0, 'stone_button', undefined, 80, 84, 8, 8, 8, 8));
+        // this.crushDmg = scene.add.text(8, 8, '', style).setOrigin(0.5, 0.65);
+        // this.add(this.crushDmg);
+        // this.pierceDmg = scene.add.text(8, 20, '', style).setOrigin(0.5, 0.65);
+        // this.add(this.pierceDmg);
+        // this.crushDef = scene.add.text(8, 32, '', style).setOrigin(0.5, 0.65);
+        // this.add(this.crushDef);
+        // this.pierceDef = scene.add.text(8, 44, '', style).setOrigin(0.5, 0.65);
+        // this.add(this.pierceDef);
+        // this.dexBonus = scene.add.text(8, 56, '', style).setOrigin(0.5, 0.65);
+        // this.add(this.dexBonus);
+        // this.weight = scene.add.text(8, 68, '', style).setOrigin(0.5, 0.65);
+        // this.add(this.weight);
+        this.descriptions = scene.add.text(8 - 40, -42, 'CRUSH DMG:\nPIERCE DMG:\nCRUSH DEF:\nPIERCE DEF:\nDEX BONUS:\nWEIGHT:', fontStyle(6, {align: 'left'}));
+        this.add(this.descriptions);
+        this.valuesText = scene.add.text(68 - 40, -42, '', fontStyle(6, {align: 'right'}));
+        this.add(this.valuesText);
+        console.log(`creating stats display (${x}, ${y})`);
         scene.add.existing(this);
     }
 
     updateStats(stats: TotalStats) {
-        this.crushDmg.setText (`CRUSH DMG:  ${stats.crush_dmg}`);
-        this.pierceDmg.setText(`PIERCE DMG: ${stats.pierce_dmg}`);
-        this.crushDef.setText (`CRUSH DEF:  ${stats.crush_def}`);
-        this.pierceDef.setText(`PIERCE DEF: ${stats.pierce_def}`);
-        this.dexBonus.setText (`DEX BONUS:  ${stats.dex_bonus}`);
-        this.weight.setText   (`WEIGHT:     ${stats.weight}`);
+        // this.crushDmg.setText (`CRUSH DMG:  ${stats.crush_dmg}`);
+        // this.pierceDmg.setText(`PIERCE DMG: ${stats.pierce_dmg}`);
+        // this.crushDef.setText (`CRUSH DEF:  ${stats.crush_def}`);
+        // this.pierceDef.setText(`PIERCE DEF: ${stats.pierce_def}`);
+        // this.dexBonus.setText (`DEX BONUS:  ${stats.dex_bonus}`);
+        // this.weight.setText   (`WEIGHT:     ${stats.weight}`);
+        this.valuesText.setText (`${stats.crush_dmg}\n${stats.pierce_dmg}\n${stats.crush_def}\n${stats.pierce_def}\n${stats.dex_bonus}\n${stats.weight}`);
     }
 }
 
@@ -187,6 +189,7 @@ class EquipmentSelector extends Phaser.GameObjects.Container {
     constructor(scene: EquipmentMenu, hero: SelectHeroActor) {
         super(scene, GAME_WIDTH / 2, GAME_HEIGHT * 0.4/* + hero.rank.index * 32*/);
         this.hero = hero;
+        this.add(scene.add.nineslice(0, 48, 'stone_button', undefined, 128, 128, 8, 8, 8, 8));
         this.add(new SlotSelector(scene, EQUIP_SLOT.rhs, hero));
         this.add(new SlotSelector(scene, EQUIP_SLOT.lhs, hero));
         this.add(new SlotSelector(scene, EQUIP_SLOT.helmet, hero));
@@ -230,7 +233,7 @@ class SlotSelector extends Phaser.GameObjects.Container {
         this.slot = slot;
         this.hero = hero;
 
-        const left = this.scene.add.image(-54, 0, 'equip_select_arrow').setFlipX(true);
+        const left = this.scene.add.image(-48, 0, 'equip_select_arrow').setFlipX(true);
         left.setInteractive({ useHandCursor: true });
         left.on('pointerup', () => {
             scene.sound.play('select');
@@ -239,7 +242,7 @@ class SlotSelector extends Phaser.GameObjects.Container {
         left.on('pointerover', () => left.setTexture('equip_select_arrow_over'));
         left.on('pointerout', () => left.setTexture('equip_select_arrow'));
         this.add(left);
-        const right = this.scene.add.image(54, 0, 'equip_select_arrow');
+        const right = this.scene.add.image(48, 0, 'equip_select_arrow');
         right.setInteractive({ useHandCursor: true });
         right.on('pointerup', () => {
             scene.sound.play('select');
@@ -249,7 +252,7 @@ class SlotSelector extends Phaser.GameObjects.Container {
         right.on('pointerout', () => right.setTexture('equip_select_arrow'));
         this.add(right);
 
-        const text = this.scene.add.text(0, 0, '', {fontSize: 8, color: 'white'}).setOrigin(0.5, 0.5);
+        const text = this.scene.add.text(0, 0, '', fontStyle(6)).setOrigin(0.5, 0.65);
         this.text = text;
         this.add(text);
 
@@ -422,8 +425,8 @@ export class EquipmentMenu extends Phaser.Scene {
 
     create() {
         this.add.image(GAME_WIDTH, GAME_HEIGHT, 'arena_bg').setPosition(GAME_WIDTH / 2, GAME_HEIGHT / 2).setDepth(-3);
-        this.add.text(GAME_WIDTH / 2 + 2, GAME_HEIGHT / 5, 'EQUIPMENT SELECT', {fontSize: 24, color: 'white'}).setOrigin(0.5, 0.5);
-        this.setupStateText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.9, '', {fontSize: 12, color: 'white'}).setOrigin(0.5, 0.5);
+        this.add.text(GAME_WIDTH / 2 + 2, GAME_HEIGHT / 5, 'EQUIPMENT SELECT', fontStyle(24)).setOrigin(0.5, 0.65);
+        this.setupStateText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.9, '', fontStyle(12)).setOrigin(0.5, 0.65);
 
         for (let team = 0; team < 2; ++team) {
             let heroes = [];

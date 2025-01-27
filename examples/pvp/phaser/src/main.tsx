@@ -51,6 +51,16 @@ var createButton = function (scene: any, text: any) {
 export const GAME_WIDTH = 480;
 export const GAME_HEIGHT = 360;
 
+export function fontStyle(fontSize: number, extra?: Phaser.Types.GameObjects.Text.TextStyle): Phaser.Types.GameObjects.Text.TextStyle {
+    // this font is really small for some reason, so double it
+    return {
+        ...extra,
+        fontSize: fontSize * 2,
+        fontFamily: 'yana',
+        color: 'white'
+    };
+}
+
 // only converts bigint, but this is the only problem we have with printing ledger types
 export function safeJSONString(obj: object): string {
     // hacky but just doing it manually since otherwise: 'string' can't be used to index type '{}'
@@ -137,6 +147,9 @@ const config = {
     width: GAME_WIDTH,
     height: GAME_HEIGHT,
     scene: [MainMenu],
+    render: {
+        pixelArt: true,
+    },
     // physics: {
     //     default: 'arcade',
     //     arcade: {

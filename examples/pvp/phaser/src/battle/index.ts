@@ -1,8 +1,8 @@
 import { ITEM, RESULT, STANCE, Hero, ARMOR, pureCircuits, GAME_STATE } from '@midnight-ntwrk/pvp-contract';
 import { Arena } from './arena';
-import { GAME_WIDTH } from '../main';
+import { fontStyle, GAME_WIDTH } from '../main';
 
-export const MAX_HP = 300000;
+export const MAX_HP = 30000;
 export const HP_DIV = 1000;
 
 export function hpDiv(dmg: number): number {
@@ -14,7 +14,7 @@ export class DamageText extends Phaser.GameObjects.Text {
     ySpeed: number;
     lifetime: number;
     constructor(arena: Arena, x: number, y: number, dmg: number) {
-        super(arena, x, y, hpDiv(dmg).toString(), {fontSize: 12, color: 'white'});
+        super(arena, x, y, hpDiv(dmg).toString(), fontStyle(12));
         this.xSpeed = Math.random() * 0.1 - 0.05;
         this.ySpeed = -0.95;
         this.lifetime = 2;

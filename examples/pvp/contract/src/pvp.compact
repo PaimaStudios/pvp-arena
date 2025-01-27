@@ -215,7 +215,7 @@ export circuit calc_sig(sk: Bytes<32>, instance: Field): Field {
 }
 
 export circuit p1_select_first_heroes(first_p1_heroes: Vector<2, Hero>): Void {
-    assert game_state == GAME_STATE.p1_selecting_first_heroes "P1 must select first heroes rigth after contract creation";
+    assert game_state == GAME_STATE.p1_selecting_first_heroes "P1 must select first heroes right after contract creation";
     p1_heroes = [some<Hero>(first_p1_heroes[0]), some<Hero>(first_p1_heroes[1]), none<Hero>()];
     game_state = GAME_STATE.p2_selecting_heroes;
 }

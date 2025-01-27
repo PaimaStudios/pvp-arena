@@ -1,25 +1,17 @@
+import { fontStyle } from "../main";
+
 export class Button extends Phaser.GameObjects.Container {
-    bg: Phaser.GameObjects.Graphics;
-    bgOver: Phaser.GameObjects.Graphics;
+    bg: Phaser.GameObjects.NineSlice;
+    bgOver: Phaser.GameObjects.NineSlice;
 
     constructor(scene: Phaser.Scene, x: number, y: number, w: number, h: number, text: string, fontSize: number, onClick: () => void) {
         super(scene, x, y);
-        this.bg = scene.add.graphics({
-            x: -w / 2,
-            y: -h / 2,
-            lineStyle: { width: 2, color: Phaser.Display.Color.GetColor(22, 41, 51) },
-            fillStyle: { color: Phaser.Display.Color.GetColor(123, 146, 158) },
-        }).fillRoundedRect(0, 0, w, h, 3).strokeRoundedRect(0, 0, w, h, 3);
+        this.bg = scene.add.nineslice(0, 0, 'stone_button', undefined, w, h, 8, 8, 8, 8);
         this.add(this.bg);
-        this.bgOver = scene.add.graphics({
-            x: -w / 2,
-            y: -h / 2,
-            lineStyle: { width: 2, color: Phaser.Display.Color.GetColor(22, 41, 51) },
-            fillStyle: { color: Phaser.Display.Color.GetColor(112, 135, 148) },
-        }).fillRoundedRect(-2, -2, w + 4, h + 4, 3).strokeRoundedRect(-2, -2, w + 4, h + 4, 3);
+        this.bgOver = scene.add.nineslice(0, 0, 'stone_button_over', undefined, w + 4, h + 4, 8, 8, 8, 8);
         this.bgOver.visible = false;
         this.add(this.bgOver);
-        this.add(scene.add.text(0, 0, text, { fontSize, color: 'white' }).setOrigin(0.5, 0.5));
+        this.add(scene.add.text(0, 0, text, fontStyle(fontSize)).setOrigin(0.5, 0.65));
 
         this.setSize(w, h);
         this.setInteractive({

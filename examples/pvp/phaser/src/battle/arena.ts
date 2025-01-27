@@ -3,7 +3,7 @@ import { ITEM, RESULT, STANCE, Hero, ARMOR, pureCircuits, GAME_STATE } from '@mi
 import { type PVPArenaDerivedState, type DeployedPVPArenaAPI } from '@midnight-ntwrk/pvp-api';
 import 'phaser';
 import RexUIPlugin from 'phaser3-rex-plugins/templates/ui/ui-plugin'
-import { GAME_WIDTH, GAME_HEIGHT, gameStateStr, safeJSONString, MatchState } from '../main';
+import { GAME_WIDTH, GAME_HEIGHT, gameStateStr, safeJSONString, MatchState, fontStyle } from '../main';
 import { HeroActor } from './hero';
 import { HeroIndex, hpDiv, Rank, Team } from './index';
 import { Button } from '../menus/button';
@@ -111,8 +111,8 @@ export class Arena extends Phaser.Scene
     displayEndMatchText(message: string) {
         this.matchStateText?.destroy();
         this.matchStateText = undefined;
-        this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.125, message, { fontSize: 64,  }).setOrigin(0.5, 0.5);
-        new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.9, 128, 32, 'Main Menu', 22, () => {
+        this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.125, message, fontStyle(64)).setOrigin(0.5, 0.65);
+        new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.9, 128, 32, 'Main Menu', 18, () => {
             this.scene.start('MainMenu');
             this.scene.remove('Arena');
         });
@@ -409,7 +409,7 @@ export class Arena extends Phaser.Scene
     create() {
         this.add.image(GAME_WIDTH, GAME_HEIGHT, 'arena_bg').setPosition(GAME_WIDTH / 2, GAME_HEIGHT / 2).setDepth(-3);
 
-        this.matchStateText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.9, '', {fontSize: 12, color: 'white'}).setOrigin(0.5, 0.5);
+        this.matchStateText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.9, '', fontStyle(12)).setOrigin(0.5, 0.65);
 
         // should we get rid of these?
         this.input?.keyboard?.on('keydown-ONE', () => {
@@ -548,7 +548,7 @@ export class Arena extends Phaser.Scene
             }
         });
 
-        this.submitButton = new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.9, 64, 24, 'Submit', 16, () => {
+        this.submitButton = new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.9, 64, 24, 'Submit', 12, () => {
             const stances = this.heroes[this.playerTeam()].map((hero) => hero.nextStance);
             this.setMatchState(MatchState.SubmittingMove);
             // still must send moves for dead units to make sure indexing works, so pad with 0's

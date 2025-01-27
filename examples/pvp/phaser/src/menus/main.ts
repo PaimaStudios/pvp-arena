@@ -1,5 +1,5 @@
 import { BrowserDeploymentManager } from '../wallet';
-import { logger, GAME_WIDTH, GAME_HEIGHT } from '../main';
+import { logger, GAME_WIDTH, GAME_HEIGHT, fontStyle } from '../main';
 import { MockPVPArenaAPI } from '../battle/mockapi';
 import { Arena } from '../battle/arena';
 import { EquipmentMenu } from './equipment';
@@ -21,6 +21,9 @@ export class MainMenu extends Phaser.Scene {
 
         this.load.image('arena_bg', 'arena_bg.png');
 
+        this.load.image('stone_button', 'stone_button.png');
+        this.load.image('stone_button_over', 'stone_button_over.png');
+
         this.load.audio('select', 'select.wav');
     }
 
@@ -28,7 +31,7 @@ export class MainMenu extends Phaser.Scene {
         this.add.image(GAME_WIDTH, GAME_HEIGHT, 'arena_bg').setPosition(GAME_WIDTH / 2, GAME_HEIGHT / 2).setDepth(-3);
         this.add.text(GAME_WIDTH / 2 + 2, GAME_HEIGHT / 4 + 2, 'PVP ARENA', {fontSize: 64, color: 'black'}).setOrigin(0.5, 0.5);
         this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 4, 'PVP ARENA', {fontSize: 64, color: 'white'}).setOrigin(0.5, 0.5);
-        this.text = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.65, '', {fontSize: 12, color: 'white'}).setOrigin(0.5, 0.5).setVisible(false);
+        this.text = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.65, '', fontStyle(12)).setOrigin(0.5, 0.65).setVisible(false);
         this.buttons.push(new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.5, 128, 32, 'Create', 20, () => {
             this.setStatusText('Creating match, please wait...');
             this.deployProvider.create().then((api) => {
