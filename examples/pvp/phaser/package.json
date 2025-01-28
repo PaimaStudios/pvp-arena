@@ -10,6 +10,7 @@
     "dev": "vite",
     "prepack": "yarn build",
     "build": "tsc && vite build --mode testnet && cp -r ../contract/dist/managed/pvp/keys ./dist/keys && cp -r ../contract/dist/managed/pvp/zkir ./dist/zkir",
+    "build-undeployed": "tsc && vite build --mode undeployed && cp -r ../contract/dist/managed/pvp/keys ./dist/keys && cp -r ../contract/dist/managed/pvp/zkir ./dist/zkir",
     "preview": "vite preview",
     "lint": "eslint ./src",
     "test": "jest --passWithNoTests"
