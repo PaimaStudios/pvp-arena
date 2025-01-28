@@ -4,19 +4,9 @@ import { ITEM, RESULT, STANCE, Hero, ARMOR, pureCircuits, GAME_STATE } from '@mi
 import { Subscriber, Observable } from 'rxjs';
 import { safeJSONString } from '../main';
 import { MAX_HP } from './index';
+import { generateRandomHero } from './hero';
 
 const MOCK_DELAY = 500;
-
-function generateRandomHero(): Hero {
-    return {
-        lhs: Phaser.Math.Between(0, 5) as ITEM,
-        rhs: Phaser.Math.Between(0, 5) as ITEM,
-        helmet: Phaser.Math.Between(0, 2) as ARMOR,
-        chest: Phaser.Math.Between(0, 2) as ARMOR,
-        skirt: Phaser.Math.Between(0, 2) as ARMOR,
-        greaves: Phaser.Math.Between(0, 2) as ARMOR,
-    };
-}
 
 export class MockPVPArenaAPI implements DeployedPVPArenaAPI {
     readonly deployedContractAddress: ContractAddress;

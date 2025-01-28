@@ -142,6 +142,10 @@ export function gameStateStr(state: GAME_STATE): string {
     return '???';
 }
 
+function scaleToWindow(): number {
+    return Math.floor(Math.min(window.innerWidth / GAME_WIDTH, window.innerHeight / GAME_HEIGHT));
+}
+
 const config = {
     type: Phaser.AUTO,
     width: GAME_WIDTH,
@@ -150,6 +154,7 @@ const config = {
     render: {
         pixelArt: true,
     },
+    zoom: scaleToWindow(),
     // physics: {
     //     default: 'arcade',
     //     arcade: {
