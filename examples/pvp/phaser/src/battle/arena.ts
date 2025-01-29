@@ -383,6 +383,7 @@ export class Arena extends Phaser.Scene
         this.load.image('hp_bar_middle', 'hp_bar_middle.png');
 
         this.load.image('arrow_move', 'arrow_move.png');
+        this.load.image('arrow_attack', 'arrow_attack4.png');
         this.load.image('select_circle', 'select_circle.png');
 
         this.load.image('skull', 'skull.png');

@@ -1,5 +1,5 @@
 import { ITEM, RESULT, STANCE, Hero, ARMOR, pureCircuits, GAME_STATE } from '@midnight-ntwrk/pvp-contract';
-import { safeJSONString, MatchState } from '../main';
+import { safeJSONString, MatchState, fontStyle } from '../main';
 import { Arena } from './arena';
 import { MAX_HP, Rank, BloodDrop, DamageText, hpDiv } from '.';
 
@@ -10,7 +10,8 @@ export class HeroActor extends Phaser.GameObjects.Container {
     hpBar: HpBar;
     rank: Rank;
     target: Rank | undefined;
-    targetLine: Phaser.GameObjects.Line;
+    targetLine: Phaser.GameObjects.Image;
+    targetDmgEstimage: Phaser.GameObjects.Text;
     preTurnDmg: number;
     uiDmg: number;
     realDmg: number;
@@ -38,12 +39,12 @@ export class HeroActor extends Phaser.GameObjects.Container {
 
         const isP2 = this.rank.team == 1;
 
-        const line = arena.add.line(0, 0, 0, 0, 0, 0, rank.team == 0 ? 0x3333bb : 0xbb3333, 0.3)
-            .setOrigin(0, 0)
-            .setLineWidth(3)
+        const line = arena.add.image(0, 0, 'arrow_attack')
             .setVisible(false);
         this.targetLine = line;
         this.add(line);
+        this.targetDmgEstimage = arena.add.text(0, 0, '', fontStyle(10)).setVisible(false).setOrigin(0.5, 0.5);
+        this.add(this.targetDmgEstimage);
 
         this.left_arrow = arena.add.image(-32, 0, 'arrow_move').setVisible(false).setFlipX(true);
         this.add(this.left_arrow);
@@ -195,6 +196,8 @@ export class HeroActor extends Phaser.GameObjects.Container {
                 this.right_arrow.setAlpha(0.75).setScale(0.5, 0.5);
             }
         }
+        // also update the damage estimate
+        this.updateTargetLine();
     }
 
     public setTarget(target: Rank | undefined) {
@@ -212,13 +215,29 @@ export class HeroActor extends Phaser.GameObjects.Container {
     public updateTargetLine() {
         if (this.target != undefined) {
             // TODO: how to know other person's stance?
-            const tx = this.target.x(this.arena.getHero(this.target).stance);
+            const enemy = this.arena.getHero(this.target);
+            const tx = this.target.x(enemy.stance);
             const ty = this.target.y();
+            const angle = Phaser.Math.Angle.Between(this.x, this.y, tx, ty);
+            const distFromHero = 16;
             this.targetLine
-                .setTo(0, 0, tx - this.x, ty - this.y)
+                .setPosition(Math.cos(angle) * distFromHero, 24 + Math.sin(angle) * distFromHero)
+                .setRotation(angle)
+                .setVisible(true);
+            const enemyClosestStance = enemy.stance == STANCE.defensive ? STANCE.neutral : STANCE.aggressive;
+            const enemyFurthestStance = enemy.stance == STANCE.aggressive ? STANCE.neutral : STANCE.defensive;
+            const lowestDmg = Number(pureCircuits.calc_item_dmg_against(pureCircuits.calc_stats(this.hero), this.nextStance, pureCircuits.calc_stats(enemy.hero), enemyFurthestStance));
+            const highestDmg = Number(pureCircuits.calc_item_dmg_against(pureCircuits.calc_stats(this.hero), this.nextStance, pureCircuits.calc_stats(enemy.hero), enemyClosestStance));
+            this.targetDmgEstimage
+                .setPosition(Math.cos(angle) * distFromHero * 3, 24 + Math.sin(angle) * distFromHero * 3)
+                .setRotation(angle)
+                .setFlipX(tx < this.x)
+                .setFlipY(tx < this.x)
+                .setText(lowestDmg == highestDmg ? lowestDmg.toString() : `${hpDiv(lowestDmg)} - ${hpDiv(highestDmg)}`)
                 .setVisible(true);
         } else {
             this.targetLine.setVisible(false);
+            this.targetDmgEstimage.setVisible(false);
         }
     }
 
@@ -262,13 +281,32 @@ export class HeroActor extends Phaser.GameObjects.Container {
     }
 }
 
+export function generateRandomHero(): Hero {
+    // we want at least one weapon, so make one of lhs or rhs start at 1 instead of 0
+    const preferRhs = Phaser.Math.Between(0, 1);
+    const rhs = Phaser.Math.Between(preferRhs, 5) as ITEM;
+    const lhs = Phaser.Math.Between(preferRhs == 0 ? 1 : 0, 5) as ITEM;
+    return {
+        lhs: rhs == ITEM.bow ? ITEM.nothing : lhs,
+        rhs: (lhs == ITEM.bow && rhs != ITEM.bow) ? ITEM.nothing : rhs,
+        helmet: Phaser.Math.Between(0, 2) as ARMOR,
+        chest: Phaser.Math.Between(0, 2) as ARMOR,
+        skirt: Phaser.Math.Between(0, 2) as ARMOR,
+        greaves: Phaser.Math.Between(0, 2) as ARMOR,
+    };
+}
+
 export function addHeroImages(container: Phaser.GameObjects.Container, hero: Hero, isP2: boolean) {
+    console.log(`addHeroImages(${safeJSONString(hero)});`);
     if (hero.lhs == ITEM.bow || hero.rhs == ITEM.bow) {
         container.add(container.scene.add.image(0, 0, 'hero_quiver').setFlipX(isP2));
     }
     container.add(container.scene.add.image(0, 0, 'hero_body').setFlipX(isP2));
-    if (hero.lhs != ITEM.nothing) {
-        container.add(container.scene.add.image(0, 0, itemSprite(hero.lhs, false)).setFlipX(isP2));
+    // swap hands if sprite is swapped too
+    const lhs = isP2 ? hero.rhs : hero.lhs;
+    const rhs = isP2 ? hero.lhs : hero.rhs;
+    if (lhs != ITEM.nothing) {
+        container.add(container.scene.add.image(0, 0, itemSprite(lhs, false)).setFlipX(isP2));
     }
     if (hero.helmet != ARMOR.nothing) {
         container.add(container.scene.add.image(0, 0, armorSprite(hero.helmet, 'helmet')).setFlipX(isP2));
@@ -283,8 +321,8 @@ export function addHeroImages(container: Phaser.GameObjects.Container, hero: Her
         container.add(container.scene.add.image(0, 0, armorSprite(hero.greaves, 'greaves')).setFlipX(isP2));
     }
     container.add(container.scene.add.image(0, 0, 'hero_arm_r').setFlipX(isP2));
-    if (hero.rhs != ITEM.nothing) {
-        container.add(container.scene.add.image(0, 0, itemSprite(hero.rhs, true)).setFlipX(isP2));
+    if (rhs != ITEM.nothing) {
+        container.add(container.scene.add.image(0, 0, itemSprite(rhs, true)).setFlipX(isP2));
     }
 }
 

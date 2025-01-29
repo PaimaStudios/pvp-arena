@@ -1,12 +1,13 @@
 import { ITEM, RESULT, STANCE, Hero, ARMOR, pureCircuits, GAME_STATE, TotalStats } from '@midnight-ntwrk/pvp-contract';
 import { Arena, BattleConfig } from '../battle/arena';
 import { GAME_WIDTH, GAME_HEIGHT, safeJSONString, gameStateStr, fontStyle } from '../main';
-import { addHeroImages } from '../battle/hero';
+import { addHeroImages, generateRandomHero } from '../battle/hero';
 import { type HeroIndex, Rank, type Team } from '../battle';
 import { Button } from './button';
 import { MockPVPArenaAPI } from '../battle/mockapi';
 import { PVPArenaAPI, PVPArenaDerivedState } from '@midnight-ntwrk/pvp-api';
 import { Physics } from 'phaser';
+import { eq } from 'fp-ts';
 
 class SelectHeroActor extends Phaser.GameObjects.Container {
     hero: Hero;
@@ -48,7 +49,7 @@ class SelectHeroActor extends Phaser.GameObjects.Container {
     }
 
     refresh() {
-        this.removeAll();
+        this.removeAll(true);
         addHeroImages(this, this.hero, this.rank.team == 1);
         if (this.statsDisplay != undefined) {
             this.statsDisplay.updateStats(pureCircuits.calc_stats(this.hero));
@@ -90,6 +91,23 @@ function equip_slot_max(slot: EQUIP_SLOT): number {
         return 6;
     }
     return 3;
+}
+
+function equip_slot_index(hero: Hero, slot: EQUIP_SLOT): number {
+    switch (slot) {
+        case EQUIP_SLOT.rhs:
+            return hero.rhs;
+        case EQUIP_SLOT.lhs:
+            return hero.lhs;
+        case EQUIP_SLOT.chest:
+            return hero.chest;
+        case EQUIP_SLOT.helmet:
+            return hero.helmet;
+        case EQUIP_SLOT.skirt:
+            return hero.skirt;
+        case EQUIP_SLOT.greaves:
+            return hero.greaves;
+    }
 }
 
 function equip_slot_name(slot: EQUIP_SLOT): string {
@@ -141,29 +159,11 @@ function armor_str(armor: ARMOR): string {
 }
 
 class StatsDisplay extends Phaser.GameObjects.Container {
-    // crushDmg: Phaser.GameObjects.Text;
-    // pierceDmg: Phaser.GameObjects.Text;
-    // crushDef: Phaser.GameObjects.Text;
-    // pierceDef: Phaser.GameObjects.Text;
-    // dexBonus: Phaser.GameObjects.Text;
-    // weight: Phaser.GameObjects.Text;
     descriptions: Phaser.GameObjects.Text;
     valuesText: Phaser.GameObjects.Text;
     constructor(scene: Phaser.Scene, x: number, y: number) {
         super(scene, x, y);
         this.add(scene.add.nineslice(0, 0, 'stone_button', undefined, 80, 84, 8, 8, 8, 8));
-        // this.crushDmg = scene.add.text(8, 8, '', style).setOrigin(0.5, 0.65);
-        // this.add(this.crushDmg);
-        // this.pierceDmg = scene.add.text(8, 20, '', style).setOrigin(0.5, 0.65);
-        // this.add(this.pierceDmg);
-        // this.crushDef = scene.add.text(8, 32, '', style).setOrigin(0.5, 0.65);
-        // this.add(this.crushDef);
-        // this.pierceDef = scene.add.text(8, 44, '', style).setOrigin(0.5, 0.65);
-        // this.add(this.pierceDef);
-        // this.dexBonus = scene.add.text(8, 56, '', style).setOrigin(0.5, 0.65);
-        // this.add(this.dexBonus);
-        // this.weight = scene.add.text(8, 68, '', style).setOrigin(0.5, 0.65);
-        // this.add(this.weight);
         this.descriptions = scene.add.text(8 - 40, -42, 'CRUSH DMG:\nPIERCE DMG:\nCRUSH DEF:\nPIERCE DEF:\nDEX BONUS:\nWEIGHT:', fontStyle(6, {align: 'left'}));
         this.add(this.descriptions);
         this.valuesText = scene.add.text(68 - 40, -42, '', fontStyle(6, {align: 'right'}));
@@ -173,29 +173,34 @@ class StatsDisplay extends Phaser.GameObjects.Container {
     }
 
     updateStats(stats: TotalStats) {
-        // this.crushDmg.setText (`CRUSH DMG:  ${stats.crush_dmg}`);
-        // this.pierceDmg.setText(`PIERCE DMG: ${stats.pierce_dmg}`);
-        // this.crushDef.setText (`CRUSH DEF:  ${stats.crush_def}`);
-        // this.pierceDef.setText(`PIERCE DEF: ${stats.pierce_def}`);
-        // this.dexBonus.setText (`DEX BONUS:  ${stats.dex_bonus}`);
-        // this.weight.setText   (`WEIGHT:     ${stats.weight}`);
         this.valuesText.setText (`${stats.crush_dmg}\n${stats.pierce_dmg}\n${stats.crush_def}\n${stats.pierce_def}\n${stats.dex_bonus}\n${stats.weight}`);
     }
 }
 
 class EquipmentSelector extends Phaser.GameObjects.Container {
     hero: SelectHeroActor;
+    slots: Map<EQUIP_SLOT, SlotSelector>;
 
     constructor(scene: EquipmentMenu, hero: SelectHeroActor) {
         super(scene, GAME_WIDTH / 2, GAME_HEIGHT * 0.4/* + hero.rank.index * 32*/);
         this.hero = hero;
         this.add(scene.add.nineslice(0, 48, 'stone_button', undefined, 128, 128, 8, 8, 8, 8));
-        this.add(new SlotSelector(scene, EQUIP_SLOT.rhs, hero));
-        this.add(new SlotSelector(scene, EQUIP_SLOT.lhs, hero));
-        this.add(new SlotSelector(scene, EQUIP_SLOT.helmet, hero));
-        this.add(new SlotSelector(scene, EQUIP_SLOT.chest, hero));
-        this.add(new SlotSelector(scene, EQUIP_SLOT.skirt, hero));
-        this.add(new SlotSelector(scene, EQUIP_SLOT.greaves, hero));
+
+        this.slots = new Map();
+        this.slots.set(EQUIP_SLOT.rhs, new SlotSelector(scene, EQUIP_SLOT.rhs, this, hero));
+        this.slots.set(EQUIP_SLOT.lhs, new SlotSelector(scene, EQUIP_SLOT.lhs, this, hero));
+        this.slots.set(EQUIP_SLOT.helmet, new SlotSelector(scene, EQUIP_SLOT.helmet, this, hero));
+        this.slots.set(EQUIP_SLOT.chest, new SlotSelector(scene, EQUIP_SLOT.chest, this, hero));
+        this.slots.set(EQUIP_SLOT.skirt, new SlotSelector(scene, EQUIP_SLOT.skirt, this, hero));
+        this.slots.set(EQUIP_SLOT.greaves, new SlotSelector(scene, EQUIP_SLOT.greaves, this, hero));
+        this.slots.values().forEach((slot) => this.add(slot));
+
+        this.add(new Button(scene, 0, -12, 16, 16, '', 10, () => {
+            this.hero.hero = generateRandomHero();
+            this.hero.refresh();
+            this.slots.values().forEach((slot) => slot.refresh());
+        }));
+        this.add(scene.add.image(0, -12, 'dice').setAlpha(0.75));
 
         this.add(new Button(scene, 0, 18 * 6, 64, 16, 'Confirm', 10, () => scene.next()));
 
@@ -204,6 +209,14 @@ class EquipmentSelector extends Phaser.GameObjects.Container {
         scene.add.existing(this);
 
         this.createOpeningTweens();
+    }
+
+    activateSlot(slot: EQUIP_SLOT) {
+        this.slots.get(slot)?.setVisible(true);
+    }
+
+    deactivateSlot(slot: EQUIP_SLOT) {
+        this.slots.get(slot)?.setVisible(false);
     }
 
     private createOpeningTweens() {
@@ -221,16 +234,16 @@ class EquipmentSelector extends Phaser.GameObjects.Container {
     }
 }
 class SlotSelector extends Phaser.GameObjects.Container {
-    index: number;
     slot: EQUIP_SLOT;
     hero: SelectHeroActor;
     text: Phaser.GameObjects.Text;
+    equip: EquipmentSelector;
 
-    constructor(scene: Phaser.Scene, slot: EQUIP_SLOT, hero: SelectHeroActor) {
+    constructor(scene: Phaser.Scene, slot: EQUIP_SLOT, equip: EquipmentSelector, hero: SelectHeroActor) {
         super(scene, 0, (slot as number) * 18);
 
-        this.index = 0;
         this.slot = slot;
+        this.equip = equip;
         this.hero = hero;
 
         const left = this.scene.add.image(-48, 0, 'equip_select_arrow').setFlipX(true);
@@ -262,36 +275,64 @@ class SlotSelector extends Phaser.GameObjects.Container {
         scene.add.existing(this);
     }
 
+    // shifts hero's stats and updates visual elements
     shift(cycle: number) {
         const max = equip_slot_max(this.slot);
-        this.index = (this.index + max + cycle) % max;
+        const index = (equip_slot_index(this.hero.hero, this.slot) + max + cycle) % max;
         switch (this.slot) {
             case EQUIP_SLOT.lhs:
-                this.hero.hero.lhs = this.index as ITEM;
+                this.hero.hero.lhs = index as ITEM;
+                if (this.hero.hero.lhs == ITEM.bow || this.hero.hero.rhs == ITEM.bow) {
+                    this.hero.hero.rhs = ITEM.nothing;
+                    this.equip.slots.get(EQUIP_SLOT.rhs)!.refresh();
+                }
+                break;
+            case EQUIP_SLOT.rhs:
+                this.hero.hero.rhs = index as ITEM;
+                if (this.hero.hero.rhs == ITEM.bow || this.hero.hero.lhs == ITEM.bow) {
+                    this.hero.hero.lhs = ITEM.nothing;
+                    this.equip.slots.get(EQUIP_SLOT.lhs)!.refresh();
+                }
+                break;
+            case EQUIP_SLOT.helmet:
+                this.hero.hero.helmet = index as ARMOR;
+                break;
+            case EQUIP_SLOT.chest:
+                this.hero.hero.chest = index as ARMOR;
+                break;
+            case EQUIP_SLOT.skirt:
+                this.hero.hero.skirt = index as ARMOR;
+                break;
+            case EQUIP_SLOT.greaves:
+                this.hero.hero.greaves = index as ARMOR;
+                break;
+        }
+        this.refresh();
+        this.hero.refresh();
+    }
+
+    // refreshes the text / hero (stats) based on current hero's stats
+    refresh() {
+        switch (this.slot) {
+            case EQUIP_SLOT.lhs:
                 this.text.setText(`${equip_slot_name(this.slot)}: ${item_str(this.hero.hero.lhs)}`);
                 break;
             case EQUIP_SLOT.rhs:
-                this.hero.hero.rhs = this.index as ITEM;
                 this.text.setText(`${equip_slot_name(this.slot)}: ${item_str(this.hero.hero.rhs)}`);
                 break;
             case EQUIP_SLOT.helmet:
-                this.hero.hero.helmet = this.index as ARMOR;
                 this.text.setText(`${equip_slot_name(this.slot)}: ${armor_str(this.hero.hero.helmet)}`);
                 break;
             case EQUIP_SLOT.chest:
-                this.hero.hero.chest = this.index as ARMOR;
                 this.text.setText(`${equip_slot_name(this.slot)}: ${armor_str(this.hero.hero.chest)}`);
                 break;
             case EQUIP_SLOT.skirt:
-                this.hero.hero.skirt = this.index as ARMOR;
                 this.text.setText(`${equip_slot_name(this.slot)}: ${armor_str(this.hero.hero.skirt)}`);
                 break;
             case EQUIP_SLOT.greaves:
-                this.hero.hero.greaves = this.index as ARMOR;
                 this.text.setText(`${equip_slot_name(this.slot)}: ${armor_str(this.hero.hero.greaves)}`);
                 break;
         }
-        this.hero.refresh();
     }
 }
 
@@ -397,6 +438,7 @@ export class EquipmentMenu extends Phaser.Scene {
         this.load.image('arena_bg', 'arena_bg.png');
         this.load.image('equip_select_arrow', 'equip_select_arrow.png');
         this.load.image('equip_select_arrow_over', 'equip_select_arrow_over.png');
+        this.load.image('dice', 'dice.png');
         this.load.image('select_circle', 'select_circle.png');
 
         this.load.image('hero_quiver', 'hero_quiver.png');
