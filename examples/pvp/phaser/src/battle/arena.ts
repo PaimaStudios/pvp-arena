@@ -230,9 +230,13 @@ export class Arena extends Phaser.Scene
                         // TODO: put in function
                         hero.left_arrow.visible = false;
                         hero.right_arrow.visible = false;
+                        hero.anims.run();
+                        hero.anims.setFlipX(hero.rank.x(hero.nextStance) < hero.x);
                     },
                     onComplete: () => {
                         hero.stance = hero.nextStance;
+                        hero.anims.idle();
+                        hero.anims.setFlipX(hero.rank.team == 1);
                         // TODO: smarter way
                         for (const h of this.getAllAliveUnits()) {
                             h.updateTargetLine();
@@ -248,84 +252,7 @@ export class Arena extends Phaser.Scene
 
         // attack tweens
         for (const hero of aliveUnits) {
-            // can't use hero.x / enemy.x etc since those aren't where they'll be after they move to their new stance
-            const heroX = hero.rank.x(hero.nextStance);
-            const heroY = hero.rank.y(); // technically the same right now but could be different in the future
-            const enemy = this.heroes[hero.target!.team][hero.target!.index];
-            const enemyX = enemy.rank.x(enemy.nextStance);
-            const enemyY = enemy.rank.y();
-            // get rid of line/prepare delay
-            tweens.push({
-                targets: hero,
-                duration: 150,
-                onComplete: () => {
-                    // get rid of line before attack
-                    hero.setTarget(undefined);
-                },
-            });
-            // move to enemy
-            const dist = (new Phaser.Math.Vector2(heroX, heroY)).distance(new Phaser.Math.Vector2(enemyX, enemyY));
-            tweens.push({
-                targets: hero,
-                ease: 'Quad.easeInOut',
-                x: hero.target!.x(this.getHero(hero.target!).nextStance),
-                y: hero.target!.y(),
-                duration: 40 + dist * 2,
-                onStart: () => {
-                    this.sound.play('move');
-                },
-                onComplete: () => {
-                    console.log(`half of tween [${hero.rank.team}][${hero.rank.index}]`);
-                    // do graphical part of hp change (TODO: this should prob be in Hero)
-                    // TODO: this is ALL damage done the entire turn to enemy so only
-                    // the first attack will appear to change it. need to fix this, can't rely on just this
-                    const stance_strs = ['def', 'neu', 'atk'];
-                    for (let hero_stance = 0; hero_stance < 3; ++hero_stance) {
-                        for (let enemy_stance = 0; enemy_stance < 3; ++enemy_stance) {
-                            const dmg = pureCircuits.calc_item_dmg_against(pureCircuits.calc_stats(hero.hero), hero_stance as STANCE, pureCircuits.calc_stats(enemy.hero), enemy_stance as STANCE);
-                            console.log(`dmg [${stance_strs[hero_stance]}] -> [${stance_strs[enemy_stance]}] = ${hpDiv(Number(dmg))}`);
-                        }
-                    }
-                    const dmg = pureCircuits.calc_item_dmg_against(pureCircuits.calc_stats(hero.hero), hero.nextStance, pureCircuits.calc_stats(enemy.hero), enemy.nextStance);
-                    if (enemy.attack(hero, Number(dmg))) {
-                        // TODO: death anim? or this is resolved after?
-                    }
-                },
-                persist: false,
-            });
-            // enemy knockback
-            const angle = Phaser.Math.Angle.Between(heroX, heroY, enemyX, enemyY);
-            tweens.push({
-                targets: enemy,
-                x: enemyX + Math.cos(angle) * 16,
-                y: enemyY + Math.sin(angle) * 16,
-                alpha: 0.4,
-                duration: 50,
-            });
-            tweens.push({
-                targets: enemy,
-                x: enemyX,
-                y: enemyY,
-                alpha: 1,
-                duration: 80,
-            });
-            // move back
-            tweens.push({
-                targets: hero,
-                ease: 'Quad.easeInOut',
-                x: hero.rank.x(hero.nextStance),
-                y: hero.y,
-                duration: 60 + dist * 3,
-                // onStart: () => {
-                //     // disabled because it sounds weird right after the damage sound
-                //     //this.sound.play('move');
-                // },
-                onComplete: (tween) => {
-                    console.log(`tween.targets = ${JSON.stringify(tween.targets)}`);
-                    console.log(`completed tween [${hero.rank.team}][${hero.rank.index}]`);
-                },
-                persist: false,
-            });
+            hero.attackTween(tweens);
         }
         tweens.push({
             targets: null,
@@ -386,6 +313,7 @@ export class Arena extends Phaser.Scene
         this.load.image('arrow_attack', 'arrow_attack4.png');
         this.load.image('select_circle', 'select_circle.png');
 
+        this.load.image('arrow', 'arrow.png');
         this.load.image('skull', 'skull.png');
         this.load.image('blood_drop0', 'blood_drop0.png');
         this.load.image('blood_drop1', 'blood_drop1.png');

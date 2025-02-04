@@ -3,6 +3,11 @@ import { safeJSONString, MatchState, fontStyle } from '../main';
 import { Arena } from './arena';
 import { MAX_HP, Rank, BloodDrop, DamageText, hpDiv } from '.';
 
+const MELEE_ATTACK_TIME = 300;
+const BOW_ATTACK_TIME = 1000;
+const IDLE_ANIM_TIME = 1000;
+const RUN_ANIM_TIME = 1000;
+
 export class HeroActor extends Phaser.GameObjects.Container {
     arena: Arena;
     hero: Hero;
@@ -21,6 +26,7 @@ export class HeroActor extends Phaser.GameObjects.Container {
     left_arrow: Phaser.GameObjects.Image;
     select_circle: Phaser.GameObjects.Image;
     tick: number;
+    anims: HeroAnimationController;
 
     constructor(arena: Arena, hero: Hero, rank: Rank) {
         console.log(`Hero created: ${rank.team}|${rank.index} => ${safeJSONString(pureCircuits.calc_stats(hero))}`);
@@ -55,7 +61,9 @@ export class HeroActor extends Phaser.GameObjects.Container {
         this.select_circle = arena.add.image(0, 8, 'select_circle').setVisible(false).setDepth(-1);
         this.add(this.select_circle);
 
-        addHeroImages(this, hero, isP2);
+        //addHeroImages(this, hero, isP2);
+        this.anims = new HeroAnimationController(this.scene, 0, 0, this.hero, this.rank.team == 1);
+        this.add(this.anims);
 
         this.hpBar = new HpBar(arena, 0, -31, 40);
         this.add(this.hpBar);
@@ -119,7 +127,7 @@ export class HeroActor extends Phaser.GameObjects.Container {
             this.arena.add.existing(new BloodDrop(this.arena, this.x, this.y, Phaser.Math.Angle.Between(attacker.rank.x(attacker.stance), attacker.rank.y(), this.rank.x(this.stance), this.rank.y())));
         }
 
-        this.arena.add.existing(new DamageText(this.arena, (this.x + attacker.x) / 2, (this.y + attacker.y) / 2 - 24, dmg));
+        this.arena.add.existing(new DamageText(this.arena, this.x, this.y - 24, dmg));
 
         this.uiDmg = Math.min(MAX_HP, this.uiDmg + dmg);
         this.updateHpBar();
@@ -158,7 +166,7 @@ export class HeroActor extends Phaser.GameObjects.Container {
     }
 
     public isAlive(): boolean {
-        console.log(`isAlive(${this.rank.team}, ${this.rank.index}) => ${this.preTurnDmg < MAX_HP} | ${this.preTurnDmg, this.uiDmg, this.realDmg}`);
+        //console.log(`isAlive(${this.rank.team}, ${this.rank.index}) => ${this.preTurnDmg < MAX_HP} | ${this.preTurnDmg, this.uiDmg, this.realDmg}`);
         return this.preTurnDmg < MAX_HP;
     }
 
@@ -279,6 +287,144 @@ export class HeroActor extends Phaser.GameObjects.Container {
             enemy.disableInteractive();
         }
     }
+
+    public attackTween(tweens: Phaser.Types.Tweens.TweenBuilderConfig[]) {
+        // can't use hero.x / enemy.x etc since those aren't where they'll be after they move to their new stance
+        const heroX = this.rank.x(this.nextStance);
+        const heroY = this.rank.y(); // technically the same right now but could be different in the future
+        const enemy = this.arena.heroes[this.target!.team][this.target!.index];
+        const enemyX = enemy.rank.x(enemy.nextStance);
+        const enemyY = enemy.rank.y();
+        const dist = (new Phaser.Math.Vector2(heroX, heroY)).distance(new Phaser.Math.Vector2(enemyX, enemyY));
+        // get rid of line/prepare delay
+        tweens.push({
+            targets: this,
+            duration: 150,
+            onComplete: () => {
+                // get rid of line before attack
+                this.setTarget(undefined);
+                if (this.hero.lhs == ITEM.bow) {
+                    this.anims.lhsAttack();
+                }
+                if (this.hero.rhs == ITEM.bow) {
+                    this.anims.rhsAttack();
+                }
+            },
+        });
+        if (this.hero.lhs == ITEM.bow || this.hero.rhs == ITEM.bow) {
+            // bow attack
+            const arrow = this.arena.add.image(heroX, heroY, 'arrow')
+                .setVisible(false)
+                .setRotation(Phaser.Math.Angle.Between(heroX, heroY, enemyX, enemyY));
+            tweens.push({
+                targets: arrow,
+                duration: dist * 2,
+                // start arrow on frame 4 of the animation
+                delay: (4/6) * BOW_ATTACK_TIME,
+                x: enemyX,
+                y: enemyY,
+                onStart: () => {
+                    arrow.visible = true;
+                },
+                onComplete: () => {
+                    this.anims.idle();
+                    arrow.destroy();
+                },
+            });
+        } else {
+            const meleeAttackX = this.target!.x(this.arena.getHero(this.target!).nextStance) + (this.rank.team == 0 ? -32 : 32);
+            const meleeAttackY = enemyY;
+            // move to enemy
+            tweens.push({
+                targets: this,
+                ease: 'Quad.easeInOut',
+                x: meleeAttackX,
+                y: meleeAttackY,
+                duration: 40 + dist * 2,
+                onStart: () => {
+                    this.arena.sound.play('move');
+                    this.anims.run();
+                },
+            });
+            // melee attacks
+            if (this.anims.lhsAttackAnim != undefined) {
+                tweens.push({
+                    targets: this,
+                    x: meleeAttackX,
+                    y: meleeAttackY,
+                    delay: 0,
+                    duration: MELEE_ATTACK_TIME / 2,
+                    onStart: () => {
+                        this.anims.lhsAttack();
+                    },
+                });
+            }
+            if (this.anims.rhsAttackAnim != undefined) {
+                tweens.push({
+                    targets: this,
+                    x: meleeAttackX,
+                    y: meleeAttackY,
+                    delay: 0,
+                    duration: MELEE_ATTACK_TIME / 2,
+                    onStart: () => {
+                        this.anims.rhsAttack();
+                    },
+                });
+            }
+        }
+        // enemy knockback
+        const angle = Phaser.Math.Angle.Between(heroX, heroY, enemyX, enemyY);
+        tweens.push({
+            targets: enemy,
+            x: enemyX + Math.cos(angle) * 16,
+            y: enemyY + Math.sin(angle) * 16,
+            alpha: 0.4,
+            duration: 50,
+            onStart: () => {
+                const stance_strs = ['def', 'neu', 'atk'];
+                for (let hero_stance = 0; hero_stance < 3; ++hero_stance) {
+                    for (let enemy_stance = 0; enemy_stance < 3; ++enemy_stance) {
+                        const dmg = pureCircuits.calc_item_dmg_against(pureCircuits.calc_stats(this.hero), hero_stance as STANCE, pureCircuits.calc_stats(enemy.hero), enemy_stance as STANCE);
+                        console.log(`dmg [${stance_strs[hero_stance]}] -> [${stance_strs[enemy_stance]}] = ${hpDiv(Number(dmg))}`);
+                    }
+                }
+                const dmg = pureCircuits.calc_item_dmg_against(pureCircuits.calc_stats(this.hero), this.nextStance, pureCircuits.calc_stats(enemy.hero), enemy.nextStance);
+                if (enemy.attack(this, Number(dmg))) {
+                    // TODO: death anim? or this is resolved after?
+                }
+            },
+        });
+        tweens.push({
+            targets: enemy,
+            x: enemyX,
+            y: enemyY,
+            alpha: 1,
+            duration: 80,
+        });
+        if (this.hero.lhs != ITEM.bow && this.hero.rhs != ITEM.bow) {
+            // move back
+            tweens.push({
+                targets: this,
+                ease: 'Quad.easeInOut',
+                x: this.rank.x(this.nextStance),
+                y: this.y,
+                duration: 60 + dist * 3,
+                onStart: () => {
+                    // disabled because it sounds weird right after the damage sound
+                    //this.sound.play('move');
+                    this.anims.run();
+                    this.anims.setFlipX(this.rank.team == 0);
+                },
+                onComplete: (tween) => {
+                    console.log(`tween.targets = ${JSON.stringify(tween.targets)}`);
+                    console.log(`completed tween [${this.rank.team}][${this.rank.index}]`);
+                    this.anims.idle();
+                    this.anims.setFlipX(this.rank.team == 1);
+                },
+                persist: false,
+            });
+        }
+    }
 }
 
 export function generateRandomHero(): Hero {
@@ -294,6 +440,332 @@ export function generateRandomHero(): Hero {
         skirt: Phaser.Math.Between(0, 2) as ARMOR,
         greaves: Phaser.Math.Between(0, 2) as ARMOR,
     };
+}
+
+
+
+type PositionalAnimation = {
+    image: Phaser.GameObjects.Image,
+    offset: Phaser.Math.Vector2[],
+};
+
+type AnimatedLayer = {
+    sprite: Phaser.GameObjects.Sprite,
+    animKey: string,
+};
+
+type HeroAnimationConfig = {
+    key: string,
+    lhs?: Phaser.Math.Vector2[],
+    rhs?: Phaser.Math.Vector2[],
+    helmet: Phaser.Math.Vector2[],
+    chest: Phaser.Math.Vector2[],
+    skirt?: Phaser.Math.Vector2[] | undefined,
+    greaves?: Phaser.Math.Vector2[] | undefined,
+};
+
+function attackAnimConfig(rhs: boolean, item: ITEM): HeroAnimationConfig | undefined {
+    const side = (base: string) => `${base}_${rhs ? 'r' : 'l'}`;
+    switch (item) {
+        case ITEM.bow:
+            return {
+                key: side('bow_attack'),
+                helmet: [],
+                chest: [],
+            };
+        case ITEM.spear:
+            return {
+                key: side('attack_thrust'),
+                helmet: [],
+                chest: [],
+                rhs: rhs ? [new Phaser.Math.Vector2(0, 0), new Phaser.Math.Vector2(-2, 1), new Phaser.Math.Vector2(0, 0), new Phaser.Math.Vector2(3, -1)] : undefined,
+                lhs: rhs ? undefined : [new Phaser.Math.Vector2(0, 0), new Phaser.Math.Vector2(-2, 1), new Phaser.Math.Vector2(0, 0), new Phaser.Math.Vector2(3, -1)],
+            };
+        case ITEM.axe:
+        case ITEM.sword:
+            return {
+                key: side('attack_swing'),
+                helmet: [],
+                chest: [],
+            };
+
+    }
+    return undefined;
+}
+
+export class HeroAnimationController extends Phaser.GameObjects.Container {
+    idleAnim: HeroAnimation;
+    runAnim: HeroAnimation;
+    lhsAttackAnim: HeroAnimation | undefined;
+    rhsAttackAnim: HeroAnimation | undefined;
+
+    constructor(scene: Phaser.Scene, x: number, y: number, hero: Hero, isP2: boolean) {
+        super(scene, x, y);
+
+        this.idleAnim = new HeroAnimation(scene, 0, 0, hero, isP2, {
+            key: 'idle',
+            lhs: [new Phaser.Math.Vector2(0, 0), new Phaser.Math.Vector2(0, 2)],
+            rhs: [new Phaser.Math.Vector2(0, 0), new Phaser.Math.Vector2(-1, 1)],
+            helmet: [new Phaser.Math.Vector2(0, 0), new Phaser.Math.Vector2(0, 1)],
+            chest: [new Phaser.Math.Vector2(0, 0), new Phaser.Math.Vector2(0, 1)],
+            skirt: [new Phaser.Math.Vector2(0, 0), new Phaser.Math.Vector2(0, 1)],
+        });
+        this.add(this.idleAnim);
+
+        this.runAnim = new HeroAnimation(scene, 0, 0, hero, isP2, {
+            key: 'run',
+            lhs: [new Phaser.Math.Vector2(-12, 9), new Phaser.Math.Vector2(-9, 9), new Phaser.Math.Vector2(-3, 6), new Phaser.Math.Vector2(-3, 8), new Phaser.Math.Vector2(-6, 9), new Phaser.Math.Vector2(-11, 8)],
+            rhs: [new Phaser.Math.Vector2(4, 0), new Phaser.Math.Vector2(1, 2), new Phaser.Math.Vector2(-2, 5), new Phaser.Math.Vector2(-8, 5), new Phaser.Math.Vector2(-2, 4), new Phaser.Math.Vector2(0, 2)],
+            helmet: [new Phaser.Math.Vector2(1, 0), new Phaser.Math.Vector2(0, 2), new Phaser.Math.Vector2(0, 3), new Phaser.Math.Vector2(1, 0), new Phaser.Math.Vector2(0, 2), new Phaser.Math.Vector2(0, 1)],
+            chest: [new Phaser.Math.Vector2(1, 0), new Phaser.Math.Vector2(0, 1), new Phaser.Math.Vector2(0, 3), new Phaser.Math.Vector2(1, 0), new Phaser.Math.Vector2(0, 1), new Phaser.Math.Vector2(0, 1)],
+        });
+        this.add(this.runAnim);
+
+        const lhsConfig = attackAnimConfig(false, hero.lhs);
+        if (lhsConfig != undefined) {
+            console.log(`lhsConfig: ${JSON.stringify(lhsConfig)}`);
+            this.lhsAttackAnim = new HeroAnimation(scene, 0, 0, hero, isP2, lhsConfig);
+            this.add(this.lhsAttackAnim);
+        }
+        
+        const rhsConfig = attackAnimConfig(true, hero.rhs);
+        if (rhsConfig != undefined) {
+            console.log(`rhsConfig: ${JSON.stringify(rhsConfig)}`);
+            this.rhsAttackAnim = new HeroAnimation(scene, 0, 0, hero, isP2, rhsConfig);
+            this.add(this.rhsAttackAnim);
+        }
+
+        this.idle();
+
+        this.setFlipX(isP2);
+
+
+        this.addToUpdateList();
+    }
+
+    // it sure would be nice if Container just had this....
+    public setFlipX(flipped: boolean) {
+        this.idleAnim.setFlipX(flipped);
+        this.runAnim.setFlipX(flipped);
+        this.lhsAttackAnim?.setFlipX(flipped);
+        this.rhsAttackAnim?.setFlipX(flipped);
+    }
+
+    public idle() {
+        this.runAnim.visible = false;
+        this.idleAnim.visible = true;
+        this.lhsAttackAnim?.setVisible(false);
+        this.rhsAttackAnim?.setVisible(false);
+        this.idleAnim.play(Phaser.Math.Between(IDLE_ANIM_TIME * 0.9, IDLE_ANIM_TIME * 1.1));
+    }
+
+    public run() {
+        this.runAnim.visible = true;
+        this.idleAnim.visible = false;
+        this.lhsAttackAnim?.setVisible(false);
+        this.rhsAttackAnim?.setVisible(false);
+        this.runAnim.play();
+    }
+
+    public lhsAttack() {
+        this.runAnim.visible = false;
+        this.idleAnim.visible = false;
+        this.lhsAttackAnim!.visible = true;
+        this.rhsAttackAnim?.setVisible(false);
+        this.lhsAttackAnim?.play();
+    }
+
+    public rhsAttack() {
+        this.runAnim.visible = false;
+        this.idleAnim.visible = false;
+        this.rhsAttackAnim!.visible = true;
+        this.lhsAttackAnim?.setVisible(false);
+        this.rhsAttackAnim?.play();
+    }
+
+    preUpdate() {
+        // why isn't this called?
+        this.idleAnim.preUpdate();
+        this.runAnim.preUpdate();
+        this.lhsAttackAnim?.preUpdate();
+        this.rhsAttackAnim?.preUpdate();
+    }
+}
+
+// managed Hero animations/graphics
+// we don't just use the phaser animations to a void a bunch of animation art work
+// and instead just use positional offsets for most layers to avoid re-drawing
+// or positioning every single one for every single animation frame in aesprite
+export class HeroAnimation extends Phaser.GameObjects.Container {
+    animated: AnimatedLayer[];
+    positionChanging: PositionalAnimation[];
+
+    constructor(scene: Phaser.Scene, x: number, y: number, hero: Hero, isP2: boolean, config: HeroAnimationConfig) {
+        super(scene, x, y);
+        this.animated = [];
+        this.positionChanging = [];
+        if (hero.lhs == ITEM.bow || hero.rhs == ITEM.bow) {
+            const image = scene.add.image(0, 0, 'hero_quiver');
+            this.positionChanging.push({
+                image,
+                offset: config.chest ?? config.helmet ?? [],
+            });
+            this.add(image);
+        }
+        if (hero.lhs != ITEM.nothing) {
+            this.addLayer(config, 'lhs', itemSprite(hero.lhs, false));
+        }
+        this.addAnimated(config, 'hero_body');
+        if (hero.helmet != ARMOR.nothing) {
+            this.addLayer(config, 'helmet', armorSprite(hero.helmet, 'helmet'));
+        }
+        if (hero.chest != ARMOR.nothing) {
+            this.addLayer(config, 'chest', armorSprite(hero.chest, 'chest'));
+        }
+        if (hero.skirt != ARMOR.nothing) {
+            this.addLayer(config, 'skirt', armorSprite(hero.skirt, 'skirt'));
+        }
+        if (hero.greaves != ARMOR.nothing) {
+            this.addLayer(config, 'greaves', armorSprite(hero.greaves, 'greaves'));
+        }
+        if (hero.rhs == ITEM.shield) {
+            this.addAnimated(config, 'hero_arm_r');
+        }
+        if (hero.rhs != ITEM.nothing) {
+            this.addLayer(config, 'rhs', itemSprite(hero.rhs, true));
+        }
+        if (hero.rhs != ITEM.shield) {
+            this.addAnimated(config, 'hero_arm_r');
+        }
+    }
+
+    public setFlipX(flipped: boolean) {
+        for (const layer of this.animated) {
+            layer.sprite.setFlipX(flipped);
+        }
+        for (const layer of this.positionChanging) {
+            layer.image.setFlipX(flipped);
+        }
+    }
+
+    public play(duration?: number) {
+        for (const layer of this.animated) {
+            layer.sprite.anims.play({
+                key: layer.animKey,
+                duration,
+            });
+        }
+    }
+
+    private addAnimated(config: HeroAnimationConfig, name: string) {
+        const animKey = `${name}_${config.key}`;
+        if (this.scene.textures.exists(animKey)) {
+            const sprite = this.scene.add.sprite(0, 0, animKey);
+            this.add(sprite);
+            this.animated.push({ sprite, animKey });
+        } else {
+            const image = this.scene.add.image(0, 0, name);
+            this.positionChanging.push({
+                image,
+                offset: [],
+            });
+            this.add(image);
+        }
+    }
+
+    private addLayer(config: HeroAnimationConfig, key: keyof HeroAnimationConfig, name: string) {
+        const offset = config[key] as Phaser.Math.Vector2[] | undefined;
+        const animTexture = `${name}_${config.key}`;
+        if (this.scene.textures.exists(animTexture)) {
+            this.addAnimated(config, name);
+        } else {
+            const image = this.scene.add.image(0, 0, name);
+            this.positionChanging.push({
+                image,
+                offset: offset ?? [],
+            });
+            this.add(image);
+        }
+    }
+
+    preUpdate() {
+        if (this.animated[0].sprite.anims.currentFrame != undefined) {
+            for (const layer of this.positionChanging) {
+                if (layer.offset.length != 0) {
+                    const index = this.animated[0].sprite.anims.currentFrame!.index - 1;
+                    const pos = layer.offset[index];
+                    if (pos != undefined) {
+                        layer.image.setPosition(layer.image.flipX ? -pos.x : pos.x, pos.y);
+                    }
+                }
+            }
+        }
+    }
+}
+
+export function createHeroAnims(scene: Phaser.Scene) {
+    // it doesn't seem like we can re-use an animation for a separate sprites
+    // so create 1 per layer
+    const layers = ['body'];
+    for (const side of ['r', 'l']) {
+        for (const part of ['arm', 'bow', 'sword', 'axe', 'spear', 'shield']) {
+            layers.push(`${part}_${side}`);
+        }
+    }
+    for (const mat of ['leather', 'metal']) {
+        for (const part of ['helmet', 'chest', 'skirt', 'greaves']) {
+            layers.push(`${part}_${mat}`);
+        }
+    }
+    for (const layer of layers) {
+        const idleKey = `hero_${layer}_idle`;
+        if (scene.textures.exists(idleKey)) {
+            scene.anims.create({
+                key: idleKey,
+                frames: [0, 1].map((i) => { return { frame: i, key: idleKey }; }),
+                repeat: -1,
+                duration: IDLE_ANIM_TIME,
+            });
+        }
+        const runKey = `hero_${layer}_run`;
+        if (scene.textures.exists(runKey)) {
+            scene.anims.create({
+                key: runKey,
+                frames: [0, 1, 2, 3, 4, 5].map((i) => { return { frame: i, key: runKey }; }),
+                repeat: -1,
+                duration: RUN_ANIM_TIME,
+            });
+        }
+        for (const side of ['r', 'l']) {
+            const bowAttackKey = `hero_${layer}_bow_attack_${side}`;
+            if (scene.textures.exists(bowAttackKey)) {
+                scene.anims.create({
+                    key: bowAttackKey,
+                    frames: [0, 1, 2, 3, 4, 5].map((i) => { return { frame: i, key: bowAttackKey }; }),
+                    repeat: 1,
+                    duration: BOW_ATTACK_TIME,
+                });
+            }
+            const thrustAttackKey = `hero_${layer}_attack_thrust_${side}`;
+            if (scene.textures.exists(thrustAttackKey)) {
+                scene.anims.create({
+                    key: thrustAttackKey,
+                    frames: [0, 1, 2].map((i) => { return { frame: i, key: thrustAttackKey }; }),
+                    repeat: 1,
+                    duration: MELEE_ATTACK_TIME,
+                });
+            }
+            const swingAttackKey = `hero_${layer}_attack_swing_${side}`;
+            if (scene.textures.exists(swingAttackKey)) {
+                scene.anims.create({
+                    key: swingAttackKey,
+                    frames: [0, 1, 2].map((i) => { return { frame: i, key: swingAttackKey }; }),
+                    repeat: 1,
+                    duration: MELEE_ATTACK_TIME,
+                });
+            }
+        }
+    }
 }
 
 export function addHeroImages(container: Phaser.GameObjects.Container, hero: Hero, isP2: boolean) {

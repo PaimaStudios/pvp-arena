@@ -1,7 +1,7 @@
 import { ITEM, RESULT, STANCE, Hero, ARMOR, pureCircuits, GAME_STATE, TotalStats } from '@midnight-ntwrk/pvp-contract';
 import { Arena, BattleConfig } from '../battle/arena';
 import { GAME_WIDTH, GAME_HEIGHT, safeJSONString, gameStateStr, fontStyle } from '../main';
-import { addHeroImages, generateRandomHero } from '../battle/hero';
+import { addHeroImages, createHeroAnims, generateRandomHero, HeroAnimationController } from '../battle/hero';
 import { type HeroIndex, Rank, type Team } from '../battle';
 import { Button } from './button';
 import { MockPVPArenaAPI } from '../battle/mockapi';
@@ -16,6 +16,8 @@ class SelectHeroActor extends Phaser.GameObjects.Container {
 
     select_circle: Phaser.GameObjects.Image;
     tick: number;
+
+    anims: HeroAnimationController | undefined;
 
     constructor(scene: EquipmentMenu, rank: Rank) {
         super(scene, rank.x(STANCE.defensive), rank.y());
@@ -49,8 +51,13 @@ class SelectHeroActor extends Phaser.GameObjects.Container {
     }
 
     refresh() {
+        if (this.anims != undefined) {
+            this.anims.destroy();
+        }
         this.removeAll(true);
-        addHeroImages(this, this.hero, this.rank.team == 1);
+        //addHeroImages(this, this.hero, this.rank.team == 1);
+        this.anims = new HeroAnimationController(this.scene, 0, 0, this.hero, this.rank.team == 1);
+        this.add(this.anims);
         if (this.statsDisplay != undefined) {
             this.statsDisplay.updateStats(pureCircuits.calc_stats(this.hero));
         }
@@ -67,6 +74,10 @@ class SelectHeroActor extends Phaser.GameObjects.Container {
             onStart: () => {
                 this.scene.sound.play('move');
                 this.refresh();
+                this.anims?.run();
+            },
+            onComplete: () => {
+                this.anims?.idle();
             },
         });
         tweens.push({
@@ -441,31 +452,13 @@ export class EquipmentMenu extends Phaser.Scene {
         this.load.image('dice', 'dice.png');
         this.load.image('select_circle', 'select_circle.png');
 
-        this.load.image('hero_quiver', 'hero_quiver.png');
-        this.load.image('hero_axe_l', 'hero_axe_l.png');
-        this.load.image('hero_sword_l', 'hero_sword_l.png');
-        this.load.image('hero_shield_l', 'hero_shield_l.png');
-        this.load.image('hero_spear_l', 'hero_spear_l.png');
-        this.load.image('hero_bow_l', 'hero_bow_l.png');
-        this.load.image('hero_axe_r', 'hero_axe_r.png');
-        this.load.image('hero_sword_r', 'hero_sword_r.png');
-        this.load.image('hero_shield_r', 'hero_shield_r.png');
-        this.load.image('hero_spear_r', 'hero_spear_r.png');
-        this.load.image('hero_bow_r', 'hero_bow_r.png');
-        this.load.image('hero_body', 'hero_body.png');
-        this.load.image('hero_arm_r', 'hero_arm_r.png');
-        for (let material of ['leather', 'metal']) {
-            for (let part of ['helmet', 'chest', 'skirt', 'greaves']) {
-                this.load.image(`hero_${part}_${material}`, `hero_${part}_${material}.png`);
-                console.log(`loading hero_${part}_${material}.png`);
-            }
-        }
-
         this.load.audio('select', 'select.wav');
         this.load.audio('move', 'move.wav');
     }
 
     create() {
+        createHeroAnims(this);
+
         this.add.image(GAME_WIDTH, GAME_HEIGHT, 'arena_bg').setPosition(GAME_WIDTH / 2, GAME_HEIGHT / 2).setDepth(-3);
         this.add.text(GAME_WIDTH / 2 + 2, GAME_HEIGHT / 5, 'EQUIPMENT SELECT', fontStyle(24)).setOrigin(0.5, 0.65);
         this.setupStateText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.9, '', fontStyle(12)).setOrigin(0.5, 0.65);

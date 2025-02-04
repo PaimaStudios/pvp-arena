@@ -4,6 +4,9 @@ import { MockPVPArenaAPI } from '../battle/mockapi';
 import { Arena } from '../battle/arena';
 import { EquipmentMenu } from './equipment';
 import { Button } from './button';
+import { HeroAnimationController, createHeroAnims, generateRandomHero } from '../battle/hero';
+import { ARMOR, ITEM } from '@midnight-ntwrk/pvp-contract';
+
 
 export class MainMenu extends Phaser.Scene {
     deployProvider: BrowserDeploymentManager;
@@ -25,6 +28,49 @@ export class MainMenu extends Phaser.Scene {
         this.load.image('stone_button_over', 'stone_button_over.png');
 
         this.load.audio('select', 'select.wav');
+
+        this.load.image('hero_quiver', 'hero_quiver.png');
+        this.load.image('hero_body', 'hero_body.png');
+        this.load.image('hero_axe_l', 'hero_axe_l.png');
+        this.load.image('hero_sword_l', 'hero_sword_l.png');
+        this.load.image('hero_shield_l', 'hero_shield_l.png');
+        this.load.image('hero_spear_l', 'hero_spear_l.png');
+        this.load.image('hero_bow_l', 'hero_bow_l.png');
+        this.load.image('hero_axe_r', 'hero_axe_r.png');
+        this.load.image('hero_sword_r', 'hero_sword_r.png');
+        this.load.image('hero_shield_r', 'hero_shield_r.png');
+        this.load.image('hero_spear_r', 'hero_spear_r.png');
+        this.load.image('hero_bow_r', 'hero_bow_r.png');
+        this.load.image('hero_arm_r', 'hero_arm_r.png');
+        for (let material of ['leather', 'metal']) {
+            for (let part of ['helmet', 'chest', 'skirt', 'greaves']) {
+                this.load.image(`hero_${part}_${material}`, `hero_${part}_${material}.png`);
+                console.log(`loading hero_${part}_${material}.png`);
+            }
+        }
+
+        this.load.spritesheet('hero_body_idle', 'hero_body_idle.png', { frameWidth: 48, frameHeight: 64 });
+        this.load.spritesheet('hero_arm_r_idle', 'hero_arm_r_idle.png', { frameWidth: 48, frameHeight: 64 });
+        this.load.spritesheet('hero_body_run', 'hero_body_run.png', { frameWidth: 48, frameHeight: 64 });
+        this.load.spritesheet('hero_arm_r_run', 'hero_arm_r_run.png', { frameWidth: 48, frameHeight: 64 });
+        this.load.spritesheet('hero_greaves_metal_run', 'hero_greaves_metal_run.png', { frameWidth: 48, frameHeight: 64 });
+        this.load.spritesheet('hero_greaves_leather_run', 'hero_greaves_leather_run.png', { frameWidth: 48, frameHeight: 64 });
+        this.load.spritesheet('hero_skirt_metal_run', 'hero_skirt_metal_run.png', { frameWidth: 48, frameHeight: 64 });
+        this.load.spritesheet('hero_skirt_leather_run', 'hero_skirt_leather_run.png', { frameWidth: 48, frameHeight: 64 });
+        this.load.spritesheet('hero_bow_l_bow_attack_l', 'hero_bow_l_bow_attack_l.png', { frameWidth: 48, frameHeight: 64 });
+        this.load.spritesheet('hero_arm_r_bow_attack_l', 'hero_arm_r_bow_attack_l.png', { frameWidth: 48, frameHeight: 64 });
+        this.load.spritesheet('hero_bow_r_bow_attack_r', 'hero_bow_r_bow_attack_r.png', { frameWidth: 48, frameHeight: 64 });
+        this.load.spritesheet('hero_body_bow_attack_r', 'hero_body_bow_attack_r.png', { frameWidth: 48, frameHeight: 64 });
+        this.load.spritesheet('hero_arm_r_attack_thrust_r', 'hero_arm_r_attack_thrust_r.png', { frameWidth: 48, frameHeight: 64 });
+        this.load.spritesheet('hero_body_attack_thrust_l', 'hero_body_attack_thrust_l.png', { frameWidth: 48, frameHeight: 64 });
+        this.load.spritesheet('hero_body_attack_swing_l', 'hero_body_attack_swing_l.png', { frameWidth: 48, frameHeight: 64 });
+        this.load.spritesheet('hero_spear_l_attack_thrust_l', 'hero_spear_l_attack_thrust_l.png', { frameWidth: 48, frameHeight: 64 });
+        this.load.spritesheet('hero_axe_l_attack_swing_l', 'hero_axe_l_attack_swing_l.png', { frameWidth: 48, frameHeight: 64 });
+        this.load.spritesheet('hero_axe_r_attack_swing_r', 'hero_axe_r_attack_swing_r.png', { frameWidth: 48, frameHeight: 64 });
+        this.load.spritesheet('hero_arm_r_attack_swing_r', 'hero_arm_r_attack_swing_r.png', { frameWidth: 48, frameHeight: 64 });
+        this.load.spritesheet('hero_sword_l_attack_swing_l', 'hero_sword_l_attack_swing_l.png', { frameWidth: 48, frameHeight: 64 });
+        this.load.spritesheet('hero_sword_r_attack_swing_r', 'hero_sword_r_attack_swing_r.png', { frameWidth: 48, frameHeight: 64 });
+        
     }
 
     create() {
@@ -68,6 +114,8 @@ export class MainMenu extends Phaser.Scene {
                 this.scene.start('EquipmentMenu');
             }, 1000);
         }));
+
+        createHeroAnims(this);
     }
 
     private setStatusText(text: string) {
