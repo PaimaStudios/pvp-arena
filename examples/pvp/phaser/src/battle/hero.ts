@@ -5,6 +5,8 @@ import { MAX_HP, Rank, BloodDrop, DamageText, hpDiv } from '.';
 
 const MELEE_ATTACK_TIME = 300;
 const BOW_ATTACK_TIME = 1000;
+const IDLE_ANIM_TIME = 1000;
+const RUN_ANIM_TIME = 1000;
 
 export class HeroActor extends Phaser.GameObjects.Container {
     arena: Arena;
@@ -294,7 +296,6 @@ export class HeroActor extends Phaser.GameObjects.Container {
         const enemyX = enemy.rank.x(enemy.nextStance);
         const enemyY = enemy.rank.y();
         const dist = (new Phaser.Math.Vector2(heroX, heroY)).distance(new Phaser.Math.Vector2(enemyX, enemyY));
-        const [lhs, rhs] = this.rank.team == 0 ? [this.hero.lhs, this.hero.rhs] : [this.hero.rhs, this.hero.lhs];
         // get rid of line/prepare delay
         tweens.push({
             targets: this,
@@ -302,15 +303,15 @@ export class HeroActor extends Phaser.GameObjects.Container {
             onComplete: () => {
                 // get rid of line before attack
                 this.setTarget(undefined);
-                if (lhs == ITEM.bow) {
+                if (this.hero.lhs == ITEM.bow) {
                     this.anims.lhsAttack();
                 }
-                if (rhs == ITEM.bow) {
+                if (this.hero.rhs == ITEM.bow) {
                     this.anims.rhsAttack();
                 }
             },
         });
-        if (lhs == ITEM.bow || rhs == ITEM.bow) {
+        if (this.hero.lhs == ITEM.bow || this.hero.rhs == ITEM.bow) {
             // bow attack
             const arrow = this.arena.add.image(heroX, heroY, 'arrow')
                 .setVisible(false)
@@ -400,7 +401,7 @@ export class HeroActor extends Phaser.GameObjects.Container {
             alpha: 1,
             duration: 80,
         });
-        if (lhs != ITEM.bow && rhs != ITEM.bow) {
+        if (this.hero.lhs != ITEM.bow && this.hero.rhs != ITEM.bow) {
             // move back
             tweens.push({
                 targets: this,
@@ -520,16 +521,14 @@ export class HeroAnimationController extends Phaser.GameObjects.Container {
         });
         this.add(this.runAnim);
 
-        const [lhs, rhs] = isP2 ? [hero.rhs, hero.lhs] : [hero.lhs, hero.rhs];
-
-        const lhsConfig = attackAnimConfig(isP2, lhs);
+        const lhsConfig = attackAnimConfig(false, hero.lhs);
         if (lhsConfig != undefined) {
             console.log(`lhsConfig: ${JSON.stringify(lhsConfig)}`);
             this.lhsAttackAnim = new HeroAnimation(scene, 0, 0, hero, isP2, lhsConfig);
             this.add(this.lhsAttackAnim);
         }
         
-        const rhsConfig = attackAnimConfig(!isP2, rhs);
+        const rhsConfig = attackAnimConfig(true, hero.rhs);
         if (rhsConfig != undefined) {
             console.log(`rhsConfig: ${JSON.stringify(rhsConfig)}`);
             this.rhsAttackAnim = new HeroAnimation(scene, 0, 0, hero, isP2, rhsConfig);
@@ -557,7 +556,7 @@ export class HeroAnimationController extends Phaser.GameObjects.Container {
         this.idleAnim.visible = true;
         this.lhsAttackAnim?.setVisible(false);
         this.rhsAttackAnim?.setVisible(false);
-        this.idleAnim.play();
+        this.idleAnim.play(Phaser.Math.Between(IDLE_ANIM_TIME * 0.9, IDLE_ANIM_TIME * 1.1));
     }
 
     public run() {
@@ -613,11 +612,8 @@ export class HeroAnimation extends Phaser.GameObjects.Container {
             });
             this.add(image);
         }
-        // swap hands if sprite is swapped too
-        const lhs = isP2 ? hero.rhs : hero.lhs;
-        const rhs = isP2 ? hero.lhs : hero.rhs;
-        if (lhs != ITEM.nothing) {
-            this.addLayer(config, 'lhs', itemSprite(lhs, false));
+        if (hero.lhs != ITEM.nothing) {
+            this.addLayer(config, 'lhs', itemSprite(hero.lhs, false));
         }
         this.addAnimated(config, 'hero_body');
         if (hero.helmet != ARMOR.nothing) {
@@ -632,13 +628,13 @@ export class HeroAnimation extends Phaser.GameObjects.Container {
         if (hero.greaves != ARMOR.nothing) {
             this.addLayer(config, 'greaves', armorSprite(hero.greaves, 'greaves'));
         }
-        if (rhs == ITEM.shield) {
+        if (hero.rhs == ITEM.shield) {
             this.addAnimated(config, 'hero_arm_r');
         }
-        if (rhs != ITEM.nothing) {
-            this.addLayer(config, 'rhs', itemSprite(rhs, true));
+        if (hero.rhs != ITEM.nothing) {
+            this.addLayer(config, 'rhs', itemSprite(hero.rhs, true));
         }
-        if (rhs != ITEM.shield) {
+        if (hero.rhs != ITEM.shield) {
             this.addAnimated(config, 'hero_arm_r');
         }
     }
@@ -652,9 +648,12 @@ export class HeroAnimation extends Phaser.GameObjects.Container {
         }
     }
 
-    public play() {
+    public play(duration?: number) {
         for (const layer of this.animated) {
-            layer.sprite.anims.play(layer.animKey);
+            layer.sprite.anims.play({
+                key: layer.animKey,
+                duration,
+            });
         }
     }
 
@@ -725,7 +724,7 @@ export function createHeroAnims(scene: Phaser.Scene) {
                 key: idleKey,
                 frames: [0, 1].map((i) => { return { frame: i, key: idleKey }; }),
                 repeat: -1,
-                duration: 1000,
+                duration: IDLE_ANIM_TIME,
             });
         }
         const runKey = `hero_${layer}_run`;
@@ -734,7 +733,7 @@ export function createHeroAnims(scene: Phaser.Scene) {
                 key: runKey,
                 frames: [0, 1, 2, 3, 4, 5].map((i) => { return { frame: i, key: runKey }; }),
                 repeat: -1,
-                duration: 1000,
+                duration: RUN_ANIM_TIME,
             });
         }
         for (const side of ['r', 'l']) {
