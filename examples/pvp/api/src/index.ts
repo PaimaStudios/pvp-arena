@@ -18,6 +18,7 @@ import {
   ITEM,
   ARMOR,
   Hero,
+  HeroHack,
   STANCE,
   GAME_STATE,
  // Command,
@@ -29,6 +30,21 @@ import { toHex } from '@midnight-ntwrk/midnight-js-utils';
 
 /** @internal */
 const pvpContractInstance: PVPArenaContract = new Contract(witnesses);
+
+function heroToHack(hero: Hero): HeroHack {
+  return {
+    rhs: BigInt(hero.rhs),
+    lhs: BigInt(hero.lhs),
+    helmet: BigInt(hero.helmet),
+    chest: BigInt(hero.chest),
+    skirt: BigInt(hero.skirt),
+    greaves: BigInt(hero.greaves),
+  };
+}
+
+function hackToHero(hack: HeroHack): Hero {
+  return pureCircuits.hack_to_hero(hack);
+}
 
 /**
  * An API for a deployed bulletin board.
@@ -67,7 +83,7 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
   /** @internal */
   private constructor(
     public readonly deployedContract: DeployedPVPArenaContract,
-    providers: PVPArenaProviders,
+    private readonly providers: PVPArenaProviders,
     private readonly logger?: Logger,
   ) {
     this.deployedContractAddress = deployedContract.deployTxData.public.contractAddress;
@@ -142,7 +158,7 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
   async p1_select_first_heroes(first_p1_heroes: Hero[]): Promise<void> {
     //this.logger?.info(`postingMessage: ${message}`);
 
-    const txData = await this.deployedContract.callTx.p1_select_first_heroes(first_p1_heroes);
+    const txData = await this.deployedContract.callTx.p1_select_first_heroes(first_p1_heroes.map(heroToHack));
 
     this.logger?.trace({
       transactionAdded: {
@@ -163,7 +179,7 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
   async p2_select_heroes(all_p2_heroes: Hero[]): Promise<void> {
     //this.logger?.info(`postingMessage: ${message}`);
 
-    const txData = await this.deployedContract.callTx.p2_select_heroes(all_p2_heroes);
+    const txData = await this.deployedContract.callTx.p2_select_heroes(all_p2_heroes.map(heroToHack));
 
     this.logger?.trace({
       transactionAdded: {
@@ -185,7 +201,7 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
   async p1_select_last_hero(last_p1_hero: Hero): Promise<void> {
     //this.logger?.info(`postingMessage: ${message}`);
 
-    const txData = await this.deployedContract.callTx.p1_select_last_hero(last_p1_hero);
+    const txData = await this.deployedContract.callTx.p1_select_last_hero(heroToHack(last_p1_hero));
 
     this.logger?.trace({
       transactionAdded: {
@@ -204,7 +220,11 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
     console.log('before[1]');
     var txData;
     try {
-      txData = await this.deployedContract.callTx.p1_commit_commands(commands);
+      const state = await PVPArenaAPI.getPrivateState(this.providers);
+      state!.commands = commands;
+      state!.stances = stances;
+      this.providers.privateStateProvider.set('pvpPrivateState', state);
+      txData = await this.deployedContract.callTx.p1_commit_commands();
     } catch (err) {
       console.log(`p1Cmd failed: ${JSON.stringify(err)}`);
       throw err;
@@ -225,7 +245,11 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
     console.log('before[2]');
     var txData;
     try {
-      txData = await this.deployedContract.callTx.p2_commit_commands(commands);
+      const state = await PVPArenaAPI.getPrivateState(this.providers);
+      state!.commands = commands;
+      state!.stances = stances;
+      this.providers.privateStateProvider.set('pvpPrivateState', state);
+      txData = await this.deployedContract.callTx.p2_commit_commands();
     } catch (err) {
       console.log(`p2Cmd failed: ${JSON.stringify(err)}`);
       throw err;

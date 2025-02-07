@@ -1,10 +1,11 @@
-import { type PVPArenaDerivedState, type DeployedPVPArenaAPI } from '@midnight-ntwrk/pvp-api';
+import { type PVPArenaDerivedState, type DeployedPVPArenaAPI, PVPArenaProviders } from '@midnight-ntwrk/pvp-api';
 import { type ContractAddress } from '@midnight-ntwrk/compact-runtime';
 import { ITEM, RESULT, STANCE, Hero, ARMOR, pureCircuits, GAME_STATE } from '@midnight-ntwrk/pvp-contract';
 import { Subscriber, Observable } from 'rxjs';
 import { safeJSONString } from '../main';
 import { MAX_HP } from './index';
 import { generateRandomHero } from './hero';
+import { SAT } from 'matter';
 
 const MOCK_DELAY = 500;
 

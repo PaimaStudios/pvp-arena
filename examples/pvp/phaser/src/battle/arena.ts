@@ -122,6 +122,12 @@ export class Arena extends Phaser.Scene
         console.log(`new state: ${safeJSONString(state)}`);
         console.log(`NOW: ${gameStateStr(state.state)}`);
 
+        if (state.state == GAME_STATE.p1_selecting_first_heroes || state.state == GAME_STATE.p1_selecting_last_hero || state.state == GAME_STATE.p2_selecting_heroes) {
+            // for some reason we're getting updates here using old state that we can ignore
+            // it calls onStateChange for every state update that had previously happened on the equipment screen
+            return;
+        }
+
         // create heroes initially
         if (this.heroes.length == 0) {
             for (let team = 0; team < 2; ++team) {

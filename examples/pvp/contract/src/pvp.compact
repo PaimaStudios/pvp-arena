@@ -19,6 +19,50 @@ export struct Hero {
     greaves: ARMOR,
 }
 
+export struct HeroHack {
+    rhs: Uint<32>,
+    lhs: Uint<32>,
+    helmet: Uint<32>,
+    chest: Uint<32>,
+    skirt: Uint<32>,
+    greaves: Uint<32>,
+}
+
+export pure circuit hack_to_item(index: Uint<32>): ITEM {
+    if (index == 1) {
+        return ITEM.axe;
+    } else if (index == 2) {
+        return ITEM.shield;
+    } else if (index == 3) {
+        return ITEM.bow;
+    } else if (index == 4) {
+        return ITEM.sword;
+    } else if (index == 5) {
+        return ITEM.spear;
+    }
+    return ITEM.nothing;
+}
+
+export pure circuit hack_to_armor(index: Uint<32>): ARMOR {
+    if (index == 1) {
+        return ARMOR.leather;
+    } else if (index == 2) {
+        return ARMOR.metal;
+    }
+    return ARMOR.nothing;
+}
+
+export pure circuit hack_to_hero(hero: HeroHack): Hero {
+    return Hero {
+        hack_to_item(hero.rhs),
+        hack_to_item(hero.lhs),
+        hack_to_armor(hero.helmet),
+        hack_to_armor(hero.chest),
+        hack_to_armor(hero.skirt),
+        hack_to_armor(hero.greaves)
+    };
+}
+
 // cache stats for smaller circuits
 export struct TotalStats {
     crush_dmg: Uint<32>,
@@ -87,6 +131,8 @@ constructor() {
     round = 0;
     game_state = GAME_STATE.p1_selecting_first_heroes;
 }
+
+//witness player_heroes(): Vector<>;
 
 export pure circuit calc_stats(hero: Hero): TotalStats {
     // TODO: calculate dex later but for now it's fine
@@ -184,15 +230,15 @@ export circuit item_pierce_def(item: ITEM): Uint<32> {
 
 export circuit item_dex_bonus(item: ITEM): Uint<32> {
     if (item == ITEM.axe) {
-        return 0;
+        return 3;
     } else if (item == ITEM.sword) {
-        return 10;
+        return 15;
     } else if (item == ITEM.shield) {
         return 0;
     } else if (item == ITEM.bow) {
-        return 15;
+        return 35;
     }
-    return 0;
+    return 5;
 }
 
 pure circuit stance_damage_modifier(stance: STANCE): Uint<32> {
@@ -214,37 +260,44 @@ export circuit calc_sig(sk: Bytes<32>, instance: Field): Field {
     return transient_hash<Hasher>(Hasher { transient_hash<Vector<2, Field>>([1234567890, instance]), sk});
 }
 
-export circuit p1_select_first_heroes(first_p1_heroes: Vector<2, Hero>): Void {
+export circuit p1_select_first_heroes(first_p1_heroes: Vector<2, HeroHack>): Void {
     assert game_state == GAME_STATE.p1_selecting_first_heroes "P1 must select first heroes right after contract creation";
-    p1_heroes = [some<Hero>(first_p1_heroes[0]), some<Hero>(first_p1_heroes[1]), none<Hero>()];
+    p1_heroes = [some<Hero>(hack_to_hero(first_p1_heroes[0])), some<Hero>(hack_to_hero(first_p1_heroes[1])), none<Hero>()];
     game_state = GAME_STATE.p2_selecting_heroes;
 }
 
-export circuit p2_select_heroes(all_p2_heroes: Vector<3, Hero>): Void {
+export circuit p2_select_heroes(all_p2_heroes: Vector<3, HeroHack>): Void {
     assert game_state == GAME_STATE.p2_selecting_heroes "P2 must select heroes right after match creation";
     p2_sig = some<Field>(1);//calc_sig(player_sk(), instance as Field));
     // TODO: can you map some here?
-    p2_heroes = [some<Hero>(all_p2_heroes[0]), some<Hero>(all_p2_heroes[1]), some<Hero>(all_p2_heroes[2])];
+    p2_heroes = [some<Hero>(hack_to_hero(all_p2_heroes[0])), some<Hero>(hack_to_hero(all_p2_heroes[1])), some<Hero>(hack_to_hero(all_p2_heroes[2]))];
     p2_stats = [calc_stats(p2_heroes[0].value), calc_stats(p2_heroes[1].value), calc_stats(p2_heroes[2].value)];
     game_state = GAME_STATE.p1_selecting_last_hero;
 }
 
-export circuit p1_select_last_hero(last_p1_hero: Hero): Void {
+export circuit p1_select_last_hero(last_p1_hero: HeroHack): Void {
     assert game_state == GAME_STATE.p1_selecting_last_hero "P1 must select remaining heroes after P2 selects heroes";
-    p1_heroes = [p1_heroes[0], p1_heroes[1], some<Hero>(last_p1_hero)];
+    p1_heroes = [p1_heroes[0], p1_heroes[1], some<Hero>(hack_to_hero(last_p1_hero))];
     p1_stats = [calc_stats(p1_heroes[0].value), calc_stats(p1_heroes[1].value), calc_stats(p1_heroes[2].value)];
     game_state = GAME_STATE.p1_commit;
 }
 
-export circuit p1_commit_commands(cmds: Vector<3, Uint<32>>): Void {
+witness player_commands(): Vector<3, Uint<32>>;
+witness player_stances(): Vector<3, STANCE>;
+
+export circuit p1_commit_commands(): Void {
+    // TODO check player
     assert game_state == GAME_STATE.p1_commit "P1 must commit at start of round";
     //assert calc_sig(player_sk(), instance as Field as Bytes<32>) == p1_sig "Not authorized as P1";
     // TODO: commitments (don't bother yet since inputs are public anyway until PR #1 is merged)
-    p1_cmds = some<Vector<3, Uint<32>>>(cmds);//[Uint<32> { attack: cmds[0], stance: STANCE.neutral}, Uint<32> { attack: cmds[1], stance: STANCE.neutral}, Uint<32> { attack: cmds[2], stance: STANCE.neutral}]]);
+    p1_cmds = some<Vector<3, Uint<32>>>(player_commands());//[Uint<32> { attack: cmds[0], stance: STANCE.neutral}, Uint<32> { attack: cmds[1], stance: STANCE.neutral}, Uint<32> { attack: cmds[2], stance: STANCE.neutral}]]);
+    p1_stances = player_stances();
+
+    game_state = GAME_STATE.p2_commit;
 }
 
 export circuit p1_reveal_commands(): Void {
-    const DEAD = 300;
+    const DEAD = 150000;
 
     assert game_state == GAME_STATE.p1_reveal "P1 must reveal after P2 commits";
 
@@ -277,16 +330,21 @@ export circuit p1_reveal_commands(): Void {
             p2_dmg_2 = (p2_dmg_2 + ((100 - p2_stats[2].crush_def) * p1_stats[2].crush_dmg + (100 - p2_stats[2].pierce_def) * p1_stats[2].pierce_dmg + (40 + p2_stats[2].weight - p1_stats[2].weight) * p1_stats[2].dex_bonus) * (stance_damage_modifier(p1_stances[2]) + stance_damage_modifier(p2_stances[2]))) as Uint<32>;
         }
     }
+
+    game_state = GAME_STATE.p2_reveal;
 }
 
-export circuit p2_commit_commands(cmds: Vector<3, Uint<32>>): Void {
+export circuit p2_commit_commands(): Void {
     assert game_state == GAME_STATE.p2_commit "P2 must commit after P1 commits";
     // TODO: commitments
-    p2_cmds = some<Vector<3, Uint<32>>>(cmds);
+    p2_cmds = some<Vector<3, Uint<32>>>(player_commands());
+    p2_stances = player_stances();
+
+    game_state = GAME_STATE.p1_reveal;
 }
 
 export circuit p2_reveal_commands(): Void {
-    const DEAD = 300;
+    const DEAD = 150000;
 
     assert game_state == GAME_STATE.p2_reveal "P2 must reveal after P1 reveals";
 

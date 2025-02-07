@@ -3,7 +3,7 @@
  * as well as the single witness function that accesses it.
  */
 
-import { Ledger } from './managed/pvp/contract/index.cjs';
+import { Ledger, STANCE } from './managed/pvp/contract/index.cjs';
 import { WitnessContext } from '@midnight-ntwrk/compact-runtime';
 
 /* **********************************************************************
@@ -17,11 +17,15 @@ import { WitnessContext } from '@midnight-ntwrk/compact-runtime';
 export type PVPArenaPrivateState = {
   // EXERCISE 1a: FILL IN A REPRESENTATION OF THE PRIVATE STATE
   readonly secretKey: Uint8Array; // EXERCISE ANSWER
+  commands: bigint[];
+  stances: STANCE[];
 };
 
 export const createPVPArenaPrivateState = (secretKey: Uint8Array) => ({
   // EXERCISE 1b: INITIALIZE THE OBJECT OF TYPE PVPArenaPrivateState
   secretKey, // EXERCISE ANSWER
+  commands: [],
+  stances: []
 });
 
 /* **********************************************************************
@@ -53,8 +57,17 @@ export const createPVPArenaPrivateState = (secretKey: Uint8Array) => ({
  */
 export const witnesses = {
   player_secret_key: ({ privateState }: WitnessContext<Ledger, PVPArenaPrivateState>): [PVPArenaPrivateState, Uint8Array] => [
-    // EXERCISE 2: WHAT ARE THE CORRECT TWO VALUES TO RETURN HERE?
-    privateState, // EXERCISE ANSWER
-    privateState.secretKey, // EXERCISE ANSWER
+    privateState,
+    privateState.secretKey,
+  ],
+
+  player_commands: ({ privateState }: WitnessContext<Ledger, PVPArenaPrivateState>): [PVPArenaPrivateState, bigint[]] => [
+    privateState,
+    privateState.commands,
+  ],
+
+  player_stances: ({ privateState }: WitnessContext<Ledger, PVPArenaPrivateState>): [PVPArenaPrivateState, STANCE[]] => [
+    privateState,
+    privateState.stances,
   ],
 };
