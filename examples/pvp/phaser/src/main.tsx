@@ -9,8 +9,9 @@ import { BrowserDeploymentManager } from './wallet';
 import * as pino from 'pino';
 
 // TODO: get this properly? it's undefined if i uncomment this
-const networkId = import.meta.env.VITE_NETWORK_ID as NetworkId;
+//const networkId = import.meta.env.VITE_NETWORK_ID as NetworkId;
 //const networkId = NetworkId.TestNet;
+const networkId = NetworkId.Undeployed;
 // Ensure that the network IDs are set within the Midnight libraries.
 setNetworkId(networkId);
 export const logger = pino.pino({

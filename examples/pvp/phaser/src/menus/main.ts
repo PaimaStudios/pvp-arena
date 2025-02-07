@@ -23,6 +23,7 @@ export class MainMenu extends Phaser.Scene {
         this.load.setBaseURL('/');
 
         this.load.image('arena_bg', 'arena_bg.png');
+        this.load.image('title_screen', 'title_screen.png');
 
         this.load.image('stone_button', 'stone_button.png');
         this.load.image('stone_button_over', 'stone_button_over.png');
@@ -48,6 +49,14 @@ export class MainMenu extends Phaser.Scene {
                 console.log(`loading hero_${part}_${material}.png`);
             }
         }
+
+        // maybe this will fix the bug when 2 local clients load at the same time
+        this.load.image('hp_bar_back', 'hp_bar_back.png');
+        this.load.image('hp_bar_side', 'hp_bar_side.png');
+        this.load.image('hp_bar_middle', 'hp_bar_middle.png');
+
+        this.load.image('arrow_move', 'arrow_move.png');
+        this.load.image('arrow_attack', 'arrow_attack4.png');
 
         this.load.spritesheet('hero_body_idle', 'hero_body_idle.png', { frameWidth: 48, frameHeight: 64 });
         this.load.spritesheet('hero_arm_r_idle', 'hero_arm_r_idle.png', { frameWidth: 48, frameHeight: 64 });
@@ -75,10 +84,11 @@ export class MainMenu extends Phaser.Scene {
 
     create() {
         this.add.image(GAME_WIDTH, GAME_HEIGHT, 'arena_bg').setPosition(GAME_WIDTH / 2, GAME_HEIGHT / 2).setDepth(-3);
-        this.add.text(GAME_WIDTH / 2 + 2, GAME_HEIGHT / 4 + 2, 'PVP ARENA', {fontSize: 64, color: 'black'}).setOrigin(0.5, 0.5);
-        this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 4, 'PVP ARENA', {fontSize: 64, color: 'white'}).setOrigin(0.5, 0.5);
+        this.add.image(GAME_WIDTH / 2, GAME_HEIGHT * 0.3, 'title_screen');
+        // this.add.text(GAME_WIDTH / 2 + 2, GAME_HEIGHT / 4 + 2, 'PVP ARENA', {fontSize: 64, color: 'black'}).setOrigin(0.5, 0.5);
+        // this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 4, 'PVP ARENA', {fontSize: 64, color: 'white'}).setOrigin(0.5, 0.5);
         this.text = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.65, '', fontStyle(12)).setOrigin(0.5, 0.65).setVisible(false);
-        this.buttons.push(new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.5, 128, 32, 'Create', 20, () => {
+        this.buttons.push(new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.55, 128, 32, 'Create', 20, () => {
             this.setStatusText('Creating match, please wait...');
             this.deployProvider.create().then((api) => {
                 console.log('====================\napi done from creating\n===============');
@@ -90,7 +100,7 @@ export class MainMenu extends Phaser.Scene {
                 this.scene.start('EquipmentMenu');
             });
         }));
-        this.buttons.push(new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.65, 128, 32, 'Join', 20, () => {
+        this.buttons.push(new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.7, 128, 32, 'Join', 20, () => {
             const contractAddress = window.prompt('Enter contract address to join')
             if (contractAddress != null) {
                 this.setStatusText('Joining match, please wait...');
@@ -106,7 +116,7 @@ export class MainMenu extends Phaser.Scene {
             }
         }));
         // create an off-chain testing world for testing graphical stuff without having to wait a long time
-        this.buttons.push(new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.8, 128, 32, 'Practice', 20, () => {
+        this.buttons.push(new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.85, 128, 32, 'Practice', 20, () => {
             this.setStatusText('Entering mocked test arena...');
             setTimeout(() => {
                 this.scene.remove('EquipmentMenu');

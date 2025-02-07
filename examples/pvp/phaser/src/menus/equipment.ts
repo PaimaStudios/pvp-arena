@@ -412,7 +412,7 @@ export class EquipmentMenu extends Phaser.Scene {
                 break;
             case GAME_STATE.p2_selecting_heroes:
                 if (!this.config.isP1 && this.selector == undefined) {
-                    this.selector = new EquipmentSelector(this, this.heroes[0][this.selecting]);
+                    this.selector = new EquipmentSelector(this, this.heroes[1][this.selecting]);
                 }
                 this.setSetupState(this.config.isP1 ? SetupState.WaitingOnOpponent : SetupState.SelectingPlayerHeroes);
                 break;
@@ -476,7 +476,7 @@ export class EquipmentMenu extends Phaser.Scene {
     // advances to next step
     next() {
         this.tweens.add({
-            targets: this.heroes[0][this.selecting].select_circle,
+            targets: this.heroes[this.config.isP1 ? 0 : 1][this.selecting].select_circle,
             alpha: 0,
             duration: 450,
         });
@@ -504,7 +504,7 @@ export class EquipmentMenu extends Phaser.Scene {
                 this.config.api.p2_select_heroes(this.heroes[1].map((h) => h.hero));
                 this.setSetupState(SetupState.Submitting);
             } else {
-                this.selector = new EquipmentSelector(this, this.heroes[0][this.selecting + 1]);
+                this.selector = new EquipmentSelector(this, this.heroes[1][this.selecting + 1]);
             }
         }
         this.selecting += 1;
