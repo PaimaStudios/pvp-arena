@@ -1,0 +1,19 @@
+{
+  "name": "local_chain",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "scripts": {
+    "fund-wallet": "tsc && node ./dist/index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "type": "module",
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "rxjs": "^7.8.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.2.2"
+  }
+}
