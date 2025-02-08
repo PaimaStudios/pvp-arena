@@ -91,16 +91,25 @@ export class HeroActor extends Phaser.GameObjects.Container {
         });
         this.left_arrow.on('pointerup', () => {
             arena.sound.play('select');
-            const leftStance = this.stance == STANCE.neutral ? STANCE.defensive : STANCE.neutral;
+            const leftStance = this.leftStance()!;
+            // toggle to undo moving if already in this stance
             this.nextStance = this.nextStance == leftStance ? this.stance : leftStance;
             this.updateNextStanceArrow();
         });
         this.right_arrow.on('pointerup', () => {
             arena.sound.play('select');
-            const rightStance = this.stance == STANCE.neutral ? STANCE.aggressive : STANCE.neutral;
+            const rightStance = this.rightStance()!;
             this.nextStance = this.nextStance == rightStance ? this.stance : rightStance;
             this.updateNextStanceArrow();
         });
+    }
+
+    private leftStance(): STANCE | undefined {
+        return this.rank.team == 0 ? furtherStance(this.stance) : closerStance(this.stance);
+    }
+
+    private rightStance(): STANCE | undefined {
+        return this.rank.team == 0 ? closerStance(this.stance) : furtherStance(this.stance);
     }
 
     preUpdate(): void {
@@ -182,22 +191,22 @@ export class HeroActor extends Phaser.GameObjects.Container {
     }
 
     private updateNextStanceArrow() {
-        if (this.stance == STANCE.defensive) {
+        const leftStance = this.leftStance();
+        if (leftStance == undefined) {
             this.left_arrow.visible = false;
         } else {
             this.left_arrow.visible = true;
-            const leftStance = this.stance == STANCE.neutral ? STANCE.defensive : STANCE.neutral;
             if (this.nextStance == leftStance) {
                 this.left_arrow.setAlpha(1).setScale(1, 1);
             } else {
                 this.left_arrow.setAlpha(0.75).setScale(0.5, 0.5);
             }
         }
-        if (this.stance == STANCE.aggressive) {
+        const rightStance = this.rightStance();
+        if (rightStance == undefined) {
             this.right_arrow.visible = false;
         } else {
             this.right_arrow.visible = true;
-            const rightStance = this.stance == STANCE.neutral ? STANCE.aggressive : STANCE.neutral;
             if (this.nextStance == rightStance) {
                 this.right_arrow.setAlpha(1).setScale(1, 1);
             } else {
@@ -424,6 +433,28 @@ export class HeroActor extends Phaser.GameObjects.Container {
                 persist: false,
             });
         }
+    }
+}
+
+function furtherStance(stance: STANCE): STANCE | undefined {
+    switch (stance) {
+        case STANCE.aggressive:
+            return STANCE.neutral;
+        case STANCE.neutral:
+            return STANCE.defensive;
+        case STANCE.defensive:
+            return undefined;
+    }
+}
+
+function closerStance(stance: STANCE): STANCE | undefined {
+    switch (stance) {
+        case STANCE.aggressive:
+            return undefined;
+        case STANCE.neutral:
+            return STANCE.aggressive;
+        case STANCE.defensive:
+            return STANCE.neutral;
     }
 }
 
