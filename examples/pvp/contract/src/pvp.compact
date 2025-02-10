@@ -111,11 +111,18 @@ export ledger p2_alive_2: Cell<Boolean>;
 //export ledger p2_alive: Cell<Vector<3, Boolean>>;
 //export ledger p2_dmg: Cell<Vector<3, Uint<32>>>;
 
+// we cache all pairwise damage e.g. p1_1_2 is how much damage (before stance calculation)
+// that would be done from player 1's 2nd (index 1) hero to player 2's 3rd one (index 2)
 export ledger base_damage_cache_p1_0_0: Cell<Uint<32>>;
 export ledger base_damage_cache_p1_0_1: Cell<Uint<32>>;
+// these are commented out as we run into cost limits if we compute these 2
+// we're already stretching as much caching into the hero selects as we can
+// if we switch to a snake draft we could cache these too
+// but at the cost of an extra tx during set-up.
+// the snake draft might be more fair though
 //export ledger base_damage_cache_p1_0_2: Cell<Uint<32>>;
 //export ledger base_damage_cache_p1_1_0: Cell<Uint<32>>;
-export ledger base_damage_cache_p1_1_1: Cell<Uint<32>>;
+//export ledger base_damage_cache_p1_1_1: Cell<Uint<32>>;
 export ledger base_damage_cache_p1_1_2: Cell<Uint<32>>;
 export ledger base_damage_cache_p1_2_0: Cell<Uint<32>>;
 export ledger base_damage_cache_p1_2_1: Cell<Uint<32>>;
@@ -165,10 +172,7 @@ constructor() {
     p2_alive_2 = true;
 }
 
-//witness player_heroes(): Vector<>;
-
 export pure circuit calc_stats(hero: Hero): TotalStats {
-    // TODO: calculate dex later but for now it's fine
     return TotalStats {
         (item_crush_dmg(hero.lhs) + item_crush_dmg(hero.rhs)) as Uint<32>,
         (item_pierce_dmg(hero.lhs) + item_pierce_dmg(hero.rhs)) as Uint<32>,
@@ -310,7 +314,7 @@ export circuit p2_select_heroes(all_p2_heroes: Vector<3, HeroHack>): Void {
 
     base_damage_cache_p1_0_0 = ((100 - p2_stats[0].crush_def) * p1_stats[0].crush_dmg + (100 - p2_stats[0].pierce_def) * p1_stats[0].pierce_dmg + (40 + p2_stats[0].weight - p1_stats[0].weight) * p1_stats[0].dex_bonus) as Uint<32>;
     base_damage_cache_p1_0_1 = ((100 - p2_stats[1].crush_def) * p1_stats[0].crush_dmg + (100 - p2_stats[1].pierce_def) * p1_stats[0].pierce_dmg + (40 + p2_stats[1].weight - p1_stats[0].weight) * p1_stats[0].dex_bonus) as Uint<32>;
-    //base_damage_cache_p1_0_2 = 20;//((100 - p2_stats[2].crush_def) * p1_stats[0].crush_dmg + (100 - p2_stats[2].pierce_def) * p1_stats[0].pierce_dmg + (40 + p2_stats[2].weight - p1_stats[0].weight) * p1_stats[0].dex_bonus) as Uint<32>;
+    //base_damage_cache_p1_0_2 = ((100 - p2_stats[2].crush_def) * p1_stats[0].crush_dmg + (100 - p2_stats[2].pierce_def) * p1_stats[0].pierce_dmg + (40 + p2_stats[2].weight - p1_stats[0].weight) * p1_stats[0].dex_bonus) as Uint<32>;
     
 
 
@@ -332,8 +336,8 @@ export circuit p1_select_last_hero(last_p1_hero: HeroHack): Void {
     game_state = GAME_STATE.p1_commit;
 
 
-    //base_damage_cache_p1_1_0 = 20;//((100 - p2_stats[0].crush_def) * p1_stats[1].crush_dmg + (100 - p2_stats[0].pierce_def) * p1_stats[1].pierce_dmg + (40 + p2_stats[0].weight - p1_stats[1].weight) * p1_stats[1].dex_bonus) as Uint<32>;
-    base_damage_cache_p1_1_1 = ((100 - p2_stats[1].crush_def) * p1_stats[1].crush_dmg + (100 - p2_stats[1].pierce_def) * p1_stats[1].pierce_dmg + (40 + p2_stats[1].weight - p1_stats[1].weight) * p1_stats[1].dex_bonus) as Uint<32>;
+    //base_damage_cache_p1_1_0 = ((100 - p2_stats[0].crush_def) * p1_stats[1].crush_dmg + (100 - p2_stats[0].pierce_def) * p1_stats[1].pierce_dmg + (40 + p2_stats[0].weight - p1_stats[1].weight) * p1_stats[1].dex_bonus) as Uint<32>;
+    //base_damage_cache_p1_1_1 = ((100 - p2_stats[1].crush_def) * p1_stats[1].crush_dmg + (100 - p2_stats[1].pierce_def) * p1_stats[1].pierce_dmg + (40 + p2_stats[1].weight - p1_stats[1].weight) * p1_stats[1].dex_bonus) as Uint<32>;
     base_damage_cache_p1_1_2 = ((100 - p2_stats[2].crush_def) * p1_stats[1].crush_dmg + (100 - p2_stats[2].pierce_def) * p1_stats[1].pierce_dmg + (40 + p2_stats[2].weight - p1_stats[1].weight) * p1_stats[1].dex_bonus) as Uint<32>;
     
     base_damage_cache_p1_2_0 = ((100 - p2_stats[0].crush_def) * p1_stats[2].crush_dmg + (100 - p2_stats[0].pierce_def) * p1_stats[2].pierce_dmg + (40 + p2_stats[0].weight - p1_stats[2].weight) * p1_stats[2].dex_bonus) as Uint<32>;
@@ -363,41 +367,12 @@ export circuit p1_commit_commands(): Void {
 export circuit p1_reveal_commands(): Void {
     assert game_state == GAME_STATE.p1_reveal "P1 must reveal after P2 commits";
 
-    // compact arrays are borderline useless so we have to unroll everything here. we also can't pass in TotalStats since overhed too high
-    // TODO: it would be better to have it simultaneous. would either need locals (not supported in compact) or cache a p1_alive: Vector<3, Boolean> ledger var
-    // if (p1_alive_0) {
-    //     if (p1_cmds.value[0] == 0) {
-    //         p2_dmg_0 = (p2_dmg_0 + base_damage_cache_p1_0_0 * (stance_damage_modifier(p1_stances[0]) + stance_damage_modifier(p2_stances[0]))) as Uint<32>;
-    //     } else if (p1_cmds.value[0] == 1) {
-    //         p2_dmg_1 = (p2_dmg_1 + base_damage_cache_p1_0_1 * (stance_damage_modifier(p1_stances[0]) + stance_damage_modifier(p2_stances[1]))) as Uint<32>;
-    //     } else {
-    //         p2_dmg_2 = (p2_dmg_2 + base_damage_cache_p1_0_2 * (stance_damage_modifier(p1_stances[0]) + stance_damage_modifier(p2_stances[2]))) as Uint<32>;
-    //     }
-    // }
-    // if (p1_alive_1) {
-    //     if (p1_cmds.value[1] == 0) {
-    //         p2_dmg_0 = (p2_dmg_0 + base_damage_cache_p1_1_0 * (stance_damage_modifier(p1_stances[1]) + stance_damage_modifier(p2_stances[0]))) as Uint<32>;
-    //     } else if (p1_cmds.value[1] == 1) {
-    //         p2_dmg_1 = (p2_dmg_1 + base_damage_cache_p1_1_1 * (stance_damage_modifier(p1_stances[1]) + stance_damage_modifier(p2_stances[1]))) as Uint<32>;
-    //     } else {
-    //         p2_dmg_2 = (p2_dmg_2 + base_damage_cache_p1_1_2 * (stance_damage_modifier(p1_stances[1]) + stance_damage_modifier(p2_stances[2]))) as Uint<32>;
-    //     }
-    // }
-    // if (p1_alive_2) {
-    //     if (p1_cmds.value[2] == 0) {
-    //         p2_dmg_0 = (p2_dmg_0 + base_damage_cache_p1_2_0 * (stance_damage_modifier(p1_stances[2]) + stance_damage_modifier(p2_stances[0]))) as Uint<32>;
-    //     } else if (p1_cmds.value[2] == 1) {
-    //         p2_dmg_1 = (p2_dmg_1 + base_damage_cache_p1_2_1 * (stance_damage_modifier(p1_stances[2]) + stance_damage_modifier(p2_stances[1]))) as Uint<32>;
-    //     } else {
-    //         p2_dmg_2 = (p2_dmg_2 + base_damage_cache_p1_2_2 * (stance_damage_modifier(p1_stances[2]) + stance_damage_modifier(p2_stances[2]))) as Uint<32>;
-    //     }
-    // }
-
     p2_dmg_0 = (p2_dmg_0 + ((p1_alive_0 as Uint<1>) * ((p1_cmds.value[0] == 0) as Uint<1>) * base_damage_cache_p1_0_0 * (stance_damage_modifier(p1_stances[0]) + stance_damage_modifier(p2_stances[0])))) as Uint<32>;
     p2_dmg_1 = (p2_dmg_1 + ((p1_alive_0 as Uint<1>) * ((p1_cmds.value[0] == 1) as Uint<1>) * base_damage_cache_p1_0_1 * (stance_damage_modifier(p1_stances[0]) + stance_damage_modifier(p2_stances[1])))) as Uint<32>;
+    // these 2 haven't been cached due to limitations - see comments in cache variable declarations 
     p2_dmg_2 = (p2_dmg_2 + ((p1_alive_0 as Uint<1>) * ((p1_cmds.value[0] == 2) as Uint<1>) * ((100 - p2_stats[2].crush_def) * p1_stats[0].crush_dmg + (100 - p2_stats[2].pierce_def) * p1_stats[0].pierce_dmg + (40 + p2_stats[2].weight - p1_stats[0].weight) * p1_stats[0].dex_bonus) * (stance_damage_modifier(p1_stances[0]) + stance_damage_modifier(p2_stances[2])))) as Uint<32>;
     p2_dmg_0 = (p2_dmg_0 + ((p1_alive_1 as Uint<1>) * ((p1_cmds.value[1] == 0) as Uint<1>) * ((100 - p2_stats[0].crush_def) * p1_stats[1].crush_dmg + (100 - p2_stats[0].pierce_def) * p1_stats[1].pierce_dmg + (40 + p2_stats[0].weight - p1_stats[1].weight) * p1_stats[1].dex_bonus) * (stance_damage_modifier(p1_stances[1]) + stance_damage_modifier(p2_stances[0])))) as Uint<32>;
-    p2_dmg_1 = (p2_dmg_1 + ((p1_alive_1 as Uint<1>) * ((p1_cmds.value[1] == 1) as Uint<1>) * base_damage_cache_p1_1_1 * (stance_damage_modifier(p1_stances[1]) + stance_damage_modifier(p2_stances[1])))) as Uint<32>;
+    p2_dmg_1 = (p2_dmg_1 + ((p1_alive_1 as Uint<1>) * ((p1_cmds.value[1] == 1) as Uint<1>) * ((100 - p2_stats[1].crush_def) * p1_stats[1].crush_dmg + (100 - p2_stats[1].pierce_def) * p1_stats[1].pierce_dmg + (40 + p2_stats[1].weight - p1_stats[1].weight) * p1_stats[1].dex_bonus) * (stance_damage_modifier(p1_stances[1]) + stance_damage_modifier(p2_stances[1])))) as Uint<32>;
     p2_dmg_2 = (p2_dmg_2 + ((p1_alive_1 as Uint<1>) * ((p1_cmds.value[1] == 2) as Uint<1>) * base_damage_cache_p1_1_2 * (stance_damage_modifier(p1_stances[1]) + stance_damage_modifier(p2_stances[2])))) as Uint<32>;
     p2_dmg_0 = (p2_dmg_0 + ((p1_alive_2 as Uint<1>) * ((p1_cmds.value[2] == 0) as Uint<1>) * base_damage_cache_p1_2_0 * (stance_damage_modifier(p1_stances[2]) + stance_damage_modifier(p2_stances[0])))) as Uint<32>;
     p2_dmg_1 = (p2_dmg_1 + ((p1_alive_2 as Uint<1>) * ((p1_cmds.value[2] == 1) as Uint<1>) * base_damage_cache_p1_2_1 * (stance_damage_modifier(p1_stances[2]) + stance_damage_modifier(p2_stances[1])))) as Uint<32>;
@@ -416,37 +391,10 @@ export circuit p2_commit_commands(): Void {
 }
 
 export circuit p2_reveal_commands(): Void {
-    const DEAD = 150000;
+    const DEAD = 300000;
 
     assert game_state == GAME_STATE.p2_reveal "P2 must reveal after P1 reveals";
 
-    // if (p2_alive_0) {
-    //     if (p2_cmds.value[0] == 0) {
-    //         p1_dmg_0 = (p1_dmg_0 + base_damage_cache_p2_0_0 * (stance_damage_modifier(p2_stances[0]) + stance_damage_modifier(p1_stances[0]))) as Uint<32>;
-    //     } else if (p2_cmds.value[0] == 1) {
-    //         p1_dmg_1 = (p1_dmg_1 + base_damage_cache_p2_0_1 * (stance_damage_modifier(p2_stances[0]) + stance_damage_modifier(p1_stances[1]))) as Uint<32>;
-    //     } else {
-    //         p1_dmg_2 = (p1_dmg_2 + base_damage_cache_p2_0_2 * (stance_damage_modifier(p2_stances[0]) + stance_damage_modifier(p1_stances[2]))) as Uint<32>;
-    //     }
-    // }
-    // if (p2_alive_1) {
-    //     if (p2_cmds.value[1] == 0) {
-    //         p1_dmg_0 = (p1_dmg_0 + base_damage_cache_p2_1_0 * (stance_damage_modifier(p2_stances[1]) + stance_damage_modifier(p1_stances[0]))) as Uint<32>;
-    //     } else if (p2_cmds.value[1] == 1) {
-    //         p1_dmg_1 = (p1_dmg_1 + base_damage_cache_p2_1_1 * (stance_damage_modifier(p2_stances[1]) + stance_damage_modifier(p1_stances[1]))) as Uint<32>;
-    //     } else {
-    //         p1_dmg_2 = (p1_dmg_2 + base_damage_cache_p2_1_2 * (stance_damage_modifier(p2_stances[1]) + stance_damage_modifier(p1_stances[2]))) as Uint<32>;
-    //     }
-    // }
-    // if (p2_alive_2) {
-    //     if (p2_cmds.value[2] == 0) {
-    //         p1_dmg_0 = (p1_dmg_0 + base_damage_cache_p2_2_0 * (stance_damage_modifier(p2_stances[2]) + stance_damage_modifier(p1_stances[0]))) as Uint<32>;
-    //     } else if (p2_cmds.value[2] == 1) {
-    //         p1_dmg_1 = (p1_dmg_1 + base_damage_cache_p2_2_1 * (stance_damage_modifier(p2_stances[2]) + stance_damage_modifier(p1_stances[1]))) as Uint<32>;
-    //     } else {
-    //         p1_dmg_2 = (p1_dmg_2 + base_damage_cache_p2_2_2 * (stance_damage_modifier(p2_stances[2]) + stance_damage_modifier(p1_stances[2]))) as Uint<32>;
-    //     }
-    // }
     p1_dmg_0 = (p1_dmg_0 + ((p2_alive_0 as Uint<1>) * ((p2_cmds.value[0] == 0) as Uint<1>) * base_damage_cache_p2_0_0 * (stance_damage_modifier(p2_stances[0]) + stance_damage_modifier(p1_stances[0])))) as Uint<32>;
     p1_dmg_1 = (p1_dmg_1 + ((p2_alive_0 as Uint<1>) * ((p2_cmds.value[0] == 1) as Uint<1>) * base_damage_cache_p2_0_1 * (stance_damage_modifier(p2_stances[0]) + stance_damage_modifier(p1_stances[1])))) as Uint<32>;
     p1_dmg_2 = (p1_dmg_2 + ((p2_alive_0 as Uint<1>) * ((p2_cmds.value[0] == 2) as Uint<1>) * base_damage_cache_p2_0_2 * (stance_damage_modifier(p2_stances[0]) + stance_damage_modifier(p1_stances[2])))) as Uint<32>;
@@ -457,45 +405,24 @@ export circuit p2_reveal_commands(): Void {
     p1_dmg_1 = (p1_dmg_1 + ((p2_alive_2 as Uint<1>) * ((p2_cmds.value[2] == 1) as Uint<1>) * base_damage_cache_p2_2_1 * (stance_damage_modifier(p2_stances[2]) + stance_damage_modifier(p1_stances[1])))) as Uint<32>;
     p1_dmg_2 = (p1_dmg_2 + ((p2_alive_2 as Uint<1>) * ((p2_cmds.value[2] == 2) as Uint<1>) * base_damage_cache_p2_2_2 * (stance_damage_modifier(p2_stances[2]) + stance_damage_modifier(p1_stances[2])))) as Uint<32>;
 
-    // p2_alive = [p2_dmg_0 < DEAD, p2_dmg_1 < DEAD, p2_dmg_2 < DEAD];
-    // p1_alive = [p1_dmg_0 < DEAD, p1_dmg_1 < DEAD, p1_dmg_2 < DEAD];
-    // if (p1_dmg_0 >= DEAD) {
-    //     p1_alive_0 = false;
-    // }
-    // if (p1_dmg_1 >= DEAD) {
-    //     p1_alive_1 = false;
-    // }
-    // if (p1_dmg_2 >= DEAD) {
-    //     p1_alive_2 = false;
-    // }
-    // if (p2_dmg_0 >= DEAD) {
-    //     p2_alive_0 = false;
-    // }
-    // if (p2_dmg_1 >= DEAD) {
-    //     p2_alive_1 = false;
-    // }
-    // if (p2_dmg_2 >= DEAD) {
-    //     p2_alive_2 = false;
-    // }
+    p1_alive_0 = p1_dmg_0 < DEAD;
+    p1_alive_1 = p1_dmg_1 < DEAD;
+    p1_alive_2 = p1_dmg_2 < DEAD;
+    p2_alive_0 = p2_dmg_0 < DEAD;
+    p2_alive_1 = p2_dmg_1 < DEAD;
+    p2_alive_2 = p2_dmg_2 < DEAD;
+    
 
     round = (round + 1) as Uint<32>;
 
-    // if (!p1_alive[0] && !p1_alive[1] && !p1_alive[2]) {
-    //     if (!p2_alive[0] && !p2_alive[1] && !p2_alive[2]) {
-    //         game_state = GAME_STATE.tie;
-    //     }
-    //     game_state = GAME_STATE.p1_win;
-    // } else if (!p2_alive[0] && !p2_alive[1] && !p2_alive[2]) {
-    //     game_state = GAME_STATE.p2_win;
-    // }
-
-    // if (!p1_alive_0 && !p1_alive_1 && !p1_alive_2) {
-    //     if (!p2_alive_0 && !p2_alive_1 && !p2_alive_2) {
-    //         game_state = GAME_STATE.tie;
-    //     }
-    //     game_state = GAME_STATE.p1_win;
-    // } else if (!p2_alive_0 && !p2_alive_1 && !p2_alive_2) {
-    //     game_state = GAME_STATE.p2_win;
-    // }
-    game_state = GAME_STATE.p1_commit;
-} 
+    if (!p1_alive_0 && !p1_alive_1 && !p1_alive_2) {
+        if (!p2_alive_0 && !p2_alive_1 && !p2_alive_2) {
+            game_state = GAME_STATE.tie;
+        }
+        game_state = GAME_STATE.p1_win;
+    } else if (!p2_alive_0 && !p2_alive_1 && !p2_alive_2) {
+        game_state = GAME_STATE.p2_win;
+    } else {
+        game_state = GAME_STATE.p1_commit;
+    }
+}
