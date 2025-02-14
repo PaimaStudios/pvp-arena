@@ -148,9 +148,9 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
    */
   readonly state$: Observable<PVPArenaDerivedState>;
   /**
-   * Select the remaining hero for Player 1
+   * Select the first hero for Player 1
    *
-   * @param all_p2_heroes All 3 Player 2 heroes.
+   * @param first_hero Player 1's first hero
    *
    * @remarks
    * This method can fail if called more than once or if validation fails
@@ -169,10 +169,10 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
     });
   }
 
-    /**
-   * Select the remaining hero for Player 1
+  /**
+   * Select the remaining 2 heroes for Player 1
    *
-   * @param all_p2_heroes All 3 Player 2 heroes.
+   * @param last_heroes Player 1's last two heroes
    *
    * @remarks
    * This method can fail if called more than once or if validation fails
@@ -191,9 +191,9 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
       });
     }
   /**
-   * Joins the contract as Player 2 and selects all your heroes to fight.
+   * Joins the contract as Player 2 and selects your first two heroes to fight.
    *
-   * @param all_p2_heroes All 3 Player 2 heroes.
+   * @param first_heroes First 2 Player 2 heroes.
    *
    * @remarks
    * This method can fail if called more than once
@@ -212,10 +212,10 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
     });
   }
 
-    /**
-   * Joins the contract as Player 2 and selects all your heroes to fight.
+  /**
+   * Selects Player 2's last hero and advances the game to combat rounds.
    *
-   * @param all_p2_heroes All 3 Player 2 heroes.
+   * @param last_hero Player 2's last hero.
    *
    * @remarks
    * This method can fail if called more than once
