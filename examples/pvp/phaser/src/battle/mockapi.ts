@@ -24,7 +24,7 @@ export class MockPVPArenaAPI implements DeployedPVPArenaAPI {
         this.mockState = {
             instance: BigInt(0),
             round: BigInt(0),
-            state: GAME_STATE.p1_selecting_first_heroes,
+            state: GAME_STATE.p1_selecting_first_hero,
             p1Heroes: [],
             p1Cmds: [BigInt(0), BigInt(0), BigInt(0)],
             p1Dmg: [BigInt(0), BigInt(0), BigInt(0)],
@@ -40,12 +40,12 @@ export class MockPVPArenaAPI implements DeployedPVPArenaAPI {
         }, MOCK_DELAY);
     }
 
-    async p1_select_first_heroes(first_p1_heroes: Hero[]): Promise<void> {
+    async p1_select_first_hero(first_p1_hero: Hero): Promise<void> {
         setTimeout(() => {
             this.mockState = {
                 ...this.mockState,
-                p1Heroes: first_p1_heroes,
-                state: GAME_STATE.p2_selecting_heroes,
+                p1Heroes: [first_p1_hero],
+                state: GAME_STATE.p2_selecting_first_heroes,
             };
             this.subscriber?.next(this.mockState);
             // mock p2 select heroes
@@ -55,28 +55,41 @@ export class MockPVPArenaAPI implements DeployedPVPArenaAPI {
                     p2Heroes: [
                         generateRandomHero(),
                         generateRandomHero(),
-                        generateRandomHero(),
                     ],
-                    state: GAME_STATE.p1_selecting_last_hero,
+                    state: GAME_STATE.p1_selecting_last_heroes,
                 };
                 this.subscriber?.next(this.mockState);
             }, MOCK_DELAY);
         }, MOCK_DELAY)
     }
   
-    async p2_select_heroes(all_p2_heroes: Hero[]): Promise<void> {
+    async p2_select_first_heroes(heroes: Hero[]): Promise<void> {
         // should never be called (TODO: let you have a p2 testing environment too?)
         throw new Error("do not call this");
     }
 
-    async p1_select_last_hero(last_p1_hero: Hero): Promise<void> {
+    async p2_select_last_hero(hero: Hero): Promise<void> {
+        // should never be called (TODO: let you have a p2 testing environment too?)
+        throw new Error("do not call this");
+    }
+
+    async p1_select_last_heroes(last_p1_heroes: Hero[]): Promise<void> {
         setTimeout(() => {
             this.mockState = {
                 ...this.mockState,
-                p1Heroes: [...this.mockState.p1Heroes, last_p1_hero],
-                state: GAME_STATE.p1_commit,
+                p1Heroes: [...this.mockState.p1Heroes, ...last_p1_heroes],
+                state: GAME_STATE.p2_selecting_last_hero,
             };
             this.subscriber?.next(this.mockState);
+            // mock select last p2 hero
+            setTimeout(() => {
+                this.mockState = {
+                    ...this.mockState,
+                    p2Heroes: [...this.mockState.p2Heroes, generateRandomHero()],
+                    state: GAME_STATE.p1_commit,
+                };
+                this.subscriber?.next(this.mockState);
+            }, MOCK_DELAY);
         }, MOCK_DELAY)
     }
 
@@ -87,7 +100,7 @@ export class MockPVPArenaAPI implements DeployedPVPArenaAPI {
                 ...this.mockState,
                 p1Cmds: commands,
                 p1Stances: stances,
-                state: GAME_STATE.p2_commit,
+                state: GAME_STATE.p2_commit_reveal,
             };
             this.subscriber?.next(this.mockState);
             // mock p2 commit
@@ -133,52 +146,39 @@ export class MockPVPArenaAPI implements DeployedPVPArenaAPI {
 
     async p1Reveal(): Promise<void> {
         setTimeout(() => {
+            console.log(`MockState: ${safeJSONString(this.mockState)}`);
+            let p1Dmg = this.mockState.p1Dmg;
+            let p2Dmg = this.mockState.p2Dmg;
+            for (let i = 0; i < 3; ++i) {
+                if (this.mockState.p1Dmg[i] < MAX_HP) {
+                    const p1Cmd = Number(this.mockState.p1Cmds![i]);
+                    p2Dmg[p1Cmd] = BigInt(Math.min(MAX_HP, Number(p2Dmg[p1Cmd] + pureCircuits.calc_item_dmg_against(
+                        pureCircuits.calc_stats(this.mockState.p1Heroes[i]),
+                        this.mockState.p1Stances[i],
+                        pureCircuits.calc_stats(this.mockState.p2Heroes[p1Cmd]),
+                        this.mockState.p2Stances[p1Cmd],
+                    ))));
+                }
+                if (this.mockState.p2Dmg[i] < MAX_HP) {
+                    const p2Cmd = Number(this.mockState.p2Cmds![i]);
+                    p1Dmg[p2Cmd] = BigInt(Math.min(MAX_HP, Number(p1Dmg[p2Cmd] + pureCircuits.calc_item_dmg_against(
+                        pureCircuits.calc_stats(this.mockState.p2Heroes[i]),
+                        this.mockState.p2Stances[i],
+                        pureCircuits.calc_stats(this.mockState.p1Heroes[p2Cmd]),
+                        this.mockState.p1Stances[p2Cmd],
+                    ))));
+                }
+            }
+            const p1Dead = p1Dmg.every((hp) => hp >= BigInt(MAX_HP));
+            const p2Dead = p2Dmg.every((hp) => hp >= BigInt(MAX_HP));
             this.mockState = {
                 ...this.mockState,
-                state: GAME_STATE.p2_reveal,
+                state: p1Dead ? (p2Dead ? GAME_STATE.tie : GAME_STATE.p2_win) : (p2Dead ? GAME_STATE.p1_win : GAME_STATE.p1_commit),
+                round: this.mockState.round + BigInt(1),
+                p1Dmg,
+                p2Dmg,
             };
             this.subscriber?.next(this.mockState);
-            // mock p2 reveal
-            setTimeout(() => {
-                console.log(`MockState: ${safeJSONString(this.mockState)}`);
-                let p1Dmg = this.mockState.p1Dmg;
-                let p2Dmg = this.mockState.p2Dmg;
-                for (let i = 0; i < 3; ++i) {
-                    if (this.mockState.p1Dmg[i] < MAX_HP) {
-                        const p1Cmd = Number(this.mockState.p1Cmds![i]);
-                        p2Dmg[p1Cmd] = BigInt(Math.min(MAX_HP, Number(p2Dmg[p1Cmd] + pureCircuits.calc_item_dmg_against(
-                            pureCircuits.calc_stats(this.mockState.p1Heroes[i]),
-                            this.mockState.p1Stances[i],
-                            pureCircuits.calc_stats(this.mockState.p2Heroes[p1Cmd]),
-                            this.mockState.p2Stances[p1Cmd],
-                        ))));
-                    }
-                    if (this.mockState.p2Dmg[i] < MAX_HP) {
-                        const p2Cmd = Number(this.mockState.p2Cmds![i]);
-                        p1Dmg[p2Cmd] = BigInt(Math.min(MAX_HP, Number(p1Dmg[p2Cmd] + pureCircuits.calc_item_dmg_against(
-                            pureCircuits.calc_stats(this.mockState.p2Heroes[i]),
-                            this.mockState.p2Stances[i],
-                            pureCircuits.calc_stats(this.mockState.p1Heroes[p2Cmd]),
-                            this.mockState.p1Stances[p2Cmd],
-                        ))));
-                    }
-                }
-                const p1Dead = p1Dmg.every((hp) => hp >= BigInt(MAX_HP));
-                const p2Dead = p2Dmg.every((hp) => hp >= BigInt(MAX_HP));
-                this.mockState = {
-                    ...this.mockState,
-                    state: p1Dead ? (p2Dead ? GAME_STATE.tie : GAME_STATE.p2_win) : (p2Dead ? GAME_STATE.p1_win : GAME_STATE.p1_commit),
-                    round: this.mockState.round + BigInt(1),
-                    p1Dmg,
-                    p2Dmg,
-                };
-                this.subscriber?.next(this.mockState);
-            }, 2000);
         }, MOCK_DELAY);
-    }
-
-    async p2Reveal(): Promise<void> {
-        // should never be called (TODO: let you have a p2 testing environment too?)
-        throw new Error("do not call this");
     }
 }

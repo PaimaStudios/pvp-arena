@@ -147,7 +147,7 @@ export class HeroActor extends Phaser.GameObjects.Container {
     }
 
     public onTurnEnd() {
-        if (this.uiDmg != this.realDmg) {
+        if (this.uiDmg != Math.min(MAX_HP, this.realDmg)) {
             console.error(`uiDmg[${this.rank.team}][${this.rank.index}] out of sync. Real: ${this.realDmg} Ui: ${this.uiDmg}`);
             this.uiDmg = this.uiDmg;
             this.updateHpBar();
