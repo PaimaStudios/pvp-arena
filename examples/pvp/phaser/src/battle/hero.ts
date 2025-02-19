@@ -224,7 +224,7 @@ export class HeroActor extends Phaser.GameObjects.Container {
 
         this.updateTargetLine();
 
-        if (this.arena.getAliveHeroes(this.arena.playerTeam()).every((h) => h.targetLine.visible)) {
+        if (this.arena.matchState == MatchState.WaitingOnPlayer && target != undefined && this.arena.getAliveHeroes(this.arena.playerTeam()).every((h) => h.targetLine.visible)) {
             this.arena.enableSubmitButton();
         }
     }
@@ -262,11 +262,11 @@ export class HeroActor extends Phaser.GameObjects.Container {
         this.select_circle.visible = true;
         this.arena.selected = this;
 
-        if (this.stance != STANCE.defensive) {
+        if (this.leftStance() != undefined) {
             this.left_arrow.setInteractive({useHandCursor: true});
             this.left_arrow.visible = true;
         }
-        if (this.stance != STANCE.aggressive) {
+        if (this.rightStance() != undefined) {
             this.right_arrow.setInteractive({useHandCursor: true});
             this.right_arrow.visible = true;
         }
@@ -361,7 +361,7 @@ export class HeroActor extends Phaser.GameObjects.Container {
                     targets: this,
                     x: meleeAttackX,
                     y: meleeAttackY,
-                    delay: 0,
+                    delay: 100,
                     duration: MELEE_ATTACK_TIME / 2,
                     onStart: () => {
                         this.anims.lhsAttack();
@@ -373,7 +373,7 @@ export class HeroActor extends Phaser.GameObjects.Container {
                     targets: this,
                     x: meleeAttackX,
                     y: meleeAttackY,
-                    delay: 0,
+                    delay: this.anims.lhsAttackAnim != undefined ? MELEE_ATTACK_TIME / 2 : 100,
                     duration: MELEE_ATTACK_TIME / 2,
                     onStart: () => {
                         this.anims.rhsAttack();
