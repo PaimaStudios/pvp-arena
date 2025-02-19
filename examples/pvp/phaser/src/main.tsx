@@ -119,20 +119,20 @@ export enum MatchState {
 
 export function gameStateStr(state: GAME_STATE): string {
     switch (state) {
-        case GAME_STATE.p1_selecting_first_heroes:
-            return 'p1_selecting_first_heroes';
-        case GAME_STATE.p2_selecting_heroes:
-            return 'p2_selecting_heroes';
-        case GAME_STATE.p1_selecting_last_hero:
-            return 'p1_selecting_last_hero';
+        case GAME_STATE.p1_selecting_first_hero:
+            return 'p1_selecting_first_hero';
+        case GAME_STATE.p2_selecting_first_heroes:
+            return 'p2_selecting_first_heroes';
+        case GAME_STATE.p1_selecting_last_heroes:
+            return 'p1_selecting_last_heroes';
+        case GAME_STATE.p2_selecting_last_hero:
+            return 'p2_selecting_last_hero';
         case GAME_STATE.p1_commit:
             return 'p1_commit';
-        case GAME_STATE.p2_commit:
-            return 'p2_commit';
+        case GAME_STATE.p2_commit_reveal:
+            return 'p2_commit_reveal';
         case GAME_STATE.p1_reveal:
             return 'p1_reveal';
-        case GAME_STATE.p2_reveal:
-            return 'p2_reveal';
         case GAME_STATE.p1_win:
             return 'p1_win';
         case GAME_STATE.p1_win:

@@ -122,7 +122,7 @@ export class Arena extends Phaser.Scene
         console.log(`new state: ${safeJSONString(state)}`);
         console.log(`NOW: ${gameStateStr(state.state)}`);
 
-        if (state.state == GAME_STATE.p1_selecting_first_heroes || state.state == GAME_STATE.p1_selecting_last_hero || state.state == GAME_STATE.p2_selecting_heroes) {
+        if (state.state == GAME_STATE.p1_selecting_first_hero || state.state == GAME_STATE.p2_selecting_first_heroes || state.state == GAME_STATE.p1_selecting_last_heroes || state.state == GAME_STATE.p2_selecting_last_hero) {
             // for some reason we're getting updates here using old state that we can ignore
             // it calls onStateChange for every state update that had previously happened on the equipment screen
             return;
@@ -179,7 +179,7 @@ export class Arena extends Phaser.Scene
             case GAME_STATE.p1_commit:
                 this.setMatchState(this.config.isP1 ? MatchState.WaitingOnPlayer : MatchState.WaitingOnOpponent);
                 break;
-            case GAME_STATE.p2_commit:
+            case GAME_STATE.p2_commit_reveal:
                 this.setMatchState(this.config.isP1 ? MatchState.WaitingOnOpponent : MatchState.WaitingOnPlayer);
                 break;
             case GAME_STATE.p1_reveal:
@@ -192,18 +192,6 @@ export class Arena extends Phaser.Scene
                     });
                 } else {
                     this.setMatchState(MatchState.WaitingOtherPlayerReveal);
-                }
-                break;
-            case GAME_STATE.p2_reveal:
-                if (this.config.isP1) {
-                    this.setMatchState(MatchState.WaitingOtherPlayerReveal);
-                } else {
-                    console.log('revealing move (as p2)');
-                    this.setMatchState(MatchState.RevealingMove);
-                    // TODO: what happens if player cancels or closes window?
-                    this.config.api.p2Reveal().then(() => {
-                        // ??? (probably nothing - resolved by onStateChange)
-                    });
                 }
                 break;
             case GAME_STATE.p1_win:

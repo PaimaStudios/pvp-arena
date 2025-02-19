@@ -403,14 +403,15 @@ export class EquipmentMenu extends Phaser.Scene {
     runStateChange(state: PVPArenaDerivedState) {
         console.log(`running state change: ${state.state}`);
         switch (state.state) {
-            case GAME_STATE.p1_selecting_first_heroes:
-            case GAME_STATE.p1_selecting_last_hero:
+            case GAME_STATE.p1_selecting_first_hero:
+            case GAME_STATE.p1_selecting_last_heroes:
                 if (this.config.isP1 && this.selector == undefined) {
                     this.selector = new EquipmentSelector(this, this.heroes[0][this.selecting]);
                 }
                 this.setSetupState(this.config.isP1 ? SetupState.SelectingPlayerHeroes : SetupState.WaitingOnOpponent);
                 break;
-            case GAME_STATE.p2_selecting_heroes:
+            case GAME_STATE.p2_selecting_first_heroes:
+            case GAME_STATE.p2_selecting_last_hero:
                 if (!this.config.isP1 && this.selector == undefined) {
                     this.selector = new EquipmentSelector(this, this.heroes[1][this.selecting]);
                 }
@@ -488,23 +489,30 @@ export class EquipmentMenu extends Phaser.Scene {
         if (this.config.isP1) {
             switch (this.selecting) {
                 case 0:
-                    this.selector = new EquipmentSelector(this, this.heroes[0][1]);
-                    break;
-                case 1:
-                    this.config.api.p1_select_first_heroes([this.heroes[0][0].hero, this.heroes[0][1].hero]);
+                    this.config.api.p1_select_first_hero(this.heroes[0][0].hero);
                     this.setSetupState(SetupState.Submitting);
                     break;
+                case 1:
+                    this.selector = new EquipmentSelector(this, this.heroes[0][2]);
+                    break;
                 case 2:
-                    this.config.api.p1_select_last_hero(this.heroes[0][2].hero);
+                    this.config.api.p1_select_last_heroes([this.heroes[0][1].hero, this.heroes[0][2].hero]);
                     this.setSetupState(SetupState.Submitting);
                     break;
             }
         } else {
-            if (this.selecting == 2) {
-                this.config.api.p2_select_heroes(this.heroes[1].map((h) => h.hero));
-                this.setSetupState(SetupState.Submitting);
-            } else {
-                this.selector = new EquipmentSelector(this, this.heroes[1][this.selecting + 1]);
+            switch (this.selecting) {
+                case 0:
+                    this.selector = new EquipmentSelector(this, this.heroes[1][1]);
+                    break;
+                case 1:
+                    this.config.api.p2_select_first_heroes([this.heroes[1][0].hero, this.heroes[1][1].hero]);
+                    this.setSetupState(SetupState.Submitting);
+                    break;
+                case 2:
+                    this.config.api.p2_select_last_hero(this.heroes[1][2].hero);
+                    this.setSetupState(SetupState.Submitting);
+                    break;
             }
         }
         this.selecting += 1;

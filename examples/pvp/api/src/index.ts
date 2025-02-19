@@ -53,13 +53,13 @@ export interface DeployedPVPArenaAPI {
   readonly deployedContractAddress: ContractAddress;
   readonly state$: Observable<PVPArenaDerivedState>;
 
-  p1_select_first_heroes: (first_p1_heroes: Hero[]) => Promise<void>
-  p2_select_heroes: (all_p2_heroes: Hero[]) => Promise<void>
-  p1_select_last_hero: (last_p1_hero: Hero) => Promise<void>
+  p1_select_first_hero: (first_hero: Hero) => Promise<void>
+  p2_select_first_heroes: (first_heroes: Hero[]) => Promise<void>
+  p1_select_last_heroes: (last_heroes: Hero[]) => Promise<void>
+  p2_select_last_hero: (last_p1_hero: Hero) => Promise<void>
   p1Commit: (commands: bigint[], stances: STANCE[]) => Promise<void>;
   p2Commit: (commands: bigint[], stances: STANCE[]) => Promise<void>;
   p1Reveal: () => Promise<void>;
-  p2Reveal: () => Promise<void>;
 }
 
 /**
@@ -148,42 +148,64 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
    */
   readonly state$: Observable<PVPArenaDerivedState>;
   /**
-   * Select the remaining hero for Player 1
+   * Select the first hero for Player 1
    *
-   * @param all_p2_heroes All 3 Player 2 heroes.
+   * @param first_hero Player 1's first hero
    *
    * @remarks
    * This method can fail if called more than once or if validation fails
    */
-  async p1_select_first_heroes(first_p1_heroes: Hero[]): Promise<void> {
+  async p1_select_first_hero(first_hero: Hero): Promise<void> {
     //this.logger?.info(`postingMessage: ${message}`);
 
-    const txData = await this.deployedContract.callTx.p1_select_first_heroes(first_p1_heroes.map(heroToHack));
+    const txData = await this.deployedContract.callTx.p1_select_first_hero(heroToHack(first_hero));
 
     this.logger?.trace({
       transactionAdded: {
-        circuit: 'p1_select_first_heroes',
+        circuit: 'p1_select_first_hero',
         txHash: txData.public.txHash,
         blockHeight: txData.public.blockHeight,
       },
     });
   }
+
   /**
-   * Joins the contract as Player 2 and selects all your heroes to fight.
+   * Select the remaining 2 heroes for Player 1
    *
-   * @param all_p2_heroes All 3 Player 2 heroes.
+   * @param last_heroes Player 1's last two heroes
+   *
+   * @remarks
+   * This method can fail if called more than once or if validation fails
+   */
+    async p1_select_last_heroes(last_heroes: Hero[]): Promise<void> {
+      //this.logger?.info(`postingMessage: ${message}`);
+  
+      const txData = await this.deployedContract.callTx.p1_select_last_heroes(last_heroes.map(heroToHack));
+  
+      this.logger?.trace({
+        transactionAdded: {
+          circuit: 'p1_select_last_heroes',
+          txHash: txData.public.txHash,
+          blockHeight: txData.public.blockHeight,
+        },
+      });
+    }
+  /**
+   * Joins the contract as Player 2 and selects your first two heroes to fight.
+   *
+   * @param first_heroes First 2 Player 2 heroes.
    *
    * @remarks
    * This method can fail if called more than once
    */
-  async p2_select_heroes(all_p2_heroes: Hero[]): Promise<void> {
+  async p2_select_first_heroes(first_heroes: Hero[]): Promise<void> {
     //this.logger?.info(`postingMessage: ${message}`);
 
-    const txData = await this.deployedContract.callTx.p2_select_heroes(all_p2_heroes.map(heroToHack));
+    const txData = await this.deployedContract.callTx.p2_select_first_heroes(first_heroes.map(heroToHack));
 
     this.logger?.trace({
       transactionAdded: {
-        circuit: 'p2_select_heroes',
+        circuit: 'p2_select_first_heroes',
         txHash: txData.public.txHash,
         blockHeight: txData.public.blockHeight,
       },
@@ -191,26 +213,26 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
   }
 
   /**
-   * Select the remaining hero for Player 1
+   * Selects Player 2's last hero and advances the game to combat rounds.
    *
-   * @param all_p2_heroes All 3 Player 2 heroes.
+   * @param last_hero Player 2's last hero.
    *
    * @remarks
-   * This method can fail if called more than once or if validation fails
+   * This method can fail if called more than once
    */
-  async p1_select_last_hero(last_p1_hero: Hero): Promise<void> {
-    //this.logger?.info(`postingMessage: ${message}`);
-
-    const txData = await this.deployedContract.callTx.p1_select_last_hero(heroToHack(last_p1_hero));
-
-    this.logger?.trace({
-      transactionAdded: {
-        circuit: 'p1_select_last_hero',
-        txHash: txData.public.txHash,
-        blockHeight: txData.public.blockHeight,
-      },
-    });
-  }
+    async p2_select_last_hero(last_hero: Hero): Promise<void> {
+      //this.logger?.info(`postingMessage: ${message}`);
+  
+      const txData = await this.deployedContract.callTx.p2_select_last_hero(heroToHack(last_hero));
+  
+      this.logger?.trace({
+        transactionAdded: {
+          circuit: 'p2_select_last_hero',
+          txHash: txData.public.txHash,
+          blockHeight: txData.public.blockHeight,
+        },
+      });
+    }
 
   async p1Commit(commands: bigint[], stances: STANCE[]): Promise<void> {
     this.logger?.info('p1Command');
@@ -280,26 +302,6 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
     this.logger?.trace({
       transactionAdded: {
         circuit: 'p1_reveal_commands',
-        txHash: txData.public.txHash,
-        blockHeight: txData.public.blockHeight,
-      },
-    });
-  }
-
-  async p2Reveal(): Promise<void> {
-    this.logger?.info('p2Reveal');
-
-    var txData;
-    try {
-      txData = await this.deployedContract.callTx.p2_reveal_commands();
-    } catch (err) {
-      console.log(`p2Reveal failed: ${JSON.stringify(err)}`);
-      throw err;
-    }
-
-    this.logger?.trace({
-      transactionAdded: {
-        circuit: 'p2_reveal_commands',
         txHash: txData.public.txHash,
         blockHeight: txData.public.blockHeight,
       },
