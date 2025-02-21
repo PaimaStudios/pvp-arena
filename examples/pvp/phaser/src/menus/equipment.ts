@@ -8,6 +8,7 @@ import { MockPVPArenaAPI } from '../battle/mockapi';
 import { PVPArenaAPI, PVPArenaDerivedState } from '@midnight-ntwrk/pvp-api';
 import { Physics } from 'phaser';
 import { eq } from 'fp-ts';
+import { makeTooltip } from './tooltip';
 
 class SelectHeroActor extends Phaser.GameObjects.Container {
     hero: Hero;
@@ -210,7 +211,7 @@ class EquipmentSelector extends Phaser.GameObjects.Container {
             this.hero.hero = generateRandomHero();
             this.hero.refresh();
             this.slots.values().forEach((slot) => slot.refresh());
-        }));
+        }, 'Randomize'));
         this.add(scene.add.image(0, -12, 'dice').setAlpha(0.75));
 
         this.add(new Button(scene, 0, 18 * 6, 64, 16, 'Confirm', 10, () => scene.next()));
@@ -237,6 +238,20 @@ class EquipmentSelector extends Phaser.GameObjects.Container {
             targets: this,
             alpha: 1,
             duration: 100,
+            onComplete: () => {
+                makeTooltip(
+                    this.scene,
+                    GAME_WIDTH / 2,
+                    300,
+                    [
+                        'Select your gladiators\' weapons and armor. Players will take turns to give a chance to counter your opponent\'s choices.',
+                        'Damage is divided into pierce and crush types. Axes deal more crush damage, while bows and spears deal more pierce damage',
+                        'There is also a dexterity bonus based on the difference betwen your weight and the opponent\'s weight.',
+                        'Certain weapons, in particular swords, have a higher dexterity bonus.'
+                    ],
+                    { width: 320, clickHighlight: new Phaser.Math.Vector2(48 + GAME_WIDTH / 2, GAME_HEIGHT * 0.4) },
+                );
+            },
         });
         this.scene.tweens.chain({
             targets: this.hero,
