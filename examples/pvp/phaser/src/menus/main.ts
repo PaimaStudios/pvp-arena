@@ -6,6 +6,7 @@ import { EquipmentMenu } from './equipment';
 import { Button } from './button';
 import { HeroAnimationController, createHeroAnims, generateRandomHero } from '../battle/hero';
 import { ARMOR, ITEM } from '@midnight-ntwrk/pvp-contract';
+import { heroBalancing } from '../balancing';
 
 
 export class MainMenu extends Phaser.Scene {
@@ -120,10 +121,25 @@ export class MainMenu extends Phaser.Scene {
             this.setStatusText('Entering mocked test arena...');
             setTimeout(() => {
                 this.scene.remove('EquipmentMenu');
-                this.scene.add('EquipmentMenu', new EquipmentMenu({ api: new MockPVPArenaAPI(), isP1: true }));
+                this.scene.add('EquipmentMenu', new EquipmentMenu({ api: new MockPVPArenaAPI(true), isP1: true }));
                 this.scene.start('EquipmentMenu');
             }, 1000);
         }));
+        // dev menu
+        if (true) {
+            this.buttons.push(new Button(this, 160 + GAME_WIDTH / 2, GAME_HEIGHT * 0.7, 128, 32, 'Balancing', 20, () => {
+                console.log(`running balancing...`);
+                heroBalancing();
+            }, 'Run a balancing test (DEV ONLY)'));
+            this.buttons.push(new Button(this, 160 + GAME_WIDTH / 2, GAME_HEIGHT * 0.85, 128, 32, 'Practice (P2)', 14, () => {
+                this.setStatusText('Entering mocked test arena (as P2)...');
+                setTimeout(() => {
+                    this.scene.remove('EquipmentMenu');
+                    this.scene.add('EquipmentMenu', new EquipmentMenu({ api: new MockPVPArenaAPI(false), isP1: false }));
+                    this.scene.start('EquipmentMenu');
+                }, 1000);
+            }, 'Play a match against a local computer AI (DEV ONLY - as player 2)'));
+        }
 
         createHeroAnims(this);
     }
