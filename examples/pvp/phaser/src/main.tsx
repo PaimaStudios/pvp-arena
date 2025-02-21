@@ -58,7 +58,7 @@ export function fontStyle(fontSize: number, extra?: Phaser.Types.GameObjects.Tex
         ...extra,
         fontSize: fontSize * 2,
         fontFamily: 'yana',
-        color: 'white'
+        color: '#f5f5ed'//'white'
     };
 }
 
@@ -102,6 +102,13 @@ export function safeJSONString(obj: object): string {
         return str;
     }
     return JSON.stringify(obj);
+}
+
+export function rootObject(obj: Phaser.GameObjects.GameObject & Phaser.GameObjects.Components.Transform): Phaser.GameObjects.Components.Transform {
+    while (obj.parentContainer != undefined) {
+        obj = obj.parentContainer;
+    }
+    return obj;
 }
 
 export enum MatchState {
