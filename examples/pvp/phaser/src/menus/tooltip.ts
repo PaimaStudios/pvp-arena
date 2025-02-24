@@ -65,7 +65,7 @@ export type TooltipOptions = {
     clickHighlight?: Phaser.Math.Vector2,
 };
 
-export function makeTooltip(scene: Phaser.Scene, x: number, y: number, message: string | string[], options?: TooltipOptions) {
+export function makeTooltip(scene: Phaser.Scene, x: number, y: number, message: string | string[], options?: TooltipOptions): Tooltip | undefined {
     console.log(`Tooltip(${message})`);
     // TODO: need separate key or is by message enough?
     if (typeof message == 'string') {
@@ -77,4 +77,5 @@ export function makeTooltip(scene: Phaser.Scene, x: number, y: number, message: 
         scene.add.existing(tooltip);
         return tooltip;
     }
+    return undefined;
 }

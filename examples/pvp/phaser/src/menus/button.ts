@@ -14,7 +14,7 @@ export class Button extends Phaser.GameObjects.Container {
         this.bgOver = scene.add.nineslice(0, 0, 'stone_button_over', undefined, w + 4, h + 4, 8, 8, 8, 8);
         this.bgOver.visible = false;
         this.add(this.bgOver);
-        this.text = scene.add.text(0, 0, text, fontStyle(fontSize)).setOrigin(0.5, 0.65)
+        this.text = scene.add.text(0, 0, text, fontStyle(fontSize, { wordWrap: { width: w - 8 } })).setOrigin(0.5, 0.65)
         this.add(this.text);
 
         this.setSize(w, h);

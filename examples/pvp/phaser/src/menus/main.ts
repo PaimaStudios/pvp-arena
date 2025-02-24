@@ -6,6 +6,8 @@ import { EquipmentMenu } from './equipment';
 import { Button } from './button';
 import { HeroAnimationController, createHeroAnims, generateRandomHero } from '../battle/hero';
 import { ARMOR, ITEM } from '@midnight-ntwrk/pvp-contract';
+import { LobbyMenu } from './lobby';
+import { makeTooltip } from './tooltip';
 
 
 export class MainMenu extends Phaser.Scene {
@@ -89,35 +91,11 @@ export class MainMenu extends Phaser.Scene {
         // this.add.text(GAME_WIDTH / 2 + 2, GAME_HEIGHT / 4 + 2, 'PVP ARENA', {fontSize: 64, color: 'black'}).setOrigin(0.5, 0.5);
         // this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 4, 'PVP ARENA', {fontSize: 64, color: 'white'}).setOrigin(0.5, 0.5);
         this.text = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.65, '', fontStyle(12)).setOrigin(0.5, 0.65).setVisible(false);
-        this.buttons.push(new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.55, 128, 32, 'Create', 20, () => {
-            this.setStatusText('Creating match, please wait...');
-            this.deployProvider.create().then((api) => {
-                console.log('====================\napi done from creating\n===============');
-                console.log(`contract address: ${api.deployedContractAddress}`);
-                navigator.clipboard.writeText(api.deployedContractAddress);
-                this.scene.remove('EquipmentMenu');
-                const equipMenu = new EquipmentMenu({ api, isP1: true });
-                this.scene.add('EquipmentMenu', equipMenu);
-                this.scene.start('EquipmentMenu');
-            });
-        }, 'Create an on-chain match'));
-        this.buttons.push(new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.7, 128, 32, 'Join', 20, () => {
-            const contractAddress = window.prompt('Enter contract address to join')
-            if (contractAddress != null) {
-                this.setStatusText('Joining match, please wait...');
-                this.deployProvider.join(contractAddress).then((api) => {
-                    console.log('=====================\napi done from joining\n======================');
-                    this.scene.remove('EquipmentMenu');
-                    const equipMenu = new EquipmentMenu({ api, isP1: false });
-                    this.scene.add('EquipmentMenu', equipMenu);
-                    this.scene.start('EquipmentMenu');
-                });
-            } else {
-                // TODO: re-enable buttons
-            }
-        }, 'Join an on-chain match'));
+
+        const suggestPracticeTooltip = 'It is recommended to play a practice match first to learn how to play.';
+
         // create an off-chain testing world for testing graphical stuff without having to wait a long time
-        this.buttons.push(new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.85, 128, 32, 'Practice', 20, () => {
+        this.buttons.push(new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.55, 128, 32, 'Practice', 20, () => {
             this.setStatusText('Entering mocked test arena...');
             setTimeout(() => {
                 this.scene.remove('EquipmentMenu');
@@ -125,6 +103,27 @@ export class MainMenu extends Phaser.Scene {
                 this.scene.start('EquipmentMenu');
             }, 1000);
         }, 'Play a match against a local computer AI'));
+        this.buttons.push(new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.7, 128, 32, 'Join', 20, () => {
+            if (makeTooltip(this, GAME_WIDTH / 2, GAME_HEIGHT / 4, suggestPracticeTooltip) == undefined) {
+                this.scene.remove('LobbyMenu');
+                this.scene.add('LobbyMenu', new LobbyMenu(this.deployProvider));
+                this.scene.start('LobbyMenu');
+            }
+        }, 'Join an on-chain match'));
+        this.buttons.push(new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.85, 128, 32, 'Create', 20, () => {
+            if (makeTooltip(this, GAME_WIDTH / 2, GAME_HEIGHT / 4, suggestPracticeTooltip) == undefined) {
+                this.setStatusText('Creating match, please wait...');
+                this.deployProvider.create().then((api) => {
+                    console.log('====================\napi done from creating\n===============');
+                    console.log(`contract address: ${api.deployedContractAddress}`);
+                    navigator.clipboard.writeText(api.deployedContractAddress);
+                    this.scene.remove('EquipmentMenu');
+                    const equipMenu = new EquipmentMenu({ api, isP1: true });
+                    this.scene.add('EquipmentMenu', equipMenu);
+                    this.scene.start('EquipmentMenu');
+                });
+            }
+        }, 'Create an on-chain match'));
 
         createHeroAnims(this);
         this.anims.create({
