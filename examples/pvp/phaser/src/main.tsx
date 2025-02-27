@@ -20,7 +20,7 @@ function getNetworkId(): NetworkId {
         case 'testnet':
             return NetworkId.TestNet;
         default:
-            console.error('Unknown Vite MODE, defaulting to testnet');
+            console.error('Unknown Vite MODE, defaulting to undeployed');
             return NetworkId.Undeployed;
     }
 }

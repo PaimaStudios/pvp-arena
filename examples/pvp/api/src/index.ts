@@ -112,9 +112,9 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
       ],
       // ...and combine them to produce the required derived state.
       (ledgerState, privateState) => {
-        const localSig = pureCircuits.calc_sig(privateState.secretKey);
+        const localPublicKey = pureCircuits.derive_public_key(privateState.secretKey);
 
-        const isP1 = ledgerState.p1Sig === localSig;
+        const isP1 = ledgerState.p1PublicKey === localPublicKey;
 
         return {
           instance: ledgerState.instance,
