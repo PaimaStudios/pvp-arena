@@ -1,7 +1,8 @@
 import { ITEM, RESULT, STANCE, Hero, ARMOR, pureCircuits, GAME_STATE } from '@midnight-ntwrk/pvp-contract';
-import { safeJSONString, MatchState, fontStyle } from '../main';
+import { safeJSONString, MatchState, fontStyle, GAME_WIDTH, rootObject } from '../main';
 import { Arena } from './arena';
 import { MAX_HP, Rank, BloodDrop, DamageText, hpDiv } from '.';
+import { makeTooltip } from '../menus/tooltip';
 
 const MELEE_ATTACK_TIME = 300;
 const BOW_ATTACK_TIME = 1000;
@@ -75,6 +76,9 @@ export class HeroActor extends Phaser.GameObjects.Container {
         this.on('pointerup', () => {
             if (this.arena.matchState == MatchState.WaitingOnPlayer) {
                 arena.sound.play('select');
+                const firstEnemy = this.arena.getAliveHeroes(this.arena.opponentTeam())[0];
+                makeTooltip(this.scene, firstEnemy.x, firstEnemy.y - 96, 'Click on an enemy gladiator to target them.', { clickHighlight: new Phaser.Math.Vector2(firstEnemy.x, firstEnemy.y) });
+                makeTooltip(this.scene, this.x + 96, this.y + 96, 'Click on the move icons to change stances.', { clickHighlight: new Phaser.Math.Vector2(rootObject(this.left_arrow).x, rootObject(this.left_arrow).y) });
                 if ((this.arena.config.isP1 ? 0 : 1) == this.rank.team) {
                     if (this.select_circle.visible) {
                         this.deselect();
@@ -86,21 +90,26 @@ export class HeroActor extends Phaser.GameObjects.Container {
                     }
                 } else if (arena.selected != undefined) {
                     arena.selected.setTarget(this.rank);
+                    makeTooltip(this.scene, GAME_WIDTH / 2, 100, 'Confirm a target for your other 2 gladiators and commit your move.');
                 }
             }
         });
+        const closerTooltip = 'Moving closer increases the damage you deal, but also increases the damage you receive.';
+        const furtherTooltip = 'Moving away decreases the damage you receive, but also decreases the damage you deal.'
         this.left_arrow.on('pointerup', () => {
             arena.sound.play('select');
             const leftStance = this.leftStance()!;
             // toggle to undo moving if already in this stance
             this.nextStance = this.nextStance == leftStance ? this.stance : leftStance;
             this.updateNextStanceArrow();
+            makeTooltip(this.scene, GAME_WIDTH / 2, 100, this.rank.team == 0 ? furtherTooltip : closerTooltip);
         });
         this.right_arrow.on('pointerup', () => {
             arena.sound.play('select');
             const rightStance = this.rightStance()!;
             this.nextStance = this.nextStance == rightStance ? this.stance : rightStance;
             this.updateNextStanceArrow();
+            makeTooltip(this.scene, GAME_WIDTH / 2, 100, this.rank.team == 0 ? closerTooltip : furtherTooltip);
         });
     }
 

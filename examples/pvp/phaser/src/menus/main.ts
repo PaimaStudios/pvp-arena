@@ -58,6 +58,7 @@ export class MainMenu extends Phaser.Scene {
 
         this.load.image('arrow_move', 'arrow_move.png');
         this.load.image('arrow_attack', 'arrow_attack4.png');
+        this.load.spritesheet('click_here', 'click_here.png', { frameWidth: 32, frameHeight: 32 });
 
         this.load.spritesheet('hero_body_idle', 'hero_body_idle.png', { frameWidth: 48, frameHeight: 64 });
         this.load.spritesheet('hero_arm_r_idle', 'hero_arm_r_idle.png', { frameWidth: 48, frameHeight: 64 });
@@ -100,7 +101,7 @@ export class MainMenu extends Phaser.Scene {
                 this.scene.add('EquipmentMenu', equipMenu);
                 this.scene.start('EquipmentMenu');
             });
-        }));
+        }, 'Create an on-chain match'));
         this.buttons.push(new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.7, 128, 32, 'Join', 20, () => {
             const contractAddress = window.prompt('Enter contract address to join')
             if (contractAddress != null) {
@@ -115,7 +116,7 @@ export class MainMenu extends Phaser.Scene {
             } else {
                 // TODO: re-enable buttons
             }
-        }));
+        }, 'Join an on-chain match'));
         // create an off-chain testing world for testing graphical stuff without having to wait a long time
         this.buttons.push(new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.85, 128, 32, 'Practice', 20, () => {
             this.setStatusText('Entering mocked test arena...');
@@ -124,7 +125,7 @@ export class MainMenu extends Phaser.Scene {
                 this.scene.add('EquipmentMenu', new EquipmentMenu({ api: new MockPVPArenaAPI(true), isP1: true }));
                 this.scene.start('EquipmentMenu');
             }, 1000);
-        }));
+        }, 'Play a match against a local computer AI'));
         // dev menu
         // TODO: how to load the .env.testnet file? I can't access the VITE env variables to check this
         if (import.meta.env.MODE == 'undeployed') {
@@ -145,6 +146,11 @@ export class MainMenu extends Phaser.Scene {
         }
 
         createHeroAnims(this);
+        this.anims.create({
+            key: 'click_here',
+            frames: [0, 1, 2, 3].map((i) => { return { frame: i, key: 'click_here' }; }),
+            duration: 1000,
+        });
     }
 
     private setStatusText(text: string) {
