@@ -6,7 +6,7 @@ import { EquipmentMenu } from './equipment';
 import { Button } from './button';
 import { HeroAnimationController, createHeroAnims, generateRandomHero } from '../battle/hero';
 import { ARMOR, ITEM } from '@midnight-ntwrk/pvp-contract';
-import { heroBalancing } from '../balancing';
+import { BalancingTest, heroBalancing } from '../balancing';
 
 
 export class MainMenu extends Phaser.Scene {
@@ -126,10 +126,13 @@ export class MainMenu extends Phaser.Scene {
             }, 1000);
         }));
         // dev menu
-        if (true) {
+        // TODO: how to load the .env.testnet file? I can't access the VITE env variables to check this
+        if (import.meta.env.MODE == 'undeployed') {
+            this.add.text(160 + GAME_WIDTH / 2, GAME_HEIGHT * 0.55, 'Dev Menu', fontStyle(12)).setOrigin(0.5, 0.65);
             this.buttons.push(new Button(this, 160 + GAME_WIDTH / 2, GAME_HEIGHT * 0.7, 128, 32, 'Balancing', 20, () => {
-                console.log(`running balancing...`);
-                heroBalancing();
+                //this.scene.remove('BalancingTest');
+                this.scene.add('BalancingTest', new BalancingTest());
+                this.scene.start('BalancingTest');
             }, 'Run a balancing test (DEV ONLY)'));
             this.buttons.push(new Button(this, 160 + GAME_WIDTH / 2, GAME_HEIGHT * 0.85, 128, 32, 'Practice (P2)', 14, () => {
                 this.setStatusText('Entering mocked test arena (as P2)...');

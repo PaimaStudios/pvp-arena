@@ -5,7 +5,7 @@ export class Button extends Phaser.GameObjects.Container {
     bgOver: Phaser.GameObjects.NineSlice;
     text: Phaser.GameObjects.Text;
 
-    constructor(scene: Phaser.Scene, x: number, y: number, w: number, h: number, text: string, fontSize: number, onClick: () => void) {
+    constructor(scene: Phaser.Scene, x: number, y: number, w: number, h: number, text: string, fontSize: number, onClick: () => void, helpText?: string) {
         super(scene, x, y);
         this.bg = scene.add.nineslice(0, 0, 'stone_button', undefined, w, h, 8, 8, 8, 8);
         this.add(this.bg);
