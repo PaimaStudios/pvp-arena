@@ -11,7 +11,19 @@ import * as pino from 'pino';
 // TODO: get this properly? it's undefined if i uncomment this
 //const networkId = import.meta.env.VITE_NETWORK_ID as NetworkId;
 //const networkId = NetworkId.TestNet;
-const networkId = NetworkId.Undeployed;
+const networkId = getNetworkId();
+
+function getNetworkId(): NetworkId {
+    switch (import.meta.env.MODE) {
+        case 'undeployed':
+            return NetworkId.Undeployed;
+        case 'testnet':
+            return NetworkId.TestNet;
+        default:
+            console.error('Unknown Vite MODE, defaulting to testnet');
+            return NetworkId.Undeployed;
+    }
+}
 // Ensure that the network IDs are set within the Midnight libraries.
 setNetworkId(networkId);
 export const logger = pino.pino({
@@ -19,6 +31,7 @@ export const logger = pino.pino({
 });
 console.log(`networkId = ${networkId}`);
 
+console.log(`VITE: [\n${JSON.stringify(import.meta.env)}\n]`);
 // phaser part
 
 import 'phaser';
