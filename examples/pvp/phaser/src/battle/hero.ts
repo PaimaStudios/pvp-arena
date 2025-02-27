@@ -468,13 +468,15 @@ function closerStance(stance: STANCE): STANCE | undefined {
 }
 
 export function generateRandomHero(): Hero {
-    // we want at least one weapon, so make one of lhs or rhs start at 1 instead of 0
-    const preferRhs = Phaser.Math.Between(0, 1);
-    const rhs = Phaser.Math.Between(preferRhs, 5) as ITEM;
-    const lhs = Phaser.Math.Between(preferRhs == 0 ? 1 : 0, 5) as ITEM;
+    // avoid useless things like double shields, unarmed, etc
+    const rightHanded = Phaser.Math.Between(0, 1) == 0;
+    const mainWeapons = [ITEM.axe, ITEM.bow, ITEM.spear, ITEM.sword];
+    const mainWeapon = mainWeapons[Phaser.Math.Between(0, 3)];
+    const secondaryWeapons = [ITEM.axe, ITEM.shield, ITEM.spear, ITEM.sword];
+    const secondaryWeapon = mainWeapon == ITEM.bow ? ITEM.nothing : secondaryWeapons[Phaser.Math.Between(0, 3)];
     return {
-        lhs: rhs == ITEM.bow ? ITEM.nothing : lhs,
-        rhs: (lhs == ITEM.bow && rhs != ITEM.bow) ? ITEM.nothing : rhs,
+        lhs: rightHanded ? secondaryWeapon : mainWeapon,
+        rhs: rightHanded ? mainWeapon : secondaryWeapon,
         helmet: Phaser.Math.Between(0, 2) as ARMOR,
         chest: Phaser.Math.Between(0, 2) as ARMOR,
         skirt: Phaser.Math.Between(0, 2) as ARMOR,
@@ -809,7 +811,6 @@ export function createHeroAnims(scene: Phaser.Scene) {
 }
 
 export function addHeroImages(container: Phaser.GameObjects.Container, hero: Hero, isP2: boolean) {
-    console.log(`addHeroImages(${safeJSONString(hero)});`);
     if (hero.lhs == ITEM.bow || hero.rhs == ITEM.bow) {
         container.add(container.scene.add.image(0, 0, 'hero_quiver').setFlipX(isP2));
     }
