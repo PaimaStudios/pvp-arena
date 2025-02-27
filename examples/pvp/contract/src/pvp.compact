@@ -188,9 +188,9 @@ struct MoveHasher {
 
 export circuit armor_crush_def(armor: ARMOR): Uint<32> {
     if (armor == ARMOR.metal) {
-        return 3;
+        return 4;
     } else if (armor == ARMOR.leather) {
-        return 5;
+        return 6;
     } else {
         return 0;
     }
@@ -198,9 +198,9 @@ export circuit armor_crush_def(armor: ARMOR): Uint<32> {
 
 export circuit armor_pierce_def(armor: ARMOR): Uint<32> {
     if (armor == ARMOR.metal) {
-        return 4;
+        return 8;
     } else if (armor == ARMOR.leather) {
-        return 2;
+        return 3;
     } else {
         return 0;
     }
@@ -208,9 +208,9 @@ export circuit armor_pierce_def(armor: ARMOR): Uint<32> {
 
 export circuit armor_weight(armor: ARMOR): Uint<32> {
     if (armor == ARMOR.metal) {
-        return 5;
+        return 7;
     } else if (armor == ARMOR.leather) {
-        return 2;
+        return 3;
     } else {
         return 0;
     }
@@ -218,13 +218,13 @@ export circuit armor_weight(armor: ARMOR): Uint<32> {
 
 export circuit item_pierce_dmg(item: ITEM): Uint<32> {
     if (item == ITEM.axe) {
-        return 10;
+        return 5;
     } else if (item == ITEM.sword) {
-        return 20;
+        return 9;
     } else if (item == ITEM.spear) {
-        return 30;
+        return 20;
     } else if (item == ITEM.bow) {
-        return 40;
+        return 42;
     } else {
         return 0;
     }
@@ -232,22 +232,24 @@ export circuit item_pierce_dmg(item: ITEM): Uint<32> {
 
 export circuit item_crush_dmg(item: ITEM): Uint<32> {
     if (item == ITEM.axe) {
-        return 25;
+        return 17;
     } else if (item == ITEM.sword) {
-        return 10;
-    } else if (item == ITEM.spear) {
         return 5;
-    } else if (item == ITEM.bow) {
+    } else if (item == ITEM.spear) {
         return 3;
+    } else if (item == ITEM.bow) {
+        return 1;
     }
-    return 0;
+    return 2;
 }
 
 export circuit item_crush_def(item: ITEM): Uint<32> {
     if (item == ITEM.shield) {
-        return 20;
+        return 35;
     } else if (item == ITEM.sword) {
-        return 5;
+        return 7;
+    } else if (item == ITEM.spear) {
+        return 9;
     } else {
         return 0;
     }
@@ -255,8 +257,8 @@ export circuit item_crush_def(item: ITEM): Uint<32> {
 
 export circuit item_pierce_def(item: ITEM): Uint<32> {
     if (item == ITEM.shield) {
-        return 30;
-    } else if (item == ITEM.sword) {
+        return 38;
+    } else if (item == ITEM.spear) {
         return 5;
     } else {
         return 0;
@@ -264,16 +266,19 @@ export circuit item_pierce_def(item: ITEM): Uint<32> {
 }
 
 export circuit item_dex_bonus(item: ITEM): Uint<32> {
-    if (item == ITEM.axe) {
-        return 3;
-    } else if (item == ITEM.sword) {
-        return 15;
-    } else if (item == ITEM.shield) {
-        return 0;
+    if (item == ITEM.sword) {
+        return 12;
+    } else if (item == ITEM.nothing) {
+        return 18;
+    } else if (item == ITEM.spear) {
+        return 1;
     } else if (item == ITEM.bow) {
-        return 35;
+        // bows get a bonus from the other hand's ITEM.nothing
+        return 0;
+    } else if (item == ITEM.axe) {
+        return 6;
     }
-    return 5;
+    return 9;
 }
 
 pure circuit stance_damage_modifier(stance: STANCE): Uint<32> {
@@ -288,7 +293,7 @@ pure circuit stance_damage_modifier(stance: STANCE): Uint<32> {
 }
 
 export pure circuit calc_item_dmg_against(stats: TotalStats, stance: STANCE, enemy_stats: TotalStats, enemy_stance: STANCE): Uint<32> {
-    return (((100 - enemy_stats.crush_def) * stats.crush_dmg + (100 - enemy_stats.pierce_def) * stats.pierce_dmg + (40 + enemy_stats.weight - stats.weight) * stats.dex_bonus) * (stance_damage_modifier(stance) + stance_damage_modifier(enemy_stance))) as Uint<32>;
+    return (((100 - enemy_stats.crush_def) * stats.crush_dmg + (100 - enemy_stats.pierce_def) * stats.pierce_dmg + (50 + enemy_stats.weight - stats.weight) * stats.dex_bonus) * (stance_damage_modifier(stance) + stance_damage_modifier(enemy_stance))) as Uint<32>;
 }
 
 export pure circuit calc_sig(sk: Bytes<32>, inst: Field): Field {
@@ -310,10 +315,10 @@ export circuit p2_select_first_heroes(all_p2_heroes: Vector<2, HeroHack>): Void 
     p2_stats = [calc_stats(p2_heroes[0].value), calc_stats(p2_heroes[1].value), p2_stats[2]];
     game_state = GAME_STATE.p1_selecting_last_heroes;
 
-    base_damage_cache_p1_0_0 = ((100 - p2_stats[0].crush_def) * p1_stats[0].crush_dmg + (100 - p2_stats[0].pierce_def) * p1_stats[0].pierce_dmg + (40 + p2_stats[0].weight - p1_stats[0].weight) * p1_stats[0].dex_bonus) as Uint<32>;
-    base_damage_cache_p1_0_1 = ((100 - p2_stats[1].crush_def) * p1_stats[0].crush_dmg + (100 - p2_stats[1].pierce_def) * p1_stats[0].pierce_dmg + (40 + p2_stats[1].weight - p1_stats[0].weight) * p1_stats[0].dex_bonus) as Uint<32>;
-    base_damage_cache_p2_0_0 = ((100 - p1_stats[0].crush_def) * p2_stats[0].crush_dmg + (100 - p1_stats[0].pierce_def) * p2_stats[0].pierce_dmg + (40 + p1_stats[0].weight - p2_stats[0].weight) * p2_stats[0].dex_bonus) as Uint<32>;
-    base_damage_cache_p2_1_0 = ((100 - p1_stats[0].crush_def) * p2_stats[1].crush_dmg + (100 - p1_stats[0].pierce_def) * p2_stats[1].pierce_dmg + (40 + p1_stats[0].weight - p2_stats[1].weight) * p2_stats[1].dex_bonus) as Uint<32>;
+    base_damage_cache_p1_0_0 = ((100 - p2_stats[0].crush_def) * p1_stats[0].crush_dmg + (100 - p2_stats[0].pierce_def) * p1_stats[0].pierce_dmg + (50 +p2_stats[0].weight - p1_stats[0].weight) * p1_stats[0].dex_bonus) as Uint<32>;
+    base_damage_cache_p1_0_1 = ((100 - p2_stats[1].crush_def) * p1_stats[0].crush_dmg + (100 - p2_stats[1].pierce_def) * p1_stats[0].pierce_dmg + (50 +p2_stats[1].weight - p1_stats[0].weight) * p1_stats[0].dex_bonus) as Uint<32>;
+    base_damage_cache_p2_0_0 = ((100 - p1_stats[0].crush_def) * p2_stats[0].crush_dmg + (100 - p1_stats[0].pierce_def) * p2_stats[0].pierce_dmg + (50 +p1_stats[0].weight - p2_stats[0].weight) * p2_stats[0].dex_bonus) as Uint<32>;
+    base_damage_cache_p2_1_0 = ((100 - p1_stats[0].crush_def) * p2_stats[1].crush_dmg + (100 - p1_stats[0].pierce_def) * p2_stats[1].pierce_dmg + (50 +p1_stats[0].weight - p2_stats[1].weight) * p2_stats[1].dex_bonus) as Uint<32>;
 }
 
 export circuit p1_select_last_heroes(last_p1_heroes: Vector<2, HeroHack>): Void {
@@ -323,15 +328,15 @@ export circuit p1_select_last_heroes(last_p1_heroes: Vector<2, HeroHack>): Void 
     game_state = GAME_STATE.p2_selecting_last_hero;
 
 
-    base_damage_cache_p1_1_0 = ((100 - p2_stats[0].crush_def) * p1_stats[1].crush_dmg + (100 - p2_stats[0].pierce_def) * p1_stats[1].pierce_dmg + (40 + p2_stats[0].weight - p1_stats[1].weight) * p1_stats[1].dex_bonus) as Uint<32>;
-    base_damage_cache_p1_1_1 = ((100 - p2_stats[1].crush_def) * p1_stats[1].crush_dmg + (100 - p2_stats[1].pierce_def) * p1_stats[1].pierce_dmg + (40 + p2_stats[1].weight - p1_stats[1].weight) * p1_stats[1].dex_bonus) as Uint<32>;
-    base_damage_cache_p1_2_0 = ((100 - p2_stats[0].crush_def) * p1_stats[2].crush_dmg + (100 - p2_stats[0].pierce_def) * p1_stats[2].pierce_dmg + (40 + p2_stats[0].weight - p1_stats[2].weight) * p1_stats[2].dex_bonus) as Uint<32>;
-    base_damage_cache_p1_2_1 = ((100 - p2_stats[1].crush_def) * p1_stats[2].crush_dmg + (100 - p2_stats[1].pierce_def) * p1_stats[2].pierce_dmg + (40 + p2_stats[1].weight - p1_stats[2].weight) * p1_stats[2].dex_bonus) as Uint<32>;
+    base_damage_cache_p1_1_0 = ((100 - p2_stats[0].crush_def) * p1_stats[1].crush_dmg + (100 - p2_stats[0].pierce_def) * p1_stats[1].pierce_dmg + (50 +p2_stats[0].weight - p1_stats[1].weight) * p1_stats[1].dex_bonus) as Uint<32>;
+    base_damage_cache_p1_1_1 = ((100 - p2_stats[1].crush_def) * p1_stats[1].crush_dmg + (100 - p2_stats[1].pierce_def) * p1_stats[1].pierce_dmg + (50 +p2_stats[1].weight - p1_stats[1].weight) * p1_stats[1].dex_bonus) as Uint<32>;
+    base_damage_cache_p1_2_0 = ((100 - p2_stats[0].crush_def) * p1_stats[2].crush_dmg + (100 - p2_stats[0].pierce_def) * p1_stats[2].pierce_dmg + (50 +p2_stats[0].weight - p1_stats[2].weight) * p1_stats[2].dex_bonus) as Uint<32>;
+    base_damage_cache_p1_2_1 = ((100 - p2_stats[1].crush_def) * p1_stats[2].crush_dmg + (100 - p2_stats[1].pierce_def) * p1_stats[2].pierce_dmg + (50 +p2_stats[1].weight - p1_stats[2].weight) * p1_stats[2].dex_bonus) as Uint<32>;
     
-    base_damage_cache_p2_0_2 = ((100 - p1_stats[2].crush_def) * p2_stats[0].crush_dmg + (100 - p1_stats[2].pierce_def) * p2_stats[0].pierce_dmg + (40 + p1_stats[2].weight - p2_stats[0].weight) * p2_stats[0].dex_bonus) as Uint<32>;
-    base_damage_cache_p2_1_2 = ((100 - p1_stats[2].crush_def) * p2_stats[1].crush_dmg + (100 - p1_stats[2].pierce_def) * p2_stats[1].pierce_dmg + (40 + p1_stats[2].weight - p2_stats[1].weight) * p2_stats[1].dex_bonus) as Uint<32>;
-    base_damage_cache_p2_0_1 = ((100 - p1_stats[1].crush_def) * p2_stats[0].crush_dmg + (100 - p1_stats[1].pierce_def) * p2_stats[0].pierce_dmg + (40 + p1_stats[1].weight - p2_stats[0].weight) * p2_stats[0].dex_bonus) as Uint<32>;
-    base_damage_cache_p2_1_1 = ((100 - p1_stats[1].crush_def) * p2_stats[1].crush_dmg + (100 - p1_stats[1].pierce_def) * p2_stats[1].pierce_dmg + (40 + p1_stats[1].weight - p2_stats[1].weight) * p2_stats[1].dex_bonus) as Uint<32>;
+    base_damage_cache_p2_0_2 = ((100 - p1_stats[2].crush_def) * p2_stats[0].crush_dmg + (100 - p1_stats[2].pierce_def) * p2_stats[0].pierce_dmg + (50 +p1_stats[2].weight - p2_stats[0].weight) * p2_stats[0].dex_bonus) as Uint<32>;
+    base_damage_cache_p2_1_2 = ((100 - p1_stats[2].crush_def) * p2_stats[1].crush_dmg + (100 - p1_stats[2].pierce_def) * p2_stats[1].pierce_dmg + (50 +p1_stats[2].weight - p2_stats[1].weight) * p2_stats[1].dex_bonus) as Uint<32>;
+    base_damage_cache_p2_0_1 = ((100 - p1_stats[1].crush_def) * p2_stats[0].crush_dmg + (100 - p1_stats[1].pierce_def) * p2_stats[0].pierce_dmg + (50 +p1_stats[1].weight - p2_stats[0].weight) * p2_stats[0].dex_bonus) as Uint<32>;
+    base_damage_cache_p2_1_1 = ((100 - p1_stats[1].crush_def) * p2_stats[1].crush_dmg + (100 - p1_stats[1].pierce_def) * p2_stats[1].pierce_dmg + (50 +p1_stats[1].weight - p2_stats[1].weight) * p2_stats[1].dex_bonus) as Uint<32>;
 }
 
 export circuit p2_select_last_hero(last_hero: HeroHack): Void {
@@ -343,14 +348,14 @@ export circuit p2_select_last_hero(last_hero: HeroHack): Void {
     game_state = GAME_STATE.p1_commit;
 
 
-    base_damage_cache_p1_0_2 = ((100 - p2_stats[2].crush_def) * p1_stats[0].crush_dmg + (100 - p2_stats[2].pierce_def) * p1_stats[0].pierce_dmg + (40 + p2_stats[2].weight - p1_stats[0].weight) * p1_stats[0].dex_bonus) as Uint<32>;
-    base_damage_cache_p1_1_2 = ((100 - p2_stats[2].crush_def) * p1_stats[1].crush_dmg + (100 - p2_stats[2].pierce_def) * p1_stats[1].pierce_dmg + (40 + p2_stats[2].weight - p1_stats[1].weight) * p1_stats[1].dex_bonus) as Uint<32>;
-    base_damage_cache_p1_2_2 = ((100 - p2_stats[2].crush_def) * p1_stats[2].crush_dmg + (100 - p2_stats[2].pierce_def) * p1_stats[2].pierce_dmg + (40 + p2_stats[2].weight - p1_stats[2].weight) * p1_stats[2].dex_bonus) as Uint<32>;
+    base_damage_cache_p1_0_2 = ((100 - p2_stats[2].crush_def) * p1_stats[0].crush_dmg + (100 - p2_stats[2].pierce_def) * p1_stats[0].pierce_dmg + (50 +p2_stats[2].weight - p1_stats[0].weight) * p1_stats[0].dex_bonus) as Uint<32>;
+    base_damage_cache_p1_1_2 = ((100 - p2_stats[2].crush_def) * p1_stats[1].crush_dmg + (100 - p2_stats[2].pierce_def) * p1_stats[1].pierce_dmg + (50 +p2_stats[2].weight - p1_stats[1].weight) * p1_stats[1].dex_bonus) as Uint<32>;
+    base_damage_cache_p1_2_2 = ((100 - p2_stats[2].crush_def) * p1_stats[2].crush_dmg + (100 - p2_stats[2].pierce_def) * p1_stats[2].pierce_dmg + (50 +p2_stats[2].weight - p1_stats[2].weight) * p1_stats[2].dex_bonus) as Uint<32>;
     
     
-    base_damage_cache_p2_2_0 = ((100 - p1_stats[0].crush_def) * p2_stats[2].crush_dmg + (100 - p1_stats[0].pierce_def) * p2_stats[2].pierce_dmg + (40 + p1_stats[0].weight - p2_stats[2].weight) * p2_stats[2].dex_bonus) as Uint<32>;
-    base_damage_cache_p2_2_1 = ((100 - p1_stats[1].crush_def) * p2_stats[2].crush_dmg + (100 - p1_stats[1].pierce_def) * p2_stats[2].pierce_dmg + (40 + p1_stats[1].weight - p2_stats[2].weight) * p2_stats[2].dex_bonus) as Uint<32>;
-    base_damage_cache_p2_2_2 = ((100 - p1_stats[2].crush_def) * p2_stats[2].crush_dmg + (100 - p1_stats[2].pierce_def) * p2_stats[2].pierce_dmg + (40 + p1_stats[2].weight - p2_stats[2].weight) * p2_stats[2].dex_bonus) as Uint<32>;
+    base_damage_cache_p2_2_0 = ((100 - p1_stats[0].crush_def) * p2_stats[2].crush_dmg + (100 - p1_stats[0].pierce_def) * p2_stats[2].pierce_dmg + (50 +p1_stats[0].weight - p2_stats[2].weight) * p2_stats[2].dex_bonus) as Uint<32>;
+    base_damage_cache_p2_2_1 = ((100 - p1_stats[1].crush_def) * p2_stats[2].crush_dmg + (100 - p1_stats[1].pierce_def) * p2_stats[2].pierce_dmg + (50 +p1_stats[1].weight - p2_stats[2].weight) * p2_stats[2].dex_bonus) as Uint<32>;
+    base_damage_cache_p2_2_2 = ((100 - p1_stats[2].crush_def) * p2_stats[2].crush_dmg + (100 - p1_stats[2].pierce_def) * p2_stats[2].pierce_dmg + (50 +p1_stats[2].weight - p2_stats[2].weight) * p2_stats[2].dex_bonus) as Uint<32>;
 }
 
 witness player_commands(): Vector<3, Uint<32>>;
