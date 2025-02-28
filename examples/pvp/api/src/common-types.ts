@@ -63,7 +63,6 @@ export type DeployedPVPArenaContract = FoundContract<PVPArenaPrivateState, PVPAr
  * A type that represents the derived combination of public (or ledger), and private state.
  */
 export type PVPArenaDerivedState = {
-  readonly instance: bigint;
   readonly p1Heroes: Hero[];
   readonly p1Cmds: bigint[] | undefined;
   readonly p1Dmg: bigint[];

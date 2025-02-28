@@ -23,7 +23,6 @@ export class MockPVPArenaAPI implements DeployedPVPArenaAPI {
             this.subscriber = subscriber;
         });
         this.mockState = {
-            instance: BigInt(0),
             round: BigInt(0),
             state: GAME_STATE.p1_selecting_first_hero,
             p1Heroes: [],

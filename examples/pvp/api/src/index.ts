@@ -117,7 +117,6 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
         const isP1 = ledgerState.p1PublicKey === localPublicKey;
 
         return {
-          instance: ledgerState.instance,
           round: ledgerState.round,
           state: ledgerState.gameState,
           p1Heroes: ledgerState.p1Heroes.filter((h) => h.is_some).map((h) => h.value),
@@ -243,7 +242,8 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
       state!.commands = commands;
       state!.stances = stances;
       this.providers.privateStateProvider.set('pvpPrivateState', state);
-      txData = await this.deployedContract.callTx.p1_commit_commands();
+      const nonce = utils.randomBytes(32);
+      txData = await this.deployedContract.callTx.p1_commit_commands(nonce);
     } catch (err) {
       console.log(`p1Cmd failed: ${JSON.stringify(err)}`);
       throw err;
