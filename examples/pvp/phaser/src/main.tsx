@@ -42,6 +42,7 @@ import { extend } from 'fp-ts/lib/pipeable';
 import { Subscriber, Observable } from 'rxjs';
 
 import { MainMenu } from './menus/main';
+import { BattleConfig } from './battle/arena';
 
 const COLOR_MAIN = 0x4e342e;
 const COLOR_LIGHT = 0x7b5e57;

@@ -46,6 +46,68 @@ function hackToHero(hack: HeroHack): Hero {
   return pureCircuits.hack_to_hero(hack);
 }
 
+function randIntBetween(min: number, max: number): number {
+  return min + Math.floor(Math.random() * (max - min + 0.1));
+}
+
+export function safeJSONString(obj: object): string {
+  // hacky but just doing it manually since otherwise: 'string' can't be used to index type '{}'
+  // let newObj = {}
+  // for (let [key, val] of Object.entries(obj)) {
+  //     if (typeof val == 'bigint') {
+  //         newObj[key] = Number(val);
+  //     } else {
+  //         newObj[key] = val;
+  //     }
+  // }
+  // return JSON.stringify(newObj);
+  if (typeof obj == 'bigint') {
+      return Number(obj).toString();
+  } else if (Array.isArray(obj)) {
+      let str = '[';
+      let innerFirst = true;
+      for (let i = 0; i < obj.length; ++i) {
+          if (!innerFirst) {
+              str += ', ';
+          }
+          innerFirst = false;
+          str += safeJSONString(obj[i]);
+      }
+      str += ']';
+      return str;
+  } else if (typeof obj == 'object') {
+      let str = '{';
+      let first = true;
+      for (let [key, val] of Object.entries(obj)) {
+          if (!first) {
+              str += ', ';
+          }
+          first = false;
+          str += `"${key}": ${safeJSONString(val)}`;
+      }
+      str += '}';
+      return str;
+  }
+  return JSON.stringify(obj);
+}
+
+export function generateRandomHero(): Hero {
+  // avoid useless things like double shields, unarmed, etc
+  const rightHanded = randIntBetween(0, 1) == 0;
+  const mainWeapons = [ITEM.axe, ITEM.bow, ITEM.spear, ITEM.sword];
+  const mainWeapon = mainWeapons[randIntBetween(0, 3)];
+  const secondaryWeapons = [ITEM.axe, ITEM.shield, ITEM.spear, ITEM.sword];
+  const secondaryWeapon = mainWeapon == ITEM.bow ? ITEM.nothing : secondaryWeapons[randIntBetween(0, 3)];
+  return {
+      lhs: rightHanded ? secondaryWeapon : mainWeapon,
+      rhs: rightHanded ? mainWeapon : secondaryWeapon,
+      helmet: randIntBetween(0, 2) as ARMOR,
+      chest: randIntBetween(0, 2) as ARMOR,
+      skirt: randIntBetween(0, 2) as ARMOR,
+      greaves: randIntBetween(0, 2) as ARMOR,
+  };
+}
+
 /**
  * An API for a deployed bulletin board.
  */
@@ -84,6 +146,7 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
   private constructor(
     public readonly deployedContract: DeployedPVPArenaContract,
     private readonly providers: PVPArenaProviders,
+    private readonly isPractice: boolean,
     private readonly logger?: Logger,
   ) {
     this.deployedContractAddress = deployedContract.deployTxData.public.contractAddress;
@@ -117,20 +180,64 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
         const isP1 = ledgerState.p1PublicKey === localPublicKey;
 
         return {
+          assert0: ledgerState.assert0,
+          assert1: ledgerState.assert1,
+          assert2: ledgerState.assert2,
           round: ledgerState.round,
           state: ledgerState.gameState,
           p1Heroes: ledgerState.p1Heroes.filter((h) => h.is_some).map((h) => h.value),
           p1Cmds: ledgerState.p1Cmds.is_some ? ledgerState.p1Cmds.value : undefined,
           p1Dmg: [ledgerState.p1Dmg0, ledgerState.p1Dmg1, ledgerState.p1Dmg2],
+          p1Alive: [ledgerState.p1Alive0, ledgerState.p1Alive1, ledgerState.p1Alive2],
           p1Stances: ledgerState.p1Stances,
           isP1,
           p2Heroes: ledgerState.p2Heroes.filter((h) => h.is_some).map((h) => h.value),
           p2Cmds: ledgerState.p2Cmds.is_some ? ledgerState.p2Cmds.value : undefined,
           p2Dmg: [ledgerState.p2Dmg0, ledgerState.p2Dmg1, ledgerState.p2Dmg2],
+          p2Alive: [ledgerState.p2Alive0, ledgerState.p2Alive1, ledgerState.p2Alive2],
           p2Stances: ledgerState.p2Stances,
         };
       },
     );
+
+    // in practice mode we locally run everything in the mockapi but ran on-chain
+    if (isPractice) {
+      this.state$.subscribe((state) => {
+        switch (state.state) {
+          case GAME_STATE.p2_selecting_first_heroes:
+            this.p2_select_first_heroes([generateRandomHero(), generateRandomHero()]);
+            break;
+          case GAME_STATE.p2_selecting_last_hero:
+            this.p2_select_last_hero(generateRandomHero());
+            break;
+          case GAME_STATE.p2_commit_reveal:
+            const commands = [0, 1, 2].map((i) => {
+              if (state.p2Alive[i]) {
+                  const availableTargets = [0, 1, 2].filter((j) => state.p1Alive[j]);
+                  return BigInt(availableTargets[randIntBetween(0, availableTargets.length - 1)]);
+              }
+              // this should never be read anyway
+              return BigInt(3);
+            });
+            const stances = state.p2Stances.map((stance, i) => {
+              if (state.p2Alive[i]) {
+                  switch (stance) {
+                      case STANCE.defensive:
+                          return randIntBetween(0, 1) as STANCE;
+                      case STANCE.aggressive:
+                          return randIntBetween(1, 2) as STANCE;
+                      case STANCE.neutral:
+                          return randIntBetween(0, 2) as STANCE;
+                  }
+              }
+              return stance;
+            });
+            console.log(`AI MOVE! STATE: ${safeJSONString(state)}\n cmds = ${safeJSONString(commands)}`);
+            this.p2Commit(commands, stances);
+          break;
+        }
+      });
+    }
   }
 
   /**
@@ -313,7 +420,7 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
    * @returns A `Promise` that resolves with a {@link PVPArenaAPI} instance that manages the newly deployed
    * {@link DeployedPVPArenaContract}; or rejects with a deployment error.
    */
-  static async deploy(providers: PVPArenaProviders, logger?: Logger): Promise<PVPArenaAPI> {
+  static async deploy(providers: PVPArenaProviders, isPractice: boolean, logger?: Logger): Promise<PVPArenaAPI> {
     logger?.info('deployContract');
 
     // EXERCISE 5: FILL IN THE CORRECT ARGUMENTS TO deployContract
@@ -330,7 +437,7 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
       },
     });
 
-    return new PVPArenaAPI(deployedPVPArenaContract, providers, logger);
+    return new PVPArenaAPI(deployedPVPArenaContract, providers, isPractice, logger);
   }
 
   /**
@@ -362,7 +469,7 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
       },
     });
 
-    return new PVPArenaAPI(deployedPVPArenaContract, providers, logger);
+    return new PVPArenaAPI(deployedPVPArenaContract, providers, false, logger);
   }
 
   private static async getPrivateState(providers: PVPArenaProviders): Promise<PVPArenaPrivateState> {
