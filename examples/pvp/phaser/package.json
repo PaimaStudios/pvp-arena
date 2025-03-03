@@ -19,7 +19,7 @@
   "dependencies": {
     "@midnight-ntwrk/pvp-api": "workspace:*",
     "@midnight-ntwrk/pvp-contract": "workspace:*",
-    "@paima/midnight-vm-bindings": "0.2.2",
+    "@paima/midnight-vm-bindings": "0.2.3",
     "@vitejs/plugin-react": "^4.3.4",
     "buffer": "^6.0.3",
     "phaser": "3.87.0",
