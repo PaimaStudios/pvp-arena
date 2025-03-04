@@ -23,9 +23,17 @@ export class MockPVPArenaAPI implements DeployedPVPArenaAPI {
             this.subscriber = subscriber;
         });
         this.mockState = {
+            assertsFailed: false,
+            revealMatch: true,
             assert0: [],
             assert1: [],
             assert2: [],
+            debugP1CommitMoves: [],
+            debugP1CommitStances: [],
+            debugP1CommitSk: "",
+            debugP1RevealMoves: [],
+            debugP1RevealStances: [],
+            debugP1RevealSk: "",
             round: BigInt(0),
             state: GAME_STATE.p1_selecting_first_hero,
             p1Heroes: [],
@@ -175,11 +183,11 @@ export class MockPVPArenaAPI implements DeployedPVPArenaAPI {
             };
             this.subscriber?.next(this.mockState);
             // mock p1 reveal
-            this.p1Reveal();
+            this.p1Reveal(commands, stances);
         }, MOCK_DELAY);
     }
 
-    async p1Reveal(): Promise<void> {
+    async p1Reveal(commands: bigint[], stances: STANCE[]): Promise<void> {
         setTimeout(() => {
             console.log(`MockState: ${safeJSONString(this.mockState)}`);
             let p1Dmg = this.mockState.p1Dmg;

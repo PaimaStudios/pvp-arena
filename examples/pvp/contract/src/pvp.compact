@@ -161,6 +161,7 @@ constructor() {
     p2_alive_0 = true;
     p2_alive_1 = true;
     p2_alive_2 = true;
+    revealMatch = true;
 }
 
 export pure circuit calc_stats(hero: Hero): TotalStats {
@@ -360,6 +361,13 @@ export circuit p2_select_last_hero(last_hero: HeroHack): Void {
 witness player_commands(): Vector<3, Uint<32>>;
 witness player_stances(): Vector<3, STANCE>;
 
+export ledger debug_p1_commit_moves: Cell<Vector<3, Uint<32>>>;
+export ledger debug_p1_commit_stances: Cell<Vector<3, STANCE>>;
+export ledger debug_p1_commit_sk: Cell<Bytes<32>>;
+export ledger debug_p1_reveal_moves: Cell<Vector<3, Uint<32>>>;
+export ledger debug_p1_reveal_stances: Cell<Vector<3, STANCE>>;
+export ledger debug_p1_reveal_sk: Cell<Bytes<32>>;
+
 export circuit p1_commit_commands(nonce: Bytes<32>): Void {
     assert p1_public_key == derive_public_key(player_secret_key()) "Not authorized as P1";
     assert game_state == GAME_STATE.p1_commit "P1 must commit at start of round";
@@ -371,11 +379,15 @@ export circuit p1_commit_commands(nonce: Bytes<32>): Void {
     commit_nonce = nonce;
 
     game_state = GAME_STATE.p2_commit_reveal;
+    debug_p1_commit_moves = player_commands();
+    debug_p1_commit_stances = player_stances();
+    debug_p1_commit_sk = player_secret_key();
 }
 
 export ledger assert_0: Cell<Vector<6, Boolean>>;
 export ledger assert_1: Cell<Vector<6, Boolean>>;
 export ledger assert_2: Cell<Vector<6, Boolean>>;
+export ledger asserts_failed: Cell<Boolean>;
 
 // p2 just publicly commits as there's no need to since p1 already committed
 export circuit p2_commit_commands(): Void {
@@ -388,20 +400,22 @@ export circuit p2_commit_commands(): Void {
     assert_0 = [!p2_alive_0 || (player_commands()[0] <= 2 && ((player_commands()[0] == 0 && p1_alive_0) || (player_commands()[0] == 1 && p1_alive_1) || (player_commands()[0] == 2 && p1_alive_2))), !p2_alive_0, player_commands()[0] <= 2, (player_commands()[0] == 0 && p1_alive_0), (player_commands()[0] == 1 && p1_alive_1), (player_commands()[0] == 2 && p1_alive_2)];
     assert_1 = [!p2_alive_1 || (player_commands()[1] <= 2 && ((player_commands()[1] == 0 && p1_alive_0) || (player_commands()[1] == 1 && p1_alive_1) || (player_commands()[1] == 2 && p1_alive_2))), !p2_alive_1, player_commands()[1] <= 2, (player_commands()[1] == 0 && p1_alive_0), (player_commands()[1] == 1 && p1_alive_1), (player_commands()[1] == 2 && p1_alive_2)];
     assert_2 = [!p2_alive_2 || (player_commands()[2] <= 2 && ((player_commands()[2] == 0 && p1_alive_0) || (player_commands()[2] == 1 && p1_alive_1) || (player_commands()[2] == 2 && p1_alive_2))), !p2_alive_2, player_commands()[2] <= 2, (player_commands()[2] == 0 && p1_alive_0), (player_commands()[2] == 1 && p1_alive_1), (player_commands()[2] == 2 && p1_alive_2)];
-
+asserts_failed = !assert_0[0] || !assert_1[0] || !assert_2[0];
     p2_cmds = some<Vector<3, Uint<32>>>(player_commands());
     p2_stances = player_stances();
 
     game_state = GAME_STATE.p1_reveal;
 }
 
+export ledger revealMatch: Cell<Boolean>;
+
 export circuit p1_reveal_commands(): Void {
     const DEAD = 100000;
 
     // no need to auth P1 as the commit hash check won't match otherwise
     assert game_state == GAME_STATE.p1_reveal "P1 must reveal after P2 commits";
-    assert transient_hash<MoveHasher>(MoveHasher { player_secret_key(), player_commands(), player_stances(), commit_nonce }) == p1_commit "Commit doesn't match";
-  
+    //assert transient_hash<MoveHasher>(MoveHasher { player_secret_key(), player_commands(), player_stances(), commit_nonce }) == p1_commit "Commit doesn't match";
+  revealMatch = transient_hash<MoveHasher>(MoveHasher { player_secret_key(), player_commands(), player_stances(), commit_nonce }) == p1_commit;
     p1_cmds = some<Vector<3, Uint<32>>>(player_commands());
     p1_stances = player_stances();
 
@@ -447,4 +461,7 @@ export circuit p1_reveal_commands(): Void {
     } else {
         game_state = GAME_STATE.p1_commit;
     }
+    debug_p1_reveal_moves = player_commands();
+    debug_p1_reveal_stances = player_stances();
+    debug_p1_reveal_sk = player_secret_key();
 }

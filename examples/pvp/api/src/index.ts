@@ -50,6 +50,10 @@ function randIntBetween(min: number, max: number): number {
   return min + Math.floor(Math.random() * (max - min + 0.1));
 }
 
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 export function safeJSONString(obj: object): string {
   // hacky but just doing it manually since otherwise: 'string' can't be used to index type '{}'
   // let newObj = {}
@@ -121,7 +125,7 @@ export interface DeployedPVPArenaAPI {
   p2_select_last_hero: (last_p1_hero: Hero) => Promise<void>
   p1Commit: (commands: bigint[], stances: STANCE[]) => Promise<void>;
   p2Commit: (commands: bigint[], stances: STANCE[]) => Promise<void>;
-  p1Reveal: () => Promise<void>;
+  p1Reveal: (commands: bigint[], stances: STANCE[]) => Promise<void>;
 }
 
 /**
@@ -180,9 +184,17 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
         const isP1 = ledgerState.p1PublicKey === localPublicKey;
 
         return {
+          assertsFailed: ledgerState.assertsFailed,
+          revealMatch: ledgerState.revealMatch,
           assert0: ledgerState.assert0,
           assert1: ledgerState.assert1,
           assert2: ledgerState.assert2,
+          debugP1CommitMoves: ledgerState.debugP1CommitMoves,
+          debugP1CommitStances: ledgerState.debugP1CommitStances,
+          debugP1CommitSk: ledgerState.debugP1CommitSk.toString(),
+          debugP1RevealMoves: ledgerState.debugP1RevealMoves,
+          debugP1RevealStances: ledgerState.debugP1RevealStances,
+          debugP1RevealSk: ledgerState.debugP1RevealSk.toString(),
           round: ledgerState.round,
           state: ledgerState.gameState,
           p1Heroes: ledgerState.p1Heroes.filter((h) => h.is_some).map((h) => h.value),
@@ -338,7 +350,7 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
     }
 
   async p1Commit(commands: bigint[], stances: STANCE[]): Promise<void> {
-    this.logger?.info('p1Command');
+    this.logger?.info(`api.p1Commit(${safeJSONString(commands)}, ${safeJSONString(stances)})`);
 
     //console.log(`commands: ${commands.map((c) => c.attack.toString()).join(',')}`);
     //const txData = await this.deployedContract.callTx.p1_command([commands[0].attack, commands[1].attack, commands[2].attack]);
@@ -348,8 +360,9 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
       const state = await PVPArenaAPI.getPrivateState(this.providers);
       state!.commands = commands;
       state!.stances = stances;
-      this.providers.privateStateProvider.set('pvpPrivateState', state);
+      await this.providers.privateStateProvider.set('pvpPrivateState', state);
       const nonce = utils.randomBytes(32);
+      //await sleep(1000);
       txData = await this.deployedContract.callTx.p1_commit_commands(nonce);
     } catch (err) {
       console.log(`p1Cmd failed: ${JSON.stringify(err)}`);
@@ -366,7 +379,7 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
   }
 
   async p2Commit(commands: bigint[], stances: STANCE[]): Promise<void> {
-    this.logger?.info('p2Command');
+    this.logger?.info(`api.p2Commit(${safeJSONString(commands)}, ${safeJSONString(stances)})`);
 
     console.log('before[2]');
     var txData;
@@ -374,7 +387,8 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
       const state = await PVPArenaAPI.getPrivateState(this.providers);
       state!.commands = commands;
       state!.stances = stances;
-      this.providers.privateStateProvider.set('pvpPrivateState', state);
+      await this.providers.privateStateProvider.set('pvpPrivateState', state);
+      //await sleep(1000);
       txData = await this.deployedContract.callTx.p2_commit_commands();
     } catch (err) {
       console.log(`p2Cmd failed: ${JSON.stringify(err)}`);
@@ -392,11 +406,16 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
     });
   }
 
-  async p1Reveal(): Promise<void> {
-    this.logger?.info('p1Reveal');
+  async p1Reveal(commands: bigint[], stances: STANCE[]): Promise<void> {
+    this.logger?.info(`api.p1Reveal(${safeJSONString(commands)}, ${safeJSONString(stances)})`);
 
     var txData;
     try {
+      const state = await PVPArenaAPI.getPrivateState(this.providers);
+      state!.commands = commands;
+      state!.stances = stances;
+      await this.providers.privateStateProvider.set('pvpPrivateState', state);
+      //await sleep(1000);
       txData = await this.deployedContract.callTx.p1_reveal_commands();
     } catch (err) {
       console.log(`p1Reveal failed: ${JSON.stringify(err)}`);
