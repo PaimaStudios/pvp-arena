@@ -1,5 +1,5 @@
 import { type DeployedPVPArenaAPI, PVPArenaAPI, type PVPArenaProviders } from '@midnight-ntwrk/pvp-api';
-import { type ContractAddress } from '@midnight-ntwrk/compact-runtime';
+import { CompactTypeBytes, transientCommit, type ContractAddress } from '@midnight-ntwrk/compact-runtime';
 import {
   concatMap,
   filter,
