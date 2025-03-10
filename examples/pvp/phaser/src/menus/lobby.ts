@@ -34,10 +34,15 @@ async function getOpenMatches(): Promise<OpenMatchInfo[]> {
     let batcherUrl = import.meta.env.VITE_BATCHER_MODE_BATCHER_URL;
 
     if (batcherUrl) {
+        const playerPublicKey = await getPlayerPublicKey();
+
         const query = () =>
-            fetch(`${batcherUrl}/lobbies/open?count=255`, {
-                method: "GET",
-            });
+            fetch(
+                `${batcherUrl}/lobbies/open?count=255&exclude_player=${playerPublicKey}`,
+                {
+                    method: "GET",
+                }
+            );
 
         const result = await query();
 
@@ -46,14 +51,11 @@ async function getOpenMatches(): Promise<OpenMatchInfo[]> {
             block_height: number;
             p1_public_key: string;
         }[] = await result.json();
-        const playerPublicKey = await getPlayerPublicKey();
 
-        return json
-            .filter((raw) => raw.p1_public_key !== playerPublicKey)
-            .map((raw) => ({
-                lastUpdatedBlock: raw.block_height,
-                contractAddress: raw.address,
-            }));
+        return json.map((raw) => ({
+            lastUpdatedBlock: raw.block_height,
+            contractAddress: raw.address,
+        }));
     } else {
         return [];
     }
