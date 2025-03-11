@@ -63,25 +63,16 @@ const localProofServer = {
     const rng = Rng.new();
 
     const networkId = getRuntimeNetworkId();
-    const rawTx = tx.serialize(networkId);
 
-    // console.log("rawTx", uint8ArrayToHex(rawTx));
+    const rawTx = tx.serialize(networkId);
 
     const zkConfig = (() => {
       if (proveTxConfig) {
-        const zkir = new Uint8Array(proveTxConfig.zkConfig!.zkir.length + 1);
-
-        // add the network id since it's not part of the zkir but the
-        // deserializer expects this.
-        zkir[0] = networkId;
-
-        zkir.set(proveTxConfig.zkConfig!.zkir, 1);
-
         return ZkConfig.new(
           proveTxConfig.zkConfig?.circuitId!,
           proveTxConfig.zkConfig?.proverKey!,
           proveTxConfig.zkConfig?.verifierKey!,
-          zkir
+          proveTxConfig.zkConfig?.zkir!
         );
       } else {
         return ZkConfig.empty();
