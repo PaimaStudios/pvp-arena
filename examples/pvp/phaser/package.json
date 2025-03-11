@@ -11,6 +11,7 @@
     "prepack": "yarn build",
     "build": "tsc && vite build --mode testnet && cp -r ../contract/dist/managed/pvp/keys ./dist/keys && cp -r ../contract/dist/managed/pvp/zkir ./dist/zkir",
     "build-undeployed": "tsc && vite build --mode undeployed && cp -r ../contract/dist/managed/pvp/keys ./dist/keys && cp -r ../contract/dist/managed/pvp/zkir ./dist/zkir",
+    "build-batcher": "tsc && vite build --mode batcher-undeployed && cp -r ../contract/dist/managed/pvp/keys ./dist/keys && cp -r ../contract/dist/managed/pvp/zkir ./dist/zkir",
     "preview": "vite preview",
     "lint": "eslint ./src",
     "test": "jest --passWithNoTests"
@@ -18,6 +19,8 @@
   "dependencies": {
     "@midnight-ntwrk/pvp-api": "workspace:*",
     "@midnight-ntwrk/pvp-contract": "workspace:*",
+    "@paima/midnight-vm-bindings": "0.2.4",
+    "@vitejs/plugin-react": "^4.3.4",
     "buffer": "^6.0.3",
     "phaser": "3.87.0",
     "phaser3-rex-plugins": "1.80.12"

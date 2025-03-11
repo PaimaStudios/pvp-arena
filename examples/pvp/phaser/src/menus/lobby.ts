@@ -4,6 +4,7 @@ import { BrowserDeploymentManager } from "../wallet";
 import { Button } from "./button";
 import { EquipmentMenu } from "./equipment";
 import { MainMenu } from "./main";
+import { PracticeMenu } from "./practice";
 
 // TODO: remove and replace with actual indexer
 const mockedMatches: MatchInfo[] = [
@@ -297,12 +298,9 @@ export class LobbyMenu extends Phaser.Scene {
     }
 
     joinPractice() {
-        this.setStatusText('Entering mocked test arena...');
-        setTimeout(() => {
-            this.scene.remove('EquipmentMenu');
-            this.scene.add('EquipmentMenu', new EquipmentMenu({ api: new MockPVPArenaAPI(true), isP1: true }));
-            this.scene.start('EquipmentMenu');
-        }, 1000);
+        this.scene.remove('PracticeMenu');
+        this.scene.add('PracticeMenu', new PracticeMenu(this.deployProvider));
+        this.scene.start('PracticeMenu');
     }
 
     private clearStatusText() {

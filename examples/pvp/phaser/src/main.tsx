@@ -11,7 +11,19 @@ import * as pino from 'pino';
 // TODO: get this properly? it's undefined if i uncomment this
 //const networkId = import.meta.env.VITE_NETWORK_ID as NetworkId;
 //const networkId = NetworkId.TestNet;
-const networkId = NetworkId.Undeployed;
+const networkId = getNetworkId();
+
+function getNetworkId(): NetworkId {
+    switch (import.meta.env.MODE) {
+        case 'undeployed':
+            return NetworkId.Undeployed;
+        case 'testnet':
+            return NetworkId.TestNet;
+        default:
+            console.error('Unknown Vite MODE, defaulting to undeployed');
+            return NetworkId.Undeployed;
+    }
+}
 // Ensure that the network IDs are set within the Midnight libraries.
 setNetworkId(networkId);
 export const logger = pino.pino({
@@ -19,6 +31,7 @@ export const logger = pino.pino({
 });
 console.log(`networkId = ${networkId}`);
 
+console.log(`VITE: [\n${JSON.stringify(import.meta.env)}\n]`);
 // phaser part
 
 import 'phaser';
@@ -29,6 +42,7 @@ import { extend } from 'fp-ts/lib/pipeable';
 import { Subscriber, Observable } from 'rxjs';
 
 import { MainMenu } from './menus/main';
+import { BattleConfig } from './battle/arena';
 
 const COLOR_MAIN = 0x4e342e;
 const COLOR_LIGHT = 0x7b5e57;

@@ -23,17 +23,18 @@ export class MockPVPArenaAPI implements DeployedPVPArenaAPI {
             this.subscriber = subscriber;
         });
         this.mockState = {
-            instance: BigInt(0),
             round: BigInt(0),
             state: GAME_STATE.p1_selecting_first_hero,
             p1Heroes: [],
             p1Cmds: [BigInt(0), BigInt(0), BigInt(0)],
             p1Dmg: [BigInt(0), BigInt(0), BigInt(0)],
+            p1Alive: [true, true, true],
             p1Stances: [STANCE.neutral, STANCE.neutral, STANCE.neutral],
             isP1: true,
             p2Heroes: [],
             p2Cmds: [BigInt(0), BigInt(0), BigInt(0)],
             p2Dmg: [BigInt(0), BigInt(0), BigInt(0)],
+            p2Alive: [true, true, true],
             p2Stances: [STANCE.neutral, STANCE.neutral, STANCE.neutral],
         };
         this.isP1 = isP1;
@@ -171,11 +172,11 @@ export class MockPVPArenaAPI implements DeployedPVPArenaAPI {
             };
             this.subscriber?.next(this.mockState);
             // mock p1 reveal
-            this.p1Reveal();
+            this.p1Reveal(commands, stances);
         }, MOCK_DELAY);
     }
 
-    async p1Reveal(): Promise<void> {
+    async p1Reveal(commands: bigint[], stances: STANCE[]): Promise<void> {
         setTimeout(() => {
             console.log(`MockState: ${safeJSONString(this.mockState)}`);
             let p1Dmg = this.mockState.p1Dmg;
@@ -210,6 +211,8 @@ export class MockPVPArenaAPI implements DeployedPVPArenaAPI {
                 round: this.mockState.round + BigInt(1),
                 p1Dmg,
                 p2Dmg,
+                p1Alive,
+                p2Alive,
             };
             this.subscriber?.next(this.mockState);
             // mock out p1 commit in case p1Reeal is called mocked out from p2's commands

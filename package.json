@@ -14,13 +14,12 @@
     "check": "turbo run check --ignore packages/dao-ui-tests"
   },
   "resolutions": {
-    "@midnight-ntwrk/compact-runtime/@midnight-ntwrk/onchain-runtime": "^0.2.2",
     "@midnight-ntwrk/zswap": "^3.0.2"
   },
   "dependencies": {
     "@midnight-ntwrk/compact-runtime": "^0.7.0",
     "@midnight-ntwrk/dapp-connector-api": "^1.2.2",
-    "@midnight-ntwrk/ledger": "^3.0.2",
+    "@midnight-ntwrk/ledger": "^3.0.6",
     "@midnight-ntwrk/midnight-js-contracts": "0.2.5",
     "@midnight-ntwrk/midnight-js-fetch-zk-config-provider": "0.2.5",
     "@midnight-ntwrk/midnight-js-http-client-proof-provider": "0.2.5",

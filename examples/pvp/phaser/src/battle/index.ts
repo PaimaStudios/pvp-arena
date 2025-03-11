@@ -2,7 +2,7 @@ import { ITEM, RESULT, STANCE, Hero, ARMOR, pureCircuits, GAME_STATE } from '@mi
 import { Arena } from './arena';
 import { fontStyle, GAME_WIDTH } from '../main';
 
-export const MAX_HP = 300000;
+export const MAX_HP = 100000;
 export const HP_DIV = 1000;
 
 export function hpDiv(dmg: number): number {

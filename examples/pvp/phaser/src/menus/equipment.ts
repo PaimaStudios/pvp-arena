@@ -308,14 +308,26 @@ class SlotSelector extends Phaser.GameObjects.Container {
         switch (this.slot) {
             case EQUIP_SLOT.lhs:
                 this.hero.hero.lhs = index as ITEM;
+                // disallow bow / non-unarmed
                 if (this.hero.hero.lhs == ITEM.bow || this.hero.hero.rhs == ITEM.bow) {
+                    this.hero.hero.rhs = ITEM.nothing;
+                    this.equip.slots.get(EQUIP_SLOT.rhs)!.refresh();
+                }
+                // disallow double shields
+                if (this.hero.hero.lhs == ITEM.shield && this.hero.hero.rhs == ITEM.shield) {
                     this.hero.hero.rhs = ITEM.nothing;
                     this.equip.slots.get(EQUIP_SLOT.rhs)!.refresh();
                 }
                 break;
             case EQUIP_SLOT.rhs:
                 this.hero.hero.rhs = index as ITEM;
+                // disallow bow / non-unarmed
                 if (this.hero.hero.rhs == ITEM.bow || this.hero.hero.lhs == ITEM.bow) {
+                    this.hero.hero.lhs = ITEM.nothing;
+                    this.equip.slots.get(EQUIP_SLOT.lhs)!.refresh();
+                }
+                // disallow double shields
+                if (this.hero.hero.lhs == ITEM.shield && this.hero.hero.rhs == ITEM.shield) {
                     this.hero.hero.lhs = ITEM.nothing;
                     this.equip.slots.get(EQUIP_SLOT.lhs)!.refresh();
                 }

@@ -80,59 +80,60 @@ export enum STANCE { defensive, neutral, aggressive }
 //     stance: STANCE,
 // }
 
-export ledger p1_heroes: Cell<Vector<3, Maybe<Hero>>>;
-export ledger p1_stats: Cell<Vector<3, TotalStats>>;
-export ledger p1_cmds: Cell<Maybe<Vector<3, Uint<32>>>>;
-export ledger p1_stances: Cell<Vector<3, STANCE>>;
+export ledger p1_heroes: Vector<3, Maybe<Hero>>;
+export ledger p1_stats: Vector<3, TotalStats>;
+export ledger p1_cmds: Maybe<Vector<3, Uint<32>>>;
+export ledger p1_stances: Vector<3, STANCE>;
 //export ledger p1_dmg: Cell<Vector<3, Uint<32>>>;
-export ledger p1_dmg_0: Cell<Uint<32>>;
-export ledger p1_dmg_1: Cell<Uint<32>>;
-export ledger p1_dmg_2: Cell<Uint<32>>;
+export ledger p1_dmg_0: Uint<32>;
+export ledger p1_dmg_1: Uint<32>;
+export ledger p1_dmg_2: Uint<32>;
 //export ledger p1_alive: Cell<Vector<3, Boolean>>;
-export ledger p1_commit: Cell<Field>;
+export ledger p1_commit: Field;
 
-export ledger p2_heroes: Cell<Vector<3, Maybe<Hero>>>;
-export ledger p2_stats: Cell<Vector<3, TotalStats>>;
-export ledger p2_cmds: Cell<Maybe<Vector<3, Uint<32>>>>;
-export ledger p2_stances: Cell<Vector<3, STANCE>>;
-export ledger p2_dmg_0: Cell<Uint<32>>;
-export ledger p2_dmg_1: Cell<Uint<32>>;
-export ledger p2_dmg_2: Cell<Uint<32>>;
-export ledger p1_alive_0: Cell<Boolean>;
-export ledger p1_alive_1: Cell<Boolean>;
-export ledger p1_alive_2: Cell<Boolean>;
-export ledger p2_alive_0: Cell<Boolean>;
-export ledger p2_alive_1: Cell<Boolean>;
-export ledger p2_alive_2: Cell<Boolean>;
+export ledger p2_heroes: Vector<3, Maybe<Hero>>;
+export ledger p2_stats: Vector<3, TotalStats>;
+export ledger p2_cmds: Maybe<Vector<3, Uint<32>>>;
+export ledger p2_stances: Vector<3, STANCE>;
+export ledger p2_dmg_0: Uint<32>;
+export ledger p2_dmg_1: Uint<32>;
+export ledger p2_dmg_2: Uint<32>;
+export ledger p1_alive_0: Boolean;
+export ledger p1_alive_1: Boolean;
+export ledger p1_alive_2: Boolean;
+export ledger p2_alive_0: Boolean;
+export ledger p2_alive_1: Boolean;
+export ledger p2_alive_2: Boolean;
 //export ledger p2_alive: Cell<Vector<3, Boolean>>;
 //export ledger p2_dmg: Cell<Vector<3, Uint<32>>>;
 
 // we cache all pairwise damage e.g. p1_1_2 is how much damage (before stance calculation)
 // that would be done from player 1's 2nd (index 1) hero to player 2's 3rd one (index 2)
-export ledger base_damage_cache_p1_0_0: Cell<Uint<32>>;
-export ledger base_damage_cache_p1_0_1: Cell<Uint<32>>;
-export ledger base_damage_cache_p1_0_2: Cell<Uint<32>>;
-export ledger base_damage_cache_p1_1_0: Cell<Uint<32>>;
-export ledger base_damage_cache_p1_1_1: Cell<Uint<32>>;
-export ledger base_damage_cache_p1_1_2: Cell<Uint<32>>;
-export ledger base_damage_cache_p1_2_0: Cell<Uint<32>>;
-export ledger base_damage_cache_p1_2_1: Cell<Uint<32>>;
-export ledger base_damage_cache_p1_2_2: Cell<Uint<32>>;
-export ledger base_damage_cache_p2_0_0: Cell<Uint<32>>;
-export ledger base_damage_cache_p2_0_1: Cell<Uint<32>>;
-export ledger base_damage_cache_p2_0_2: Cell<Uint<32>>;
-export ledger base_damage_cache_p2_1_0: Cell<Uint<32>>;
-export ledger base_damage_cache_p2_1_1: Cell<Uint<32>>;
-export ledger base_damage_cache_p2_1_2: Cell<Uint<32>>;
-export ledger base_damage_cache_p2_2_0: Cell<Uint<32>>;
-export ledger base_damage_cache_p2_2_1: Cell<Uint<32>>;
-export ledger base_damage_cache_p2_2_2: Cell<Uint<32>>;
+export ledger base_damage_cache_p1_0_0: Uint<32>;
+export ledger base_damage_cache_p1_0_1: Uint<32>;
+export ledger base_damage_cache_p1_0_2: Uint<32>;
+export ledger base_damage_cache_p1_1_0: Uint<32>;
+export ledger base_damage_cache_p1_1_1: Uint<32>;
+export ledger base_damage_cache_p1_1_2: Uint<32>;
+export ledger base_damage_cache_p1_2_0: Uint<32>;
+export ledger base_damage_cache_p1_2_1: Uint<32>;
+export ledger base_damage_cache_p1_2_2: Uint<32>;
+export ledger base_damage_cache_p2_0_0: Uint<32>;
+export ledger base_damage_cache_p2_0_1: Uint<32>;
+export ledger base_damage_cache_p2_0_2: Uint<32>;
+export ledger base_damage_cache_p2_1_0: Uint<32>;
+export ledger base_damage_cache_p2_1_1: Uint<32>;
+export ledger base_damage_cache_p2_1_2: Uint<32>;
+export ledger base_damage_cache_p2_2_0: Uint<32>;
+export ledger base_damage_cache_p2_2_1: Uint<32>;
+export ledger base_damage_cache_p2_2_2: Uint<32>;
 
-export ledger instance: Counter;
-export ledger round: Cell<Uint<32>>;
-export ledger game_state: Cell<GAME_STATE>;
-export ledger p1_sig: Cell<Field>;
-export ledger p2_sig: Cell<Maybe<Field>>;
+// nonce used to hash p1's move commits
+export ledger commit_nonce: Bytes<32>;
+export ledger round: Uint<32>;
+export ledger game_state: GAME_STATE;
+export ledger p1_public_key: Field;
+export ledger p2_public_key: Maybe<Field>;
 
 witness player_secret_key(): Bytes<32>;
 
@@ -149,8 +150,7 @@ constructor() {
     p2_dmg_0 = 0;
     p2_dmg_1 = 0;
     p2_dmg_2 = 0;
-    instance.increment(1);
-    p1_sig = calc_sig(player_secret_key(), instance as Field);
+    p1_public_key = derive_public_key(player_secret_key());
     round = 0;
     game_state = GAME_STATE.p1_selecting_first_hero;
     // p1_alive = [true, true, true];
@@ -164,6 +164,8 @@ constructor() {
 }
 
 export pure circuit calc_stats(hero: Hero): TotalStats {
+    assert (hero.rhs != ITEM.bow || hero.lhs == ITEM.nothing) && (hero.lhs != ITEM.bow || hero.rhs == ITEM.nothing) "Bows are 2-handed";
+    assert hero.rhs != ITEM.shield || hero.lhs != ITEM.shield "Can't wield 2 shields"; // this is to prevent negative subtraction, not sure why you'd want to do this anyway since it's very weak
     return TotalStats {
         (item_crush_dmg(hero.lhs) + item_crush_dmg(hero.rhs)) as Uint<32>,
         (item_pierce_dmg(hero.lhs) + item_pierce_dmg(hero.rhs)) as Uint<32>,
@@ -174,16 +176,11 @@ export pure circuit calc_stats(hero: Hero): TotalStats {
     };
 }
 
-struct SigHasher {
-    f: Field,
-    b: Bytes<32>,
-}
-
 struct MoveHasher {
     sk: Bytes<32>,
-    instance: Field,
     cmds: Vector<3, Uint<32>>,
     stances: Vector<3, STANCE>,
+    nonce: Bytes<32>,
 }
 
 export circuit armor_crush_def(armor: ARMOR): Uint<32> {
@@ -296,20 +293,21 @@ export pure circuit calc_item_dmg_against(stats: TotalStats, stance: STANCE, ene
     return (((100 - enemy_stats.crush_def) * stats.crush_dmg + (100 - enemy_stats.pierce_def) * stats.pierce_dmg + (50 + enemy_stats.weight - stats.weight) * stats.dex_bonus) * (stance_damage_modifier(stance) + stance_damage_modifier(enemy_stance))) as Uint<32>;
 }
 
-export pure circuit calc_sig(sk: Bytes<32>, inst: Field): Field {
-    return transient_hash<SigHasher>(SigHasher { transient_hash<Vector<2, Field>>([123456789, inst]), sk});
+export pure circuit derive_public_key(sk: Bytes<32>): Field {
+    return transient_commit<Bytes<32>>(sk,  123456789);
 }
 
-export circuit p1_select_first_hero(first_p1_hero: HeroHack): Void {
+export circuit p1_select_first_hero(first_p1_hero: HeroHack): [] {
+    assert p1_public_key == derive_public_key(player_secret_key()) "Not authorized as P1";
     assert game_state == GAME_STATE.p1_selecting_first_hero "P1 must select first hero right after contract creation";
     p1_heroes = [some<Hero>(hack_to_hero(first_p1_hero)), none<Hero>(), none<Hero>()];
     p1_stats = [calc_stats(p1_heroes[0].value), p1_stats[1], p1_stats[2]];
     game_state = GAME_STATE.p2_selecting_first_heroes;
 }
 
-export circuit p2_select_first_heroes(all_p2_heroes: Vector<2, HeroHack>): Void {
+export circuit p2_select_first_heroes(all_p2_heroes: Vector<2, HeroHack>): [] {
     assert game_state == GAME_STATE.p2_selecting_first_heroes "P2 must select first heroes right after match creation";
-    p2_sig = some<Field>(1);//calc_sig(player_sk(), instance as Field));
+    p2_public_key = some<Field>(derive_public_key(player_secret_key()));
     // TODO: can you map some here?
     p2_heroes = [some<Hero>(hack_to_hero(all_p2_heroes[0])), some<Hero>(hack_to_hero(all_p2_heroes[1])), none<Hero>()];
     p2_stats = [calc_stats(p2_heroes[0].value), calc_stats(p2_heroes[1].value), p2_stats[2]];
@@ -321,7 +319,8 @@ export circuit p2_select_first_heroes(all_p2_heroes: Vector<2, HeroHack>): Void 
     base_damage_cache_p2_1_0 = ((100 - p1_stats[0].crush_def) * p2_stats[1].crush_dmg + (100 - p1_stats[0].pierce_def) * p2_stats[1].pierce_dmg + (50 +p1_stats[0].weight - p2_stats[1].weight) * p2_stats[1].dex_bonus) as Uint<32>;
 }
 
-export circuit p1_select_last_heroes(last_p1_heroes: Vector<2, HeroHack>): Void {
+export circuit p1_select_last_heroes(last_p1_heroes: Vector<2, HeroHack>): [] {
+    assert p1_public_key == derive_public_key(player_secret_key()) "Not authorized as P1";
     assert game_state == GAME_STATE.p1_selecting_last_heroes "P1 must select remaining heroes after P2 selects heroes";
     p1_heroes = [p1_heroes[0], some<Hero>(hack_to_hero(last_p1_heroes[0])), some<Hero>(hack_to_hero(last_p1_heroes[1]))];
     p1_stats = [p1_stats[0], calc_stats(p1_heroes[1].value), calc_stats(p1_heroes[2].value)];
@@ -339,9 +338,9 @@ export circuit p1_select_last_heroes(last_p1_heroes: Vector<2, HeroHack>): Void 
     base_damage_cache_p2_1_1 = ((100 - p1_stats[1].crush_def) * p2_stats[1].crush_dmg + (100 - p1_stats[1].pierce_def) * p2_stats[1].pierce_dmg + (50 +p1_stats[1].weight - p2_stats[1].weight) * p2_stats[1].dex_bonus) as Uint<32>;
 }
 
-export circuit p2_select_last_hero(last_hero: HeroHack): Void {
+export circuit p2_select_last_hero(last_hero: HeroHack): [] {
+    assert p2_public_key == some<Field>(derive_public_key(player_secret_key())) "Not authorized as P2";
     assert game_state == GAME_STATE.p2_selecting_last_hero "P2 must select first heroes right after match creation";
-    p2_sig = some<Field>(1);//calc_sig(player_sk(), instance as Field));
     // TODO: can you map some here?
     p2_heroes = [p2_heroes[0], p2_heroes[1], some<Hero>(hack_to_hero(last_hero))];
     p2_stats = [p2_stats[0], p2_stats[1], calc_stats(p2_heroes[2].value)];
@@ -361,31 +360,44 @@ export circuit p2_select_last_hero(last_hero: HeroHack): Void {
 witness player_commands(): Vector<3, Uint<32>>;
 witness player_stances(): Vector<3, STANCE>;
 
-export circuit p1_commit_commands(): Void {
-    // TODO check player
+export circuit p1_commit_commands(nonce: Bytes<32>): [] {
+    assert p1_public_key == derive_public_key(player_secret_key()) "Not authorized as P1";
     assert game_state == GAME_STATE.p1_commit "P1 must commit at start of round";
-    //assert calc_sig(player_sk(), instance as Field as Bytes<32>) == p1_sig "Not authorized as P1";
-    p1_commit = transient_hash<MoveHasher>(MoveHasher { player_secret_key(), instance as Field, player_commands(), player_stances() });
+    // check you're only targetting valid (alive) gladiators
+    assert !p1_alive_0 || (disclose(player_commands())[0] <= 2 && ((disclose(player_commands())[0] == 0 && p2_alive_0) || (disclose(player_commands())[0] == 1 && p2_alive_1) || (disclose(player_commands())[0] == 2 && p2_alive_2))) "Invalid move [0]";
+    assert !p1_alive_1 || (disclose(player_commands())[1] <= 2 && ((disclose(player_commands())[1] == 0 && p2_alive_0) || (disclose(player_commands())[1] == 1 && p2_alive_1) || (disclose(player_commands())[1] == 2 && p2_alive_2))) "Invalid move [1]";
+    assert !p1_alive_2 || (disclose(player_commands())[2] <= 2 && ((disclose(player_commands())[2] == 0 && p2_alive_0) || (disclose(player_commands())[2] == 1 && p2_alive_1) || (disclose(player_commands())[2] == 2 && p2_alive_2))) "Invalid move [2]";
+    p1_commit = transient_hash<MoveHasher>(MoveHasher { disclose(player_secret_key()), disclose(player_commands()), disclose(player_stances()), nonce });
+
+    commit_nonce = nonce;
 
     game_state = GAME_STATE.p2_commit_reveal;
 }
 
-export circuit p2_commit_commands(): Void {
+// p2 just publicly commits as there's no need to since p1 already committed
+export circuit p2_commit_commands(): [] {
+    assert p2_public_key == some<Field>(derive_public_key(player_secret_key())) "Not authorized as P2";
     assert game_state == GAME_STATE.p2_commit_reveal "P2 must commit after P1 commits";
-    p2_cmds = some<Vector<3, Uint<32>>>(player_commands());
-    p2_stances = player_stances();
+    // check you're only targetting valid (alive) gladiators
+    assert !p2_alive_0 || (disclose(player_commands())[0] <= 2 && ((disclose(player_commands())[0] == 0 && p1_alive_0) || (disclose(player_commands())[0] == 1 && p1_alive_1) || (disclose(player_commands())[0] == 2 && p1_alive_2))) "Invalid move [0]";
+    assert !p2_alive_1 || (disclose(player_commands())[1] <= 2 && ((disclose(player_commands())[1] == 0 && p1_alive_0) || (disclose(player_commands())[1] == 1 && p1_alive_1) || (disclose(player_commands())[1] == 2 && p1_alive_2))) "Invalid move [1]";
+    assert !p2_alive_2 || (disclose(player_commands())[2] <= 2 && ((disclose(player_commands())[2] == 0 && p1_alive_0) || (disclose(player_commands())[2] == 1 && p1_alive_1) || (disclose(player_commands())[2] == 2 && p1_alive_2))) "Invalid move [2]";
+
+    p2_cmds = some<Vector<3, Uint<32>>>(disclose(player_commands()));
+    p2_stances = disclose(player_stances());
 
     game_state = GAME_STATE.p1_reveal;
 }
 
-export circuit p1_reveal_commands(): Void {
-    const DEAD = 300000;
+export circuit p1_reveal_commands(): [] {
+    const DEAD = 100000;
 
+    // no need to auth P1 as the commit hash check won't match otherwise
     assert game_state == GAME_STATE.p1_reveal "P1 must reveal after P2 commits";
-    assert transient_hash<MoveHasher>(MoveHasher { player_secret_key(), instance as Field, player_commands(), player_stances() }) == p1_commit "Commit doesn't match";
-  
-    p1_cmds = some<Vector<3, Uint<32>>>(player_commands());
-    p1_stances = player_stances();
+    assert transient_hash<MoveHasher>(MoveHasher { disclose(player_secret_key()), disclose(player_commands()), disclose(player_stances()), commit_nonce }) == p1_commit "Commit doesn't match";
+
+    p1_cmds = some<Vector<3, Uint<32>>>(disclose(player_commands()));
+    p1_stances = disclose(player_stances());
 
     p1_dmg_0 = (p1_dmg_0 + ((p2_alive_0 as Uint<1>) * ((p2_cmds.value[0] == 0) as Uint<1>) * base_damage_cache_p2_0_0 * (stance_damage_modifier(p2_stances[0]) + stance_damage_modifier(p1_stances[0])))) as Uint<32>;
     p1_dmg_1 = (p1_dmg_1 + ((p2_alive_0 as Uint<1>) * ((p2_cmds.value[0] == 1) as Uint<1>) * base_damage_cache_p2_0_1 * (stance_damage_modifier(p2_stances[0]) + stance_damage_modifier(p1_stances[1])))) as Uint<32>;
