@@ -1,8 +1,6 @@
 import { type DeployedPVPArenaAPI, PVPArenaAPI, type PVPArenaProviders } from '@midnight-ntwrk/pvp-api';
 import { type ContractAddress } from '@midnight-ntwrk/compact-runtime';
 import {
-  BehaviorSubject,
-  type Observable,
   concatMap,
   filter,
   firstValueFrom,
@@ -35,6 +33,7 @@ import { type CoinInfo, Transaction, type TransactionId } from '@midnight-ntwrk/
 import { Transaction as ZswapTransaction } from '@midnight-ntwrk/zswap';
 import semver from 'semver';
 import { getLedgerNetworkId, getZswapNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
+import { initializeProviders as initializeBatcherModeProviders } from './batcher-providers';
 
 export class BrowserDeploymentManager {
   #initializedProviders: Promise<PVPArenaProviders> | undefined;
@@ -72,7 +71,12 @@ export class BrowserDeploymentManager {
     // 2. Act as a synchronization point if multiple contract deploys or joins run concurrently.
     //    Concurrent calls to `getProviders()` will receive, and ultimately await, the same
     //    `Promise`.
-    return this.#initializedProviders ?? (this.#initializedProviders = initializeProviders(this.logger));
+    return (
+      this.#initializedProviders ??
+      (this.#initializedProviders = import.meta.env.VITE_BATCHER_MODE_ENABLED
+        ? initializeBatcherModeProviders(this.logger)
+        : initializeProviders(this.logger))
+    );
   }
 }
 
