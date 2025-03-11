@@ -66,11 +66,13 @@ export type PVPArenaDerivedState = {
   readonly p1Heroes: Hero[];
   readonly p1Cmds: bigint[] | undefined;
   readonly p1Dmg: bigint[];
+  readonly p1Alive: boolean[];
   readonly p1Stances: STANCE[];
   readonly isP1: boolean;
   readonly p2Heroes: Hero[];
   readonly p2Cmds: bigint[] | undefined;
   readonly p2Dmg: bigint[];
+  readonly p2Alive: boolean[];
   readonly p2Stances: STANCE[];
   readonly round: bigint;
   readonly state: GAME_STATE;

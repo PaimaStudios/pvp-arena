@@ -307,6 +307,7 @@ export class HeroActor extends Phaser.GameObjects.Container {
     }
 
     public attackTween(tweens: Phaser.Types.Tweens.TweenBuilderConfig[]) {
+        console.log(`attackTween(${this.rank.team}:${this.rank.index}})`);
         // can't use hero.x / enemy.x etc since those aren't where they'll be after they move to their new stance
         const heroX = this.rank.x(this.nextStance);
         const heroY = this.rank.y(); // technically the same right now but could be different in the future
@@ -403,7 +404,7 @@ export class HeroActor extends Phaser.GameObjects.Container {
                 for (let hero_stance = 0; hero_stance < 3; ++hero_stance) {
                     for (let enemy_stance = 0; enemy_stance < 3; ++enemy_stance) {
                         const dmg = pureCircuits.calc_item_dmg_against(pureCircuits.calc_stats(this.hero), hero_stance as STANCE, pureCircuits.calc_stats(enemy.hero), enemy_stance as STANCE);
-                        console.log(`dmg [${stance_strs[hero_stance]}] -> [${stance_strs[enemy_stance]}] = ${hpDiv(Number(dmg))}`);
+                        //console.log(`dmg [${stance_strs[hero_stance]}] -> [${stance_strs[enemy_stance]}] = ${hpDiv(Number(dmg))}`);
                     }
                 }
                 const dmg = pureCircuits.calc_item_dmg_against(pureCircuits.calc_stats(this.hero), this.nextStance, pureCircuits.calc_stats(enemy.hero), enemy.nextStance);

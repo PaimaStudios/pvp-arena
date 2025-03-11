@@ -363,7 +363,12 @@ witness player_stances(): Vector<3, STANCE>;
 export circuit p1_commit_commands(nonce: Bytes<32>): [] {
     assert p1_public_key == derive_public_key(player_secret_key()) "Not authorized as P1";
     assert game_state == GAME_STATE.p1_commit "P1 must commit at start of round";
+    // check you're only targetting valid (alive) gladiators
+    assert !p1_alive_0 || (disclose(player_commands())[0] <= 2 && ((disclose(player_commands())[0] == 0 && p2_alive_0) || (disclose(player_commands())[0] == 1 && p2_alive_1) || (disclose(player_commands())[0] == 2 && p2_alive_2))) "Invalid move [0]";
+    assert !p1_alive_1 || (disclose(player_commands())[1] <= 2 && ((disclose(player_commands())[1] == 0 && p2_alive_0) || (disclose(player_commands())[1] == 1 && p2_alive_1) || (disclose(player_commands())[1] == 2 && p2_alive_2))) "Invalid move [1]";
+    assert !p1_alive_2 || (disclose(player_commands())[2] <= 2 && ((disclose(player_commands())[2] == 0 && p2_alive_0) || (disclose(player_commands())[2] == 1 && p2_alive_1) || (disclose(player_commands())[2] == 2 && p2_alive_2))) "Invalid move [2]";
     p1_commit = transient_hash<MoveHasher>(MoveHasher { disclose(player_secret_key()), disclose(player_commands()), disclose(player_stances()), nonce });
+
     commit_nonce = nonce;
 
     game_state = GAME_STATE.p2_commit_reveal;
@@ -373,6 +378,11 @@ export circuit p1_commit_commands(nonce: Bytes<32>): [] {
 export circuit p2_commit_commands(): [] {
     assert p2_public_key == some<Field>(derive_public_key(player_secret_key())) "Not authorized as P2";
     assert game_state == GAME_STATE.p2_commit_reveal "P2 must commit after P1 commits";
+    // check you're only targetting valid (alive) gladiators
+    assert !p2_alive_0 || (disclose(player_commands())[0] <= 2 && ((disclose(player_commands())[0] == 0 && p1_alive_0) || (disclose(player_commands())[0] == 1 && p1_alive_1) || (disclose(player_commands())[0] == 2 && p1_alive_2))) "Invalid move [0]";
+    assert !p2_alive_1 || (disclose(player_commands())[1] <= 2 && ((disclose(player_commands())[1] == 0 && p1_alive_0) || (disclose(player_commands())[1] == 1 && p1_alive_1) || (disclose(player_commands())[1] == 2 && p1_alive_2))) "Invalid move [1]";
+    assert !p2_alive_2 || (disclose(player_commands())[2] <= 2 && ((disclose(player_commands())[2] == 0 && p1_alive_0) || (disclose(player_commands())[2] == 1 && p1_alive_1) || (disclose(player_commands())[2] == 2 && p1_alive_2))) "Invalid move [2]";
+
     p2_cmds = some<Vector<3, Uint<32>>>(disclose(player_commands()));
     p2_stances = disclose(player_stances());
 
@@ -380,12 +390,12 @@ export circuit p2_commit_commands(): [] {
 }
 
 export circuit p1_reveal_commands(): [] {
-    const DEAD = 300000;
+    const DEAD = 100000;
 
     // no need to auth P1 as the commit hash check won't match otherwise
     assert game_state == GAME_STATE.p1_reveal "P1 must reveal after P2 commits";
     assert transient_hash<MoveHasher>(MoveHasher { disclose(player_secret_key()), disclose(player_commands()), disclose(player_stances()), commit_nonce }) == p1_commit "Commit doesn't match";
-  
+
     p1_cmds = some<Vector<3, Uint<32>>>(disclose(player_commands()));
     p1_stances = disclose(player_stances());
 

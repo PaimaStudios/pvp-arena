@@ -92,13 +92,13 @@ export class Arena extends Phaser.Scene
                     this.displayEndMatchText('You won!');
                 } else {
                     this.sound.play('lose');
-                    this.displayEndMatchText('Opponent won!');
+                    this.displayEndMatchText('Opponent\nwon!');
                 }
                 break;
             case MatchState.GameOverP2Win:
                 if (this.config.isP1) {
                     this.sound.play('lose');
-                    this.displayEndMatchText('Opponent won!');
+                    this.displayEndMatchText('Opponent\nwon!');
                 } else {
                     this.sound.play('win');
                     this.displayEndMatchText('You won!');
@@ -114,7 +114,7 @@ export class Arena extends Phaser.Scene
     displayEndMatchText(message: string) {
         this.matchStateText?.destroy();
         this.matchStateText = undefined;
-        this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.125, message, fontStyle(64)).setOrigin(0.5, 0.65);
+        this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.4, message, fontStyle(64, { align: 'center' })).setOrigin(0.5, 0.65);
         new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.9, 128, 32, 'Main Menu', 18, () => {
             this.scene.start('MainMenu');
             this.scene.remove('Arena');
@@ -145,7 +145,7 @@ export class Arena extends Phaser.Scene
         }
 
         // update commands/stances/damages
-        if (state.p1Cmds != undefined && state.p2Cmds != undefined && state.state) {
+        if (state.p1Cmds != undefined && state.p2Cmds != undefined/* && (state.state == GAME_STATE.p1_commit)*/) {
             console.log(`***** UPDATING CMDS ****`);
             const newTargets = [
                 state.p1Cmds.map(Number),
@@ -159,8 +159,11 @@ export class Arena extends Phaser.Scene
                     const hero = this.heroes[team][i];
                     // update damage now, but no graphical effect shown
                     hero.realDmg = Number(dmgs[i]);
-                    hero.nextStance = stances[i];
-                    hero.target = new Rank(newTargets[team][i] as HeroIndex, team == 0 ? 1 : 0);
+                    //if ((i == 0 && state.state == GAME_STATE.p1_commit) || (i == 1 && state.state == GAME_STATE.p1_reveal)) {
+                    if (team != this.playerTeam()) {
+                        hero.nextStance = stances[i];
+                        hero.target = new Rank(newTargets[team][i] as HeroIndex, team == 0 ? 1 : 0);
+                    }
                 }
             }
         }
@@ -190,7 +193,7 @@ export class Arena extends Phaser.Scene
                     console.log('revealing move (as p1)');
                     this.setMatchState(MatchState.RevealingMove);
                     // TODO: what happens if player cancels or closes window?
-                    this.config.api.p1Reveal().then(() => {
+                    this.config.api.p1Reveal(this.movesForContract(), this.stancesForContract()).then(() => {
                         // ??? (probably nothing - resolved by onStateChange)
                     });
                 } else {
@@ -445,20 +448,18 @@ export class Arena extends Phaser.Scene
         });
         this.input?.keyboard?.on('keydown-Z', () => {
             if (this.matchState == MatchState.WaitingOnPlayer) {
-                const stances = this.heroes[this.playerTeam()].map((hero) => hero.nextStance);
                 const moves = this.heroes[this.playerTeam()].filter((hero) => hero.isAlive() && hero.target != undefined && hero.target.team == this.opponentTeam()).map((hero) => BigInt(hero.target!.index));
                 if (moves.length == this.getAliveHeroes(this.playerTeam()).length) {
                     this.setMatchState(MatchState.SubmittingMove);
                     // still must send moves for dead units to make sure indexing works, so pad with 0's
-                    const paddedMoves = this.heroes[this.playerTeam()].map((hero) => BigInt(hero.isAlive() ? hero.target!.index : 0));
                     if (this.config.isP1) {
                         console.log('submitting move (as p1)');
-                        this.config.api.p1Commit(paddedMoves, stances).then(() => {
+                        this.config.api.p1Commit(this.movesForContract(), this.stancesForContract()).then(() => {
                             // ???
                         });
                     } else {
                         console.log('submitting move (as p2)');
-                        this.config.api.p2Commit(paddedMoves, stances).then(() => {
+                        this.config.api.p2Commit(this.movesForContract(), this.stancesForContract()).then(() => {
                             // ???
                         });
                     }
@@ -475,18 +476,16 @@ export class Arena extends Phaser.Scene
         });
 
         this.submitButton = new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.9, 64, 24, 'Submit', 12, () => {
-            const stances = this.heroes[this.playerTeam()].map((hero) => hero.nextStance);
             this.setMatchState(MatchState.SubmittingMove);
             // still must send moves for dead units to make sure indexing works, so pad with 0's
-            const paddedMoves = this.heroes[this.playerTeam()].map((hero) => BigInt(hero.isAlive() ? hero.target!.index : 0));
             if (this.config.isP1) {
                 console.log('submitting move (as p1)');
-                this.config.api.p1Commit(paddedMoves, stances).then(() => {
+                this.config.api.p1Commit(this.movesForContract(), this.stancesForContract()).then(() => {
                     // ???
                 });
             } else {
                 console.log('submitting move (as p2)');
-                this.config.api.p2Commit(paddedMoves, stances).then(() => {
+                this.config.api.p2Commit(this.movesForContract(), this.stancesForContract()).then(() => {
                     // ???
                 });
             }
@@ -519,5 +518,13 @@ export class Arena extends Phaser.Scene
     public enableSubmitButton() {
         this.submitButton!.visible = true;
         this.matchStateText!.visible = false;
+    }
+
+    private movesForContract(): bigint[] {
+        return this.heroes[this.playerTeam()].map((hero) => BigInt(hero.isAlive() ? hero.target!.index : 0));
+    }
+
+    private stancesForContract(): STANCE[] {
+        return this.heroes[this.playerTeam()].map((hero) => hero.nextStance);
     }
 }

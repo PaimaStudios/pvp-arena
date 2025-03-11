@@ -7,6 +7,7 @@ import { Button } from './button';
 import { HeroAnimationController, createHeroAnims, generateRandomHero } from '../battle/hero';
 import { ARMOR, ITEM } from '@midnight-ntwrk/pvp-contract';
 import { BalancingTest, heroBalancing } from '../balancing';
+import { PracticeMenu } from './practice';
 
 
 export class MainMenu extends Phaser.Scene {
@@ -92,7 +93,7 @@ export class MainMenu extends Phaser.Scene {
         this.text = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.65, '', fontStyle(12)).setOrigin(0.5, 0.65).setVisible(false);
         this.buttons.push(new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.55, 128, 32, 'Create', 20, () => {
             this.setStatusText('Creating match, please wait...');
-            this.deployProvider.create().then((api) => {
+            this.deployProvider.create(false).then((api) => {
                 console.log('====================\napi done from creating\n===============');
                 console.log(`contract address: ${api.deployedContractAddress}`);
                 navigator.clipboard.writeText(api.deployedContractAddress);
@@ -119,12 +120,9 @@ export class MainMenu extends Phaser.Scene {
         }, 'Join an on-chain match'));
         // create an off-chain testing world for testing graphical stuff without having to wait a long time
         this.buttons.push(new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.85, 128, 32, 'Practice', 20, () => {
-            this.setStatusText('Entering mocked test arena...');
-            setTimeout(() => {
-                this.scene.remove('EquipmentMenu');
-                this.scene.add('EquipmentMenu', new EquipmentMenu({ api: new MockPVPArenaAPI(true), isP1: true }));
-                this.scene.start('EquipmentMenu');
-            }, 1000);
+            this.scene.remove('PracticeMenu');
+            this.scene.add('PracticeMenu', new PracticeMenu(this.deployProvider));
+            this.scene.start('PracticeMenu');
         }, 'Play a match against a local computer AI'));
         // dev menu
         // TODO: how to load the .env.testnet file? I can't access the VITE env variables to check this
