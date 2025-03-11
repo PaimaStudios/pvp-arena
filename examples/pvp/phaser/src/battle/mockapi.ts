@@ -23,17 +23,6 @@ export class MockPVPArenaAPI implements DeployedPVPArenaAPI {
             this.subscriber = subscriber;
         });
         this.mockState = {
-            assertsFailed: false,
-            revealMatch: true,
-            assert0: [],
-            assert1: [],
-            assert2: [],
-            debugP1CommitMoves: [],
-            debugP1CommitStances: [],
-            debugP1CommitSk: "",
-            debugP1RevealMoves: [],
-            debugP1RevealStances: [],
-            debugP1RevealSk: "",
             round: BigInt(0),
             state: GAME_STATE.p1_selecting_first_hero,
             p1Heroes: [],

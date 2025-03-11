@@ -63,14 +63,6 @@ export type DeployedPVPArenaContract = FoundContract<PVPArenaPrivateState, PVPAr
  * A type that represents the derived combination of public (or ledger), and private state.
  */
 export type PVPArenaDerivedState = {
-  readonly assertsFailed: boolean;
-  readonly revealMatch: boolean;
-  readonly debugP1CommitMoves: bigint[];
-  readonly debugP1CommitStances: STANCE[];
-  readonly debugP1CommitSk: string;
-  readonly debugP1RevealMoves: bigint[];
-  readonly debugP1RevealStances: STANCE[];
-  readonly debugP1RevealSk: string;
   readonly p1Heroes: Hero[];
   readonly p1Cmds: bigint[] | undefined;
   readonly p1Dmg: bigint[];
@@ -84,9 +76,6 @@ export type PVPArenaDerivedState = {
   readonly p2Stances: STANCE[];
   readonly round: bigint;
   readonly state: GAME_STATE;
-  readonly assert0: boolean[];
-  readonly assert1: boolean[];
-  readonly assert2: boolean[];
   // readonly p2Dmg0: bigint;
   // readonly p2Dmg1: bigint;
   // readonly p2Dmg2: bigint;

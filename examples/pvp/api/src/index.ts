@@ -184,17 +184,6 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
         const isP1 = ledgerState.p1PublicKey === localPublicKey;
 
         return {
-          assertsFailed: ledgerState.assertsFailed,
-          revealMatch: ledgerState.revealMatch,
-          assert0: ledgerState.assert0,
-          assert1: ledgerState.assert1,
-          assert2: ledgerState.assert2,
-          debugP1CommitMoves: ledgerState.debugP1CommitMoves,
-          debugP1CommitStances: ledgerState.debugP1CommitStances,
-          debugP1CommitSk: ledgerState.debugP1CommitSk.toString(),
-          debugP1RevealMoves: ledgerState.debugP1RevealMoves,
-          debugP1RevealStances: ledgerState.debugP1RevealStances,
-          debugP1RevealSk: ledgerState.debugP1RevealSk.toString(),
           round: ledgerState.round,
           state: ledgerState.gameState,
           p1Heroes: ledgerState.p1Heroes.filter((h) => h.is_some).map((h) => h.value),
@@ -215,6 +204,8 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
     // in practice mode we locally run everything in the mockapi but ran on-chain
     if (isPractice) {
       this.state$.subscribe((state) => {
+        // nothing is awaited since not async + doesn't matter as it's always the last thing called
+        // also, this won't be called again until the execution is completed and state changes on the network
         switch (state.state) {
           case GAME_STATE.p2_selecting_first_heroes:
             this.p2_select_first_heroes([generateRandomHero(), generateRandomHero()]);
@@ -244,7 +235,6 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
               }
               return stance;
             });
-            console.log(`AI MOVE! STATE: ${safeJSONString(state)}\n cmds = ${safeJSONString(commands)}`);
             this.p2Commit(commands, stances);
           break;
         }

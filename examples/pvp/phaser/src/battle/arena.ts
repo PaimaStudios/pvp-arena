@@ -125,13 +125,6 @@ export class Arena extends Phaser.Scene
         console.log(`new state: ${safeJSONString(state)}`);
         console.log(`NOW: ${gameStateStr(state.state)}`);
 
-        if (state.assertsFailed) {
-            this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.25, 'asserts failed', fontStyle(12)).setOrigin(0.5, 0.5);
-        }
-        if (!state.revealMatch) {
-            this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.4, 'match failed', fontStyle(12)).setOrigin(0.5, 0.5);
-        }
-
         if (state.state == GAME_STATE.p1_selecting_first_hero || state.state == GAME_STATE.p2_selecting_first_heroes || state.state == GAME_STATE.p1_selecting_last_heroes || state.state == GAME_STATE.p2_selecting_last_hero) {
             // for some reason we're getting updates here using old state that we can ignore
             // it calls onStateChange for every state update that had previously happened on the equipment screen
