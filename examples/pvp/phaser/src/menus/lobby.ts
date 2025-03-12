@@ -17,9 +17,10 @@ type OpenMatchInfo = {
 const WON = "[color=green]Won[/color]";
 const LOST = "[color=red]Lost[/color]";
 const YOUR_TURN = "[color=yellow]Your turn[/color]";
+const OPPONENT_TURN = "[b]Opponent's turn[/b]";
 type PlayerMatchStatus =
     | typeof YOUR_TURN
-    | "Waiting for move"
+    | typeof OPPONENT_TURN
     | typeof WON
     | typeof LOST
     | "Tie";
@@ -123,25 +124,19 @@ async function getPlayerMatches(): Promise<PlayerMatchInfo[]> {
         }[] = await result.json();
 
         const isPlayerOneTurn = (state: number): boolean =>
-            Boolean(
-                [
-                    GAME_STATE.p1_selecting_first_hero,
-                    GAME_STATE.p1_selecting_last_heroes,
-                    GAME_STATE.p1_commit,
-                    GAME_STATE.p1_reveal,
-                ].find((s) => {
-                    return s === state;
-                })
-            );
+            [
+                GAME_STATE.p1_selecting_first_hero,
+                GAME_STATE.p1_selecting_last_heroes,
+                GAME_STATE.p1_commit,
+                GAME_STATE.p1_reveal,
+            ].some((s) => s === state);
 
         const isPlayerTwoTurn = (state: number): boolean =>
-            Boolean(
-                [
-                    GAME_STATE.p2_selecting_first_heroes,
-                    GAME_STATE.p2_selecting_last_hero,
-                    GAME_STATE.p2_commit_reveal,
-                ].find((s) => s === state)
-            );
+            [
+                GAME_STATE.p2_selecting_first_heroes,
+                GAME_STATE.p2_selecting_last_hero,
+                GAME_STATE.p2_commit_reveal,
+            ].some((s) => s === state);
 
         const matchStatus = (raw: (typeof json)[0]): PlayerMatchStatus => {
             const state = Number(raw.state);
@@ -161,7 +156,7 @@ async function getPlayerMatches(): Promise<PlayerMatchInfo[]> {
                     return YOUR_TURN;
                 }
 
-                return "Waiting for move";
+                return OPPONENT_TURN;
             } else {
                 if (state === GAME_STATE.p2_win) {
                     return WON;
@@ -173,7 +168,7 @@ async function getPlayerMatches(): Promise<PlayerMatchInfo[]> {
                     return YOUR_TURN;
                 }
 
-                return "Waiting for move";
+                return OPPONENT_TURN;
             }
         };
 
@@ -323,7 +318,7 @@ class JoinGamesUI<
                 let buttonText = `${contractAddressShortString(match.contractAddress)}\nlast update: ${match.lastUpdatedBlock}`;
 
                 if ("status" in match) {
-                    buttonText = `${buttonText}\nstatus: [color=red]${match.status}[/color]`;
+                    buttonText = `${buttonText}\nstatus: ${match.status}`;
                 }
 
                 const button = new Button(
@@ -332,9 +327,12 @@ class JoinGamesUI<
                     -(JOIN_HEIGHT - JOIN_TITLE_HEIGHT) / 2 +
                         JOIN_TITLE_HEIGHT +
                         JOIN_BORDER +
-                        i * (MATCH_HEIGHT + MATCH_GAP),
+                        i *
+                            (MATCH_HEIGHT +
+                                MATCH_GAP +
+                                ("status" in match ? 12 : 0)),
                     JOIN_WIDTH - 2 * JOIN_BORDER - SCROLL_WIDTH,
-                    MATCH_HEIGHT,
+                    MATCH_HEIGHT + ("status" in match ? 16 : 0),
                     buttonText,
                     7,
                     () => this.lobby.join(match.contractAddress)
