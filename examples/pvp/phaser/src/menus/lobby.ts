@@ -190,7 +190,6 @@ type RefreshingGrapihcs = {
 const JOIN_WIDTH = 180;
 const JOIN_HEIGHT = 240;
 const JOIN_TITLE_HEIGHT = 32;
-const MAX_MATCHES_SHOWN = 5;
 
 class JoinGamesUI<
     MatchInfo extends OpenMatchInfo | PlayerMatchInfo,
@@ -202,6 +201,7 @@ class JoinGamesUI<
     matchButtons: Button[];
     suggestPractice: boolean;
     getMatches: () => Promise<MatchInfo[]>;
+    maxMatchesShown: number;
 
     constructor(
         lobby: LobbyMenu,
@@ -209,7 +209,8 @@ class JoinGamesUI<
         y: number,
         title: string,
         suggestPractice: boolean,
-        getMatches: () => Promise<MatchInfo[]>
+        getMatches: () => Promise<MatchInfo[]>,
+        maxMatchesShown: number,
     ) {
         super(lobby, x, y);
         this.lobby = lobby;
@@ -218,6 +219,7 @@ class JoinGamesUI<
         this.matchIndex = 0;
         this.suggestPractice = suggestPractice;
         this.getMatches = getMatches;
+        this.maxMatchesShown = maxMatchesShown;
         const REFRESH_WIDTH = 32;
         this.add(
             lobby.add.nineslice(
@@ -313,7 +315,7 @@ class JoinGamesUI<
 
         this.matchButtons.forEach((b) => b.destroy());
         this.matchButtons = this.matches
-            .slice(this.matchIndex, this.matchIndex + MAX_MATCHES_SHOWN)
+            .slice(this.matchIndex, this.matchIndex + this.maxMatchesShown)
             .map((match, i) => {
                 let buttonText = `${contractAddressShortString(match.contractAddress)}\nlast update: ${match.lastUpdatedBlock}`;
 
@@ -352,27 +354,27 @@ class JoinGamesUI<
                 "^",
                 12,
                 () => {
-                    this.matchIndex -= MAX_MATCHES_SHOWN;
+                    this.matchIndex -= this.maxMatchesShown;
                     this.makeMatchList();
                 }
             );
             this.add(scrollUp);
             this.matchButtons.push(scrollUp);
         }
-        if (this.matchIndex + MAX_MATCHES_SHOWN < this.matches.length) {
+        if (this.matchIndex + this.maxMatchesShown < this.matches.length) {
             const scrollDown = new Button(
                 this.scene,
                 JOIN_WIDTH / 2 - SCROLL_WIDTH / 2 - 2,
                 -(JOIN_HEIGHT - JOIN_TITLE_HEIGHT) / 2 +
                     JOIN_TITLE_HEIGHT +
                     JOIN_BORDER +
-                    (MAX_MATCHES_SHOWN - 1) * (MATCH_HEIGHT + MATCH_GAP),
+                    (this.maxMatchesShown - 1) * (MATCH_HEIGHT + MATCH_GAP),
                 SCROLL_WIDTH - 6,
                 SCROLL_WIDTH - 6,
                 "v",
                 12,
                 () => {
-                    this.matchIndex += MAX_MATCHES_SHOWN;
+                    this.matchIndex += this.maxMatchesShown;
                     this.makeMatchList();
                 }
             );
@@ -422,7 +424,8 @@ export class LobbyMenu extends Phaser.Scene {
             GAME_HEIGHT / 2,
             "Public Matches",
             true,
-            () => getOpenMatches()
+            () => getOpenMatches(),
+            5
         );
         this.rejoin = new JoinGamesUI(
             this,
@@ -430,7 +433,8 @@ export class LobbyMenu extends Phaser.Scene {
             GAME_HEIGHT / 2,
             "Your Matches",
             false,
-            () => getPlayerMatches()
+            () => getPlayerMatches(),
+            4
         );
         this.statusText = this.add
             .text(
