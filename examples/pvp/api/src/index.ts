@@ -27,6 +27,7 @@ import * as utils from './utils/index.js';
 import { deployContract, findDeployedContract } from '@midnight-ntwrk/midnight-js-contracts';
 import { combineLatest, map, tap, from, type Observable } from 'rxjs';
 import { toHex } from '@midnight-ntwrk/midnight-js-utils';
+import { PrivateStateProvider } from '@midnight-ntwrk/midnight-js-types';
 
 /** @internal */
 const pvpContractInstance: PVPArenaContract = new Contract(witnesses);
@@ -347,7 +348,7 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
     console.log('before[1]');
     var txData;
     try {
-      const state = await PVPArenaAPI.getPrivateState(this.providers);
+      const state = await PVPArenaAPI.getPrivateState(this.providers.privateStateProvider);
       state!.commands = commands;
       state!.stances = stances;
       await this.providers.privateStateProvider.set('pvpPrivateState', state);
@@ -374,7 +375,7 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
     console.log('before[2]');
     var txData;
     try {
-      const state = await PVPArenaAPI.getPrivateState(this.providers);
+      const state = await PVPArenaAPI.getPrivateState(this.providers.privateStateProvider);
       state!.commands = commands;
       state!.stances = stances;
       await this.providers.privateStateProvider.set('pvpPrivateState', state);
@@ -401,7 +402,7 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
 
     var txData;
     try {
-      const state = await PVPArenaAPI.getPrivateState(this.providers);
+      const state = await PVPArenaAPI.getPrivateState(this.providers.privateStateProvider);
       state!.commands = commands;
       state!.stances = stances;
       await this.providers.privateStateProvider.set('pvpPrivateState', state);
@@ -437,7 +438,7 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
       // EXERCISE ANSWER
       privateStateKey: 'pvpPrivateState', // EXERCISE ANSWER
       contract: pvpContractInstance,
-      initialPrivateState: await PVPArenaAPI.getPrivateState(providers), // EXERCISE ANSWER
+      initialPrivateState: await PVPArenaAPI.getPrivateState(providers.privateStateProvider), // EXERCISE ANSWER
       //args: [],
     });
     logger?.trace({
@@ -469,7 +470,7 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
       contractAddress,
       contract: pvpContractInstance,
       privateStateKey: 'pvpPrivateState',
-      initialPrivateState: await PVPArenaAPI.getPrivateState(providers),
+      initialPrivateState: await PVPArenaAPI.getPrivateState(providers.privateStateProvider),
     });
 
     logger?.trace({
@@ -481,19 +482,27 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
     return new PVPArenaAPI(deployedPVPArenaContract, providers, false, logger);
   }
 
-  private static async getPrivateState(providers: PVPArenaProviders): Promise<PVPArenaPrivateState> {
-    const existingPrivateState = await providers.privateStateProvider.get('pvpPrivateState');
-    // hacky convert bytes[32] to bigint
-    const randSrc = utils.randomBytes(32);
-    // let randBigInt = BigInt(0);
-    // let scalar = BigInt(1);
-    // for (let i = 0; i < 32; ++i) {
-    //   randBigInt += BigInt(randSrc[i]) * scalar;
-    //   scalar *= BigInt(256);
-    // }
-    return existingPrivateState ?? createPVPArenaPrivateState(randSrc);
+  static async getPrivateState(
+    privateStateProvider: PrivateStateProvider
+  ): Promise<PVPArenaPrivateState> {
+    const existingPrivateState =
+      await privateStateProvider.get("pvpPrivateState");
+
+    if (existingPrivateState) {
+      return existingPrivateState;
+    } else {
+      let newPrivateState = createPVPArenaPrivateState(utils.randomBytes(32));
+
+      // this is done anyway on the first contract deploy/join, but we need to
+      // initialize it before that to be able to have the public key for the
+      // lobby menu available before that.
+      privateStateProvider.set("pvpPrivateState", newPrivateState);
+
+      return newPrivateState;
+    }
   }
 }
+
 
 /**
  * A namespace that represents the exports from the `'utils'` sub-package.

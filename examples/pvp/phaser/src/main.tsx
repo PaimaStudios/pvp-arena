@@ -36,6 +36,7 @@ console.log(`VITE: [\n${JSON.stringify(import.meta.env)}\n]`);
 
 import 'phaser';
 import RexUIPlugin from 'phaser3-rex-plugins/templates/ui/ui-plugin'
+import BBCodeTextPlugin from 'phaser3-rex-plugins/plugins/bbcodetext-plugin.js';
 //import KeyboardPlugin from 'phaser3-';
 import RoundRectanglePlugin from 'phaser3-rex-plugins/plugins/roundrectangle-plugin.js';
 import { extend } from 'fp-ts/lib/pipeable';
@@ -169,32 +170,39 @@ function scaleToWindow(): number {
 }
 
 const config = {
-    type: Phaser.AUTO,
-    width: GAME_WIDTH,
-    height: GAME_HEIGHT,
-    scene: [MainMenu],
-    render: {
-        pixelArt: true,
-    },
-    zoom: scaleToWindow(),
-    // physics: {
-    //     default: 'arcade',
-    //     arcade: {
-    //         gravity: { x: 0, y: 200 }
-    //     }
-    // }
-    dom: {
-        createContainer: true
-    },
-	plugins: {
-		scene: [
-			{
-				key: 'rexUI',
-				plugin: RexUIPlugin,
-				mapping: 'rexUI'
-			}
-		]
-    }
+  type: Phaser.AUTO,
+  width: GAME_WIDTH,
+  height: GAME_HEIGHT,
+  scene: [MainMenu],
+  render: {
+    pixelArt: true,
+  },
+  zoom: scaleToWindow(),
+  // physics: {
+  //     default: 'arcade',
+  //     arcade: {
+  //         gravity: { x: 0, y: 200 }
+  //     }
+  // }
+  dom: {
+    createContainer: true,
+  },
+  plugins: {
+    scene: [
+      {
+        key: "rexUI",
+        plugin: RexUIPlugin,
+        mapping: "rexUI",
+      },
+    ],
+    global: [
+      {
+        key: "rexBBCodeTextPlugin",
+        plugin: BBCodeTextPlugin,
+        start: true,
+      },
+    ],
+  },
 };
 
 export const game = new Phaser.Game(config);
