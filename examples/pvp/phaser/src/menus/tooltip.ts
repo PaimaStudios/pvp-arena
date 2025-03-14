@@ -1,23 +1,66 @@
+import { toLowerCase } from "fp-ts/lib/string";
 import { fontStyle } from "../main";
 import { Button } from "./button";
+import { boolean } from "fp-ts";
 
-// TODO: store these properly in some global settings store
-const tooltipStore: Set<string> = new Set();
+export enum TooltipId {
+    EquipExplain1,
+    EquipExplain2,
+    EquipExplain3,
+    EquipExplain4,
+    PlayPracticeFirst,
+    SelectHero,
+    Move,
+    MoveCloser,
+    MoveFurther,
+    SetFirstAttack,
+    SetAllAttacks,
+};
+
+const localStorageId = (id: TooltipId) => `seen_tooltip_${id}`;
+
+function tooltipString(id: TooltipId): string {
+    switch (id) {
+        case TooltipId.EquipExplain1:
+            return 'Select your gladiators\' weapons and armor. Players will take turns to give a chance to counter your opponent\'s choices.';
+        case TooltipId.EquipExplain2:
+            return 'Damage is divided into pierce and crush types. Axes deal more crush damage, while bows and spears deal more pierce damage';
+        case TooltipId.EquipExplain3:
+            return 'There is also a dexterity bonus based on the difference betwen your weight and the opponent\'s weight.';
+        case TooltipId.EquipExplain4:
+            return 'Certain weapons, in particular swords and bows, have a higher dexterity bonus.';
+        case TooltipId.PlayPracticeFirst:
+            return 'It is recommended to play a practice match first to learn how to play.';
+        case TooltipId.SelectHero:
+            return 'Click on one of your gladiators to control them.';
+        case TooltipId.Move:
+            return 'Click on the move icons to change stances.';
+        case TooltipId.MoveCloser:
+            return 'Moving closer increases the damage you deal, but also increases the damage you receive.';
+        case TooltipId.MoveFurther:
+            return 'Moving away decreases the damage you receive, but also decreases the damage you deal.';
+        case TooltipId.SetAllAttacks:
+            return 'Confirm a target for your other 2 gladiators and commit your move.';
+        case TooltipId.SetFirstAttack:
+            return 'Click on an enemy gladiator to target them.';
+    }
+}
+
+const openTooltips: Map<TooltipId, Tooltip> = new Map();
 
 export class Tooltip extends Phaser.GameObjects.Container {
     current: number;
-    messages: string[];
+    messages: TooltipId[];
     width: number;
 
-    constructor(scene: Phaser.Scene, x: number, y: number, messages: string[], options?: TooltipOptions) {
+    constructor(scene: Phaser.Scene, x: number, y: number, messages: TooltipId[], options?: TooltipOptions) {
         super(scene, x, y);
         this.width = options?.width ?? 128;
         this.current = 0;
         this.messages = messages;
         this.refresh();
-        if (options?.clickHighlight != undefined) {
-            console.log(`clickHere: ${options.clickHighlight.x - x}, ${options.clickHighlight.y - y}`);
-            const clickHere = scene.add.sprite(options.clickHighlight.x - x, options.clickHighlight.y - y, 'click_here').setAlpha(0);
+        options?.clickHighlights?.forEach((clickHighlight) => {
+            const clickHere = scene.add.sprite(clickHighlight.x - x, clickHighlight.y - y, 'click_here').setAlpha(0);
             this.add(clickHere);
             clickHere.anims.play({
                 key: 'click_here',
@@ -30,13 +73,29 @@ export class Tooltip extends Phaser.GameObjects.Container {
                 delay: 200,
                 duration: 750,
             });
-        }
+        });
+    }
+
+    protected preDestroy(): void {
+        const matchedIds = openTooltips.entries().filter(([id, tooltip]) => tooltip == this);
+        matchedIds.forEach(([id, tooltip]) => openTooltips.delete(id));
+    }
+
+    public close() {
+        // just needs to exist, the 'true' is arbitrary
+        const id = this.messages[this.current];
+        localStorage.setItem(localStorageId(id), 'true');
+        openTooltips.delete(id);
+        ++this.current;
+        this.removeAll(true);
+        this.refresh();
     }
 
     private refresh() {
         if (this.current < this.messages.length) {
+            const id = this.messages[this.current];
             const border = 4;
-            const text = this.scene.add.text(border, 0, this.messages[this.current], fontStyle(10, {
+            const text = this.scene.add.text(border, 0, tooltipString(id), fontStyle(10, {
                 wordWrap: { width: this.width },
             })).setOrigin(0.5, 0.5);
             
@@ -47,13 +106,10 @@ export class Tooltip extends Phaser.GameObjects.Container {
             this.add(text);
             
             
-            const close = new Button(this.scene, w / 2, -h / 2, 16, 16, 'x', 10, () => {
-                tooltipStore.add(this.messages[this.current]);
-                ++this.current;
-                this.removeAll(true);
-                this.refresh();
-            }, 'Close');
+            const close = new Button(this.scene, w / 2, -h / 2, 16, 16, 'x', 10, () => this.close(), 'Close');
             this.add(close);
+
+            openTooltips.set(id, this);
         } else {
             this.destroy();
         }
@@ -62,18 +118,22 @@ export class Tooltip extends Phaser.GameObjects.Container {
 
 export type TooltipOptions = {
     width?: number,
-    clickHighlight?: Phaser.Math.Vector2,
+    clickHighlights?: Phaser.Math.Vector2[],
 };
 
-export function makeTooltip(scene: Phaser.Scene, x: number, y: number, message: string | string[], options?: TooltipOptions): Tooltip | undefined {
-    console.log(`Tooltip(${message})`);
+/// closes a tooltip if it's open. marks it as read regardless of if seen or not
+export const closeTooltip = (id: TooltipId) => openTooltips.get(id)?.close();
+
+export const isTooltipOpen = (id: TooltipId) => openTooltips.get(id) != undefined;
+
+export function makeTooltip(scene: Phaser.Scene, x: number, y: number, ids: TooltipId | TooltipId[], options?: TooltipOptions): Tooltip | undefined {
     // TODO: need separate key or is by message enough?
-    if (typeof message == 'string') {
-        message = [message];
+    if (!Array.isArray(ids)) {
+        ids = [ids];
     }
-    const unseenMessages = message.filter((m) => !tooltipStore.has(m));
-    if (unseenMessages.length != 0) {
-        const tooltip = new Tooltip(scene, x, y, message, options);
+    const unseenMessages = ids.filter((id) => localStorage.getItem(localStorageId(id)) == null);
+    if (unseenMessages.length != 0 && unseenMessages.every((id) => openTooltips.get(id) == undefined)) {
+        const tooltip = new Tooltip(scene, x, y, unseenMessages, options);
         scene.add.existing(tooltip);
         return tooltip;
     }
