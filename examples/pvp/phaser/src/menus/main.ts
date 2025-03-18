@@ -1,5 +1,5 @@
 import { BrowserDeploymentManager } from '../wallet';
-import { logger, GAME_WIDTH, GAME_HEIGHT, fontStyle } from '../main';
+import { logger, networkId, GAME_WIDTH, GAME_HEIGHT, fontStyle } from '../main';
 import { MockPVPArenaAPI } from '../battle/mockapi';
 import { Arena } from '../battle/arena';
 import { EquipmentMenu } from './equipment';
@@ -7,9 +7,10 @@ import { Button } from './button';
 import { HeroAnimationController, createHeroAnims, generateRandomHero } from '../battle/hero';
 import { ARMOR, ITEM } from '@midnight-ntwrk/pvp-contract';
 import { LobbyMenu } from './lobby';
-import { makeTooltip } from './tooltip';
+import { closeTooltip, isTooltipOpen, makeTooltip, TooltipId } from './tooltip';
 import { BalancingTest, heroBalancing } from '../balancing';
 import { PracticeMenu } from './practice';
+import { NetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 
 
 export class MainMenu extends Phaser.Scene {
@@ -94,24 +95,25 @@ export class MainMenu extends Phaser.Scene {
         // this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 4, 'PVP ARENA', {fontSize: 64, color: 'white'}).setOrigin(0.5, 0.5);
         this.text = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.65, '', fontStyle(12)).setOrigin(0.5, 0.65).setVisible(false);
 
-        const suggestPracticeTooltip = 'It is recommended to play a practice match first to learn how to play.';
-
         // create an off-chain testing world for testing graphical stuff without having to wait a long time
         this.buttons.push(new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.55, 128, 32, 'Practice', 20, () => {
+            closeTooltip(TooltipId.PlayPracticeFirst);
             this.scene.remove('PracticeMenu');
             this.scene.add('PracticeMenu', new PracticeMenu(this.deployProvider));
             this.scene.start('PracticeMenu');
         }, 'Play a match against a local computer AI'));
         
         this.buttons.push(new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.7, 128, 32, 'Join', 20, () => {
-            if (makeTooltip(this, GAME_WIDTH / 2, GAME_HEIGHT / 4, suggestPracticeTooltip) == undefined) {
+            if (isTooltipOpen(TooltipId.PlayPracticeFirst) || makeTooltip(this, GAME_WIDTH / 2, GAME_HEIGHT / 4, TooltipId.PlayPracticeFirst) == undefined) {
+                closeTooltip(TooltipId.PlayPracticeFirst);
                 this.scene.remove('LobbyMenu');
                 this.scene.add('LobbyMenu', new LobbyMenu(this.deployProvider));
                 this.scene.start('LobbyMenu');
             }
         }, 'Join an on-chain match'));
         this.buttons.push(new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.85, 128, 32, 'Create', 20, () => {
-            if (makeTooltip(this, GAME_WIDTH / 2, GAME_HEIGHT / 4, suggestPracticeTooltip) == undefined) {
+            if (isTooltipOpen(TooltipId.PlayPracticeFirst) || makeTooltip(this, GAME_WIDTH / 2, GAME_HEIGHT / 4, TooltipId.PlayPracticeFirst) == undefined) {
+                closeTooltip(TooltipId.PlayPracticeFirst);
                 this.setStatusText('Creating match, please wait...');
                 this.deployProvider.create(false).then((api) => {
                     console.log('====================\napi done from creating\n===============');
@@ -127,7 +129,7 @@ export class MainMenu extends Phaser.Scene {
 
         // dev menu
         // TODO: how to load the .env.testnet file? I can't access the VITE env variables to check this
-        if (import.meta.env.MODE == 'undeployed') {
+        if (networkId == NetworkId.Undeployed) {
             this.add.text(160 + GAME_WIDTH / 2, GAME_HEIGHT * 0.55, 'Dev Menu', fontStyle(12)).setOrigin(0.5, 0.65);
             this.buttons.push(new Button(this, 160 + GAME_WIDTH / 2, GAME_HEIGHT * 0.7, 128, 32, 'Balancing', 20, () => {
                 //this.scene.remove('BalancingTest');

@@ -8,7 +8,7 @@ import { HeroActor } from './hero';
 import { HeroIndex, hpDiv, Rank, Team } from './index';
 import { Button } from '../menus/button';
 import { init } from 'fp-ts/lib/ReadonlyNonEmptyArray';
-import { makeTooltip } from '../menus/tooltip';
+import { closeTooltip, makeTooltip, TooltipId } from '../menus/tooltip';
 
 export type BattleConfig = {
     isP1: boolean,
@@ -64,7 +64,7 @@ export class Arena extends Phaser.Scene
                     hero.setInteractive({useHandCursor: true});
                 }
                 const firstHero = this.getAliveHeroes(this.playerTeam())[0];
-                makeTooltip(this, firstHero.x, firstHero.y - 96, 'Click on one of your gladiators to control them.', { clickHighlight: new Phaser.Math.Vector2(firstHero.x, firstHero.y) });
+                makeTooltip(this, firstHero.x, firstHero.y - 96, TooltipId.SelectHero, { clickHighlights: [new Phaser.Math.Vector2(firstHero.x, firstHero.y)] });
                 break;
             case MatchState.WaitingOnOpponent:
                 this.matchStateText?.setText('Waiting on opponent (submit)...');
@@ -491,6 +491,7 @@ export class Arena extends Phaser.Scene
             }
             this.submitButton!.visible = false;
             this.matchStateText!.visible = true;
+            closeTooltip(TooltipId.SetAllAttacks);
         });
         this.submitButton!.visible = false;
         this.add.existing(this.submitButton);
