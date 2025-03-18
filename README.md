@@ -4,7 +4,7 @@
 
 In this order, run
 
-From `examples/pvp/contract`:
+From `examples/pvp/compact`:
 ```
 yarn install
 npm run contract
