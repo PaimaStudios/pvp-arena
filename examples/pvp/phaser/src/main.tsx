@@ -11,7 +11,7 @@ import * as pino from 'pino';
 // TODO: get this properly? it's undefined if i uncomment this
 //const networkId = import.meta.env.VITE_NETWORK_ID as NetworkId;
 //const networkId = NetworkId.TestNet;
-const networkId = getNetworkId();
+export const networkId = getNetworkId();
 
 function getNetworkId(): NetworkId {
     switch (import.meta.env.MODE) {
