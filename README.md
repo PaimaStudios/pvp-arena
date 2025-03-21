@@ -2,7 +2,9 @@
 
 ## How to build
 
-In this order, run
+First make sure you have [`compactc`](https://docs.midnight.network/relnotes/compact) set up and the `COMPACT_HOME` env var set to the unzipped `compactc` directory.
+
+Then, in this order, run
 
 From `examples/pvp/compact`:
 ```
