@@ -6,6 +6,7 @@ import { EquipmentMenu } from './equipment';
 import { Button } from './button';
 import { HeroAnimationController, createHeroAnims, generateRandomHero } from '../battle/hero';
 import { ARMOR, ITEM } from '@midnight-ntwrk/pvp-contract';
+import { CreateMenu } from './create';
 import { LobbyMenu } from './lobby';
 import { closeTooltip, isTooltipOpen, makeTooltip, TooltipId } from './tooltip';
 import { BalancingTest, heroBalancing } from '../balancing';
@@ -29,6 +30,7 @@ export class MainMenu extends Phaser.Scene {
 
         this.load.image('arena_bg', 'arena_bg.png');
         this.load.image('title_screen', 'title_screen.png');
+        this.load.image('clipboard', 'clipboard.png');
 
         this.load.image('stone_button', 'stone_button.png');
         this.load.image('stone_button_over', 'stone_button_over.png');
@@ -114,16 +116,9 @@ export class MainMenu extends Phaser.Scene {
         this.buttons.push(new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.85, 128, 32, 'Create', 20, () => {
             if (isTooltipOpen(TooltipId.PlayPracticeFirst) || makeTooltip(this, GAME_WIDTH / 2, GAME_HEIGHT / 4, TooltipId.PlayPracticeFirst) == undefined) {
                 closeTooltip(TooltipId.PlayPracticeFirst);
-                this.setStatusText('Creating match, please wait...');
-                this.deployProvider.create(false).then((api) => {
-                    console.log('====================\napi done from creating\n===============');
-                    console.log(`contract address: ${api.deployedContractAddress}`);
-                    navigator.clipboard.writeText(api.deployedContractAddress);
-                    this.scene.remove('EquipmentMenu');
-                    const equipMenu = new EquipmentMenu({ api, isP1: true });
-                    this.scene.add('EquipmentMenu', equipMenu);
-                    this.scene.start('EquipmentMenu');
-                });
+                this.scene.remove('CreateMenu');
+                this.scene.add('CreateMenu', new CreateMenu(this.deployProvider));
+                this.scene.start('CreateMenu');
             }
         }, 'Create an on-chain match'));
 

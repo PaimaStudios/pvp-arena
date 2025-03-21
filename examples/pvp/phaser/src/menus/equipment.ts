@@ -8,7 +8,10 @@ import { MockPVPArenaAPI } from '../battle/mockapi';
 import { PVPArenaAPI, PVPArenaDerivedState } from '@midnight-ntwrk/pvp-api';
 import { Physics } from 'phaser';
 import { eq } from 'fp-ts';
-import { makeTooltip, TooltipId } from './tooltip';
+import { closeTooltip, isTooltipOpen, makeTooltip, TooltipId } from './tooltip';
+import { Observable } from 'rxjs/internal/Observable';
+import { Subscription } from 'rxjs';
+import { ContractAddress } from '@midnight-ntwrk/ledger';
 
 class SelectHeroActor extends Phaser.GameObjects.Container {
     hero: Hero;
@@ -485,6 +488,8 @@ export class EquipmentMenu extends Phaser.Scene {
         this.add.image(GAME_WIDTH, GAME_HEIGHT, 'arena_bg').setPosition(GAME_WIDTH / 2, GAME_HEIGHT / 2).setDepth(-3);
         this.add.text(GAME_WIDTH / 2 + 2, GAME_HEIGHT / 5, 'EQUIPMENT SELECT', fontStyle(24)).setOrigin(0.5, 0.65);
         this.setupStateText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.9, '', fontStyle(12)).setOrigin(0.5, 0.65);
+        makeCopyAddressButton(this, GAME_WIDTH - 48, 16, this.config.api.deployedContractAddress);
+        makeExitMatchButton(this, GAME_WIDTH - 16, 16);
 
         for (let team = 0; team < 2; ++team) {
             let heroes = [];
@@ -539,4 +544,22 @@ export class EquipmentMenu extends Phaser.Scene {
         }
         this.selecting += 1;
     }
+}
+
+export function makeCopyAddressButton(scene: Phaser.Scene, x: number, y: number, address: ContractAddress): Button {
+    const button = new Button(scene, x, y, 24, 24, '', 10, () => {
+        navigator.clipboard.writeText(address);
+    }, 'Copy contract address');
+    button.add(scene.add.image(0, 0, 'clipboard').setAlpha(0.75));
+    return button;
+}
+
+export function makeExitMatchButton(scene: Phaser.Scene, x: number, y: number): Button {
+    return new Button(scene, x, y, 24, 24, '<', 10, () => {
+        if (isTooltipOpen(TooltipId.ExitInProgressMatch) || makeTooltip(scene, GAME_WIDTH / 2, GAME_HEIGHT / 4, TooltipId.ExitInProgressMatch) == undefined) {
+            closeTooltip(TooltipId.ExitInProgressMatch);
+            scene.scene.start('MainMenu');
+            scene.scene.remove('Arena');
+        }
+    }, 'Exit to main menu');
 }

@@ -9,6 +9,7 @@ import { HeroIndex, hpDiv, Rank, Team } from './index';
 import { Button } from '../menus/button';
 import { init } from 'fp-ts/lib/ReadonlyNonEmptyArray';
 import { closeTooltip, makeTooltip, TooltipId } from '../menus/tooltip';
+import { makeCopyAddressButton, makeExitMatchButton } from '../menus/equipment';
 
 export type BattleConfig = {
     isP1: boolean,
@@ -337,6 +338,9 @@ export class Arena extends Phaser.Scene
 
     create() {
         this.add.image(GAME_WIDTH, GAME_HEIGHT, 'arena_bg').setPosition(GAME_WIDTH / 2, GAME_HEIGHT / 2).setDepth(-3);
+
+        makeCopyAddressButton(this, GAME_WIDTH - 48, 16, this.config.api.deployedContractAddress);
+        makeExitMatchButton(this, GAME_WIDTH - 16, 16);
 
         this.matchStateText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.9, '', fontStyle(12)).setOrigin(0.5, 0.65);
 

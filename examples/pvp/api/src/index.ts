@@ -113,6 +113,11 @@ export function generateRandomHero(): Hero {
   };
 }
 
+export type CreateMatchOptions = {
+  isPractice: boolean,
+  isPublic: boolean,
+};
+
 /**
  * An API for a deployed bulletin board.
  */
@@ -151,7 +156,7 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
   private constructor(
     public readonly deployedContract: DeployedPVPArenaContract,
     private readonly providers: PVPArenaProviders,
-    private readonly isPractice: boolean,
+    private readonly launchPracticeMode: boolean,
     private readonly logger?: Logger,
   ) {
     this.deployedContractAddress = deployedContract.deployTxData.public.contractAddress;
@@ -203,7 +208,7 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
     );
 
     // in practice mode we locally run everything in the mockapi but ran on-chain
-    if (isPractice) {
+    if (launchPracticeMode) {
       this.state$.subscribe((state) => {
         // nothing is awaited since not async + doesn't matter as it's always the last thing called
         // also, this won't be called again until the execution is completed and state changes on the network
@@ -430,16 +435,15 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
    * @returns A `Promise` that resolves with a {@link PVPArenaAPI} instance that manages the newly deployed
    * {@link DeployedPVPArenaContract}; or rejects with a deployment error.
    */
-  static async deploy(providers: PVPArenaProviders, isPractice: boolean, logger?: Logger): Promise<PVPArenaAPI> {
+  static async deploy(providers: PVPArenaProviders, options: CreateMatchOptions, logger?: Logger): Promise<PVPArenaAPI> {
     logger?.info('deployContract');
 
     // EXERCISE 5: FILL IN THE CORRECT ARGUMENTS TO deployContract
     const deployedPVPArenaContract = await deployContract(providers, {
-      // EXERCISE ANSWER
-      privateStateKey: 'pvpPrivateState', // EXERCISE ANSWER
+      privateStateKey: 'pvpPrivateState',
       contract: pvpContractInstance,
-      initialPrivateState: await PVPArenaAPI.getPrivateState(providers.privateStateProvider), // EXERCISE ANSWER
-      //args: [],
+      initialPrivateState: await PVPArenaAPI.getPrivateState(providers.privateStateProvider),
+      args: [options.isPublic],
     });
     logger?.trace({
       contractDeployed: {
@@ -447,7 +451,7 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
       },
     });
 
-    return new PVPArenaAPI(deployedPVPArenaContract, providers, isPractice, logger);
+    return new PVPArenaAPI(deployedPVPArenaContract, providers, options.isPractice, logger);
   }
 
   /**
