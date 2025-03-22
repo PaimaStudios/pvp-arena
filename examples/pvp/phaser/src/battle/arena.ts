@@ -529,46 +529,47 @@ export class Arena extends Phaser.Scene
             // this takes ~1-3s on my machine in dev mode, do we need further optimization?
             // e.g. only consider valid moves
             const guessTargetsForP1 = () => {
-                if (this.config.isP1) {
-                    const startTime = Date.now();
-                    for (let stance0 = 0; stance0 < 3; ++stance0) {
-                        for (let stance1 = 0; stance1 < 3; ++stance1) {
-                            for (let stance2 = 0; stance2 < 3; ++stance2) {
-                                for (let target0 = 0; target0 < 4; ++target0) {
-                                    for (let target1 = 0; target1 < 4; ++target1) {
-                                        for (let target2 = 0; target2 < 4; ++target2) {
-                                            const commit = pureCircuits.calc_commit_for_checking(
-                                                this.initialState.secretKey,
-                                                [BigInt(target0), BigInt(target1), BigInt(target2)],
-                                                [stance0, stance1, stance2],
-                                                this.initialState.nonce!,
-                                            );
-                                            if (commit == this.initialState.commit) {
-                                                console.log(`found match [${stance0}, ${stance1}, ${stance2}]; [${target0}, ${target1}, ${target2}] in ${Date.now() - startTime}ms`);
-                                                this.heroes[0][0].setNextStance(stance0);
-                                                this.heroes[0][1].setNextStance(stance1);
-                                                this.heroes[0][2].setNextStance(stance2);
-                                                this.heroes[0][0].setTarget(new Rank(target0 as HeroIndex, 1));
-                                                this.heroes[0][1].setTarget(new Rank(target1 as HeroIndex, 1));
-                                                this.heroes[0][2].setTarget(new Rank(target2 as HeroIndex, 1));
-                                                return;
-                                            }
+                const startTime = Date.now();
+                for (let stance0 = 0; stance0 < 3; ++stance0) {
+                    for (let stance1 = 0; stance1 < 3; ++stance1) {
+                        for (let stance2 = 0; stance2 < 3; ++stance2) {
+                            for (let target0 = 0; target0 < 4; ++target0) {
+                                for (let target1 = 0; target1 < 4; ++target1) {
+                                    for (let target2 = 0; target2 < 4; ++target2) {
+                                        const commit = pureCircuits.calc_commit_for_checking(
+                                            this.initialState.secretKey,
+                                            [BigInt(target0), BigInt(target1), BigInt(target2)],
+                                            [stance0, stance1, stance2],
+                                            this.initialState.nonce!,
+                                        );
+                                        if (commit == this.initialState.commit) {
+                                            console.log(`found match [${stance0}, ${stance1}, ${stance2}]; [${target0}, ${target1}, ${target2}] in ${Date.now() - startTime}ms`);
+                                            this.heroes[0][0].setNextStance(stance0);
+                                            this.heroes[0][1].setNextStance(stance1);
+                                            this.heroes[0][2].setNextStance(stance2);
+                                            this.heroes[0][0].setTarget(new Rank(target0 as HeroIndex, 1));
+                                            this.heroes[0][1].setTarget(new Rank(target1 as HeroIndex, 1));
+                                            this.heroes[0][2].setTarget(new Rank(target2 as HeroIndex, 1));
+                                            return;
                                         }
                                     }
                                 }
                             }
                         }
                     }
-                    throw new Error('could not find matching commit');
                 }
+                throw new Error('could not find matching commit');
             };
             switch (this.initialState.state) {
                 case GAME_STATE.p2_commit_reveal:
-                    guessTargetsForP1();
+                    if (this.config.isP1) {
+                        guessTargetsForP1();
+                    }
                     break;
                 case GAME_STATE.p1_reveal:
-                    guessTargetsForP1();
-                    if (!this.config.isP1) {
+                    if (this.config.isP1) {
+                        guessTargetsForP1();
+                    } else {
                         for (let i = 0; i < 3; ++i) {
                             this.heroes[1][i].setTarget(new Rank(Number(this.initialState.p2Cmds![i]) as HeroIndex, 0));
                         }

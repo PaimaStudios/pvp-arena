@@ -464,7 +464,8 @@ export class EquipmentMenu extends Phaser.Scene {
             case GAME_STATE.p1_commit:
                 // game started
                 console.log(`================skipping equip screen=============`);
-                this.scene.remove('Arena');
+                // This causes black screens when uncommented. TODO: investigate. Issue: https://github.com/PaimaStudios/pvp-arena/issues/22
+                //this.scene.remove('Arena');
                 this.scene.add('Arena', new Arena(this.config, state));
                 this.scene.start('Arena');
                 break;
