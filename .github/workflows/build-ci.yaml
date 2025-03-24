@@ -48,5 +48,5 @@ jobs:
         mkdir -p ~/.ssh
         echo "$SSH_PRIVATE_KEY" > ~/.ssh/private_key
         chmod 600 ~/.ssh/private_key
-        scp -P $SSH_PORT -i ~/.ssh/private_key -r $PWD/examples/pvp/phaser/dist/* $SSH_USERNAME@$SSH_HOST:/opt/kachina-test/
+        scp -o StrictHostKeyChecking=no -P $SSH_PORT -i ~/.ssh/private_key -r $PWD/examples/pvp/phaser/dist/* $SSH_USERNAME@$SSH_HOST:/opt/kachina-test/
         rm ~/.ssh/private_key
