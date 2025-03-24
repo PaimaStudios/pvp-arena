@@ -1,7 +1,7 @@
 import { NetworkId, setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 import '@midnight-ntwrk/dapp-connector-api';
 import { ITEM, RESULT, STANCE, Hero, ARMOR, pureCircuits, GAME_STATE } from '@midnight-ntwrk/pvp-contract';
-import { type PVPArenaDerivedState, type DeployedPVPArenaAPI } from '@midnight-ntwrk/pvp-api';
+import { type PVPArenaDerivedState, type DeployedPVPArenaAPI, PVPArenaAPI } from '@midnight-ntwrk/pvp-api';
 import './globals';
 import { type ContractAddress } from '@midnight-ntwrk/compact-runtime';
 import { LedgerState } from '@midnight-ntwrk/ledger';
@@ -124,6 +124,26 @@ export function rootObject(obj: Phaser.GameObjects.GameObject & Phaser.GameObjec
         obj = obj.parentContainer;
     }
     return obj;
+}
+
+export type ContractJoinInfo = {
+    config: BattleConfig;
+    state: PVPArenaDerivedState;
+}
+
+export async function joinContract(deployProvider: BrowserDeploymentManager, contractAddress: ContractAddress): Promise<ContractJoinInfo> {
+    return deployProvider.join(contractAddress).then((api) => new Promise((resolve) => {
+        const subscription = api.state$.subscribe((state) => {
+            subscription.unsubscribe();
+            resolve({
+                config: {
+                    isP1: state.isP1,
+                    api,
+                },
+                state,
+            });
+        });
+    }));
 }
 
 export enum MatchState {

@@ -104,7 +104,7 @@ export class HeroActor extends Phaser.GameObjects.Container {
             arena.sound.play('select');
             const leftStance = this.leftStance()!;
             // toggle to undo moving if already in this stance
-            this.nextStance = this.nextStance == leftStance ? this.stance : leftStance;
+            this.setNextStance(this.nextStance == leftStance ? this.stance : leftStance);
             this.updateNextStanceArrow();
             closeTooltip(TooltipId.Move);
             makeTooltip(this.scene, GAME_WIDTH / 2, 100, this.rank.team == 0 ? TooltipId.MoveFurther : TooltipId.MoveCloser);
@@ -112,7 +112,7 @@ export class HeroActor extends Phaser.GameObjects.Container {
         this.right_arrow.on('pointerup', () => {
             arena.sound.play('select');
             const rightStance = this.rightStance()!;
-            this.nextStance = this.nextStance == rightStance ? this.stance : rightStance;
+            this.setNextStance(this.nextStance == rightStance ? this.stance : rightStance);
             this.updateNextStanceArrow();
             closeTooltip(TooltipId.Move);
             makeTooltip(this.scene, GAME_WIDTH / 2, 100, this.rank.team == 0 ? TooltipId.MoveCloser : TooltipId.MoveFurther);
@@ -176,13 +176,25 @@ export class HeroActor extends Phaser.GameObjects.Container {
                     alpha: 0,
                     duration: 150,
                     onComplete: () => {
-                            this.arena.sound.play('death');
-                            this.visible = false;
-                            this.arena.add.image(this.x, this.y, 'skull').setFlipX(this.rank.team == 1).setDepth(-1);
+                        this.arena.sound.play('death');
+                        this.visible = false;
+                        this.arena.add.image(this.x, this.y, 'skull').setFlipX(this.rank.team == 1).setDepth(-1);
                     }
                 });
             }
         }));
+    }
+
+    /// used for resuming game
+    public setDamageForResume(dmg: number) {
+        this.realDmg = dmg;
+        this.uiDmg = dmg;
+        this.preTurnDmg = dmg;
+        if (!this.isAlive()) {
+            this.visible = false;
+            this.arena.add.image(this.x, this.y, 'skull').setFlipX(this.rank.team == 1).setDepth(-1);
+        }
+        this.updateHpBar();
     }
 
     private updateHpBar() {
@@ -196,12 +208,16 @@ export class HeroActor extends Phaser.GameObjects.Container {
 
     public toggleNextStance() {
         if (this.nextStance == STANCE.neutral) {
-            this.nextStance = this.stance == STANCE.defensive ? STANCE.defensive : STANCE.aggressive;
+            this.setNextStance(this.stance == STANCE.defensive ? STANCE.defensive : STANCE.aggressive);
         } else if (this.nextStance == STANCE.aggressive) {
-            this.nextStance = this.stance == STANCE.aggressive ? STANCE.neutral : STANCE.defensive;
+            this.setNextStance(this.stance == STANCE.aggressive ? STANCE.neutral : STANCE.defensive);
         } else {
-            this.nextStance = STANCE.neutral;
+            this.setNextStance(STANCE.neutral);
         }
+    }
+
+    public setNextStance(stance: STANCE) {
+        this.nextStance = stance;
         this.updateNextStanceArrow();
     }
 
@@ -214,7 +230,11 @@ export class HeroActor extends Phaser.GameObjects.Container {
             if (this.nextStance == leftStance) {
                 this.left_arrow.setAlpha(1).setScale(1, 1);
             } else {
-                this.left_arrow.setAlpha(0.75).setScale(0.5, 0.5);
+                if (this.arena.matchState == MatchState.WaitingOnPlayer) {
+                    this.left_arrow.setAlpha(0.75).setScale(0.5, 0.5);
+                } else {
+                    this.left_arrow.visible = false;
+                }
             }
         }
         const rightStance = this.rightStance();
@@ -225,7 +245,11 @@ export class HeroActor extends Phaser.GameObjects.Container {
             if (this.nextStance == rightStance) {
                 this.right_arrow.setAlpha(1).setScale(1, 1);
             } else {
-                this.right_arrow.setAlpha(0.75).setScale(0.5, 0.5);
+                if (this.arena.matchState == MatchState.WaitingOnPlayer) {
+                    this.right_arrow.setAlpha(0.75).setScale(0.5, 0.5);
+                } else {
+                    this.right_arrow.visible = false;
+                }
             }
         }
         // also update the damage estimate

@@ -9,6 +9,7 @@ import { HeroIndex, hpDiv, Rank, Team } from './index';
 import { Button } from '../menus/button';
 import { init } from 'fp-ts/lib/ReadonlyNonEmptyArray';
 import { closeTooltip, makeTooltip, TooltipId } from '../menus/tooltip';
+import { Subscription } from 'rxjs';
 
 export type BattleConfig = {
     isP1: boolean,
@@ -29,6 +30,7 @@ export class Arena extends Phaser.Scene
     matchStateText: Phaser.GameObjects.Text | undefined;
     round: number;
     submitButton: Button | undefined;
+    subscription: Subscription | undefined;
 
     constructor(config: BattleConfig, initialState: PVPArenaDerivedState) {
         super('Arena');
@@ -40,8 +42,10 @@ export class Arena extends Phaser.Scene
         this.matchState = MatchState.Initializing;
         this.round = 0;
         this.submitButton = undefined;
+    }
 
-        const subscription = config.api.state$.subscribe((state) => this.onStateChange(state));
+    preDestroy() {
+        this.subscription?.unsubscribe();
     }
 
     playerTeam(): Team {
@@ -121,16 +125,7 @@ export class Arena extends Phaser.Scene
         });
     }
 
-    onStateChange(state: PVPArenaDerivedState) {
-        console.log(`new state: ${safeJSONString(state)}`);
-        console.log(`NOW: ${gameStateStr(state.state)}`);
-
-        if (state.state == GAME_STATE.p1_selecting_first_hero || state.state == GAME_STATE.p2_selecting_first_heroes || state.state == GAME_STATE.p1_selecting_last_heroes || state.state == GAME_STATE.p2_selecting_last_hero) {
-            // for some reason we're getting updates here using old state that we can ignore
-            // it calls onStateChange for every state update that had previously happened on the equipment screen
-            return;
-        }
-
+    private createHeroes(state: PVPArenaDerivedState) {
         // create heroes initially
         if (this.heroes.length == 0) {
             for (let team = 0; team < 2; ++team) {
@@ -143,6 +138,19 @@ export class Arena extends Phaser.Scene
                 this.heroes.push(hero_actors);
             }
         }
+    }
+
+    onStateChange(state: PVPArenaDerivedState) {
+        console.log(`new state: ${safeJSONString(state)}`);
+        console.log(`NOW: ${gameStateStr(state.state)}`);
+
+        if (state.state == GAME_STATE.p1_selecting_first_hero || state.state == GAME_STATE.p2_selecting_first_heroes || state.state == GAME_STATE.p1_selecting_last_heroes || state.state == GAME_STATE.p2_selecting_last_hero) {
+            // for some reason we're getting updates here using old state that we can ignore
+            // it calls onStateChange for every state update that had previously happened on the equipment screen
+            return;
+        }
+
+        this.createHeroes(state);
 
         // update commands/stances/damages
         if (state.p1Cmds != undefined && state.p2Cmds != undefined/* && (state.state == GAME_STATE.p1_commit)*/) {
@@ -498,7 +506,79 @@ export class Arena extends Phaser.Scene
 
         this.setMatchState(MatchState.Initializing);
 
-        this.onStateChange(this.initialState);
+        this.createHeroes(this.initialState);
+        
+        if (this.initialState.round != BigInt(0) || this.initialState.state != GAME_STATE.p1_commit) {
+            console.log('===================re-doing initial state=========');
+            this.round = Number(this.initialState.round);
+            // we can't know previous stances for player 2 so to make the resuming consistent just default to the on-chain values
+            for (let team = 0; team < 2; ++team) {
+                const stances = team == 0 ? this.initialState.p1Stances : this.initialState.p2Stances;
+                const dmgs = team == 0 ? this.initialState.p1Dmg : this.initialState.p2Dmg;
+                for (let i = 0; i < 3; ++i) {
+                    const stance = stances[i];
+                    const hero = this.heroes[team][i];
+                    hero.stance = stance;
+                    hero.nextStance = stance;
+                    hero.setX(hero.rank.x(stance));
+                    hero.setDamageForResume(Number(dmgs[i]));
+                }
+            }
+
+            // we need to bruteforce to see what our commit was for
+            // this takes ~1-3s on my machine in dev mode, do we need further optimization?
+            // e.g. only consider valid moves
+            const guessTargetsForP1 = () => {
+                const startTime = Date.now();
+                for (let stance0 = 0; stance0 < 3; ++stance0) {
+                    for (let stance1 = 0; stance1 < 3; ++stance1) {
+                        for (let stance2 = 0; stance2 < 3; ++stance2) {
+                            for (let target0 = 0; target0 < 4; ++target0) {
+                                for (let target1 = 0; target1 < 4; ++target1) {
+                                    for (let target2 = 0; target2 < 4; ++target2) {
+                                        const commit = pureCircuits.calc_commit_for_checking(
+                                            this.initialState.secretKey,
+                                            [BigInt(target0), BigInt(target1), BigInt(target2)],
+                                            [stance0, stance1, stance2],
+                                            this.initialState.nonce!,
+                                        );
+                                        if (commit == this.initialState.commit) {
+                                            console.log(`found match [${stance0}, ${stance1}, ${stance2}]; [${target0}, ${target1}, ${target2}] in ${Date.now() - startTime}ms`);
+                                            this.heroes[0][0].setNextStance(stance0);
+                                            this.heroes[0][1].setNextStance(stance1);
+                                            this.heroes[0][2].setNextStance(stance2);
+                                            this.heroes[0][0].setTarget(new Rank(target0 as HeroIndex, 1));
+                                            this.heroes[0][1].setTarget(new Rank(target1 as HeroIndex, 1));
+                                            this.heroes[0][2].setTarget(new Rank(target2 as HeroIndex, 1));
+                                            return;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                throw new Error('could not find matching commit');
+            };
+            switch (this.initialState.state) {
+                case GAME_STATE.p2_commit_reveal:
+                    if (this.config.isP1) {
+                        guessTargetsForP1();
+                    }
+                    break;
+                case GAME_STATE.p1_reveal:
+                    if (this.config.isP1) {
+                        guessTargetsForP1();
+                    } else {
+                        for (let i = 0; i < 3; ++i) {
+                            this.heroes[1][i].setTarget(new Rank(Number(this.initialState.p2Cmds![i]) as HeroIndex, 0));
+                        }
+                    }
+                    break;
+            }
+        }
+
+        this.subscription = this.config.api.state$.subscribe((state) => this.onStateChange(state));
     }
 
     update() {

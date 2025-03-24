@@ -36,6 +36,9 @@ export class MockPVPArenaAPI implements DeployedPVPArenaAPI {
             p2Dmg: [BigInt(0), BigInt(0), BigInt(0)],
             p2Alive: [true, true, true],
             p2Stances: [STANCE.neutral, STANCE.neutral, STANCE.neutral],
+            nonce: undefined,
+            commit: undefined,
+            secretKey: new Uint8Array(),
         };
         this.isP1 = isP1;
         setTimeout(() => {

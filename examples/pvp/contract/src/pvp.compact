@@ -176,6 +176,11 @@ export pure circuit calc_stats(hero: Hero): TotalStats {
     };
 }
 
+// not to be used in the circuit, but useful for UI to verify commits when resuming games
+export pure circuit calc_commit_for_checking(sk: Bytes<32>, commands: Vector<3, Uint<32>>, stances: Vector<3, STANCE>, nonce: Bytes<32>): Field {
+    return transient_hash<MoveHasher>(MoveHasher { sk, commands, stances, nonce });
+}
+
 struct MoveHasher {
     sk: Bytes<32>,
     cmds: Vector<3, Uint<32>>,
