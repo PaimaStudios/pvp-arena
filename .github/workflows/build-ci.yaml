@@ -17,10 +17,22 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: '20'
-        cache: 'yarn'
 
-    - name: Build and copy assets
+    - name: Install compactc dependencies and setup environment
       run: |
-        yarn install --frozen-lockfile
+        wget https://d3fazakqrumx6p.cloudfront.net/artifacts/compiler/compactc_0.22.0/compactc_v0.22.0_x86_64-unknown-linux-musl.zip
+        unzip compactc_v0.22.0_x86_64-unknown-linux-musl.zip -d compactc
+        export COMPACT_HOME=$PWD/compactc
+        export PATH=$PATH:$COMPACT_HOME
+
+    - name: Configure Node to use yarn and install turbo globally
+      run: |
+        corepack enable
+        corepack install yarn@4.7.0
+        corepack use yarn@4.7.0
+        npm i -g turbo
+
+    - name: Build assets.
+      run: |
+        yarn install
         yarn build
-        sudo cp -r examples/pvp/phaser/dist/* /opt/kachina-app/
