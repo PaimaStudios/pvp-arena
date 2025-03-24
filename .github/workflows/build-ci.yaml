@@ -22,8 +22,6 @@ jobs:
       run: |
         wget https://d3fazakqrumx6p.cloudfront.net/artifacts/compiler/compactc_0.22.0/compactc_v0.22.0_x86_64-unknown-linux-musl.zip
         unzip compactc_v0.22.0_x86_64-unknown-linux-musl.zip -d compactc
-        export COMPACT_HOME=$PWD/compactc
-        export PATH=$PATH:$COMPACT_HOME
 
     - name: Configure Node to use yarn and install turbo globally
       shell: bash
@@ -35,5 +33,7 @@ jobs:
 
     - name: Build assets
       run: |
+        export COMPACT_HOME=$PWD/compactc
+        export PATH=$PATH:$COMPACT_HOME      
         yarn install --frozen-lockfile
         yarn build
