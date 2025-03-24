@@ -1,14 +1,15 @@
 import { ITEM, RESULT, STANCE, Hero, ARMOR, pureCircuits, GAME_STATE, TotalStats } from '@midnight-ntwrk/pvp-contract';
 import { Arena, BattleConfig } from '../battle/arena';
-import { GAME_WIDTH, GAME_HEIGHT, safeJSONString, gameStateStr, fontStyle } from '../main';
+import { GAME_WIDTH, GAME_HEIGHT, safeJSONString, gameStateStr, fontStyle, isMuted, makeCopyAddressButton, makeExitMatchButton, makeSoundToggleButton, playSound } from '../main';
 import { addHeroImages, createHeroAnims, generateRandomHero, HeroAnimationController } from '../battle/hero';
 import { type HeroIndex, Rank, type Team } from '../battle';
 import { Button } from './button';
-import { MockPVPArenaAPI } from '../battle/mockapi';
+import { MockPVPArenaAPI, OFFLINE_PRACTICE_CONTRACT_ADDR } from '../battle/mockapi';
 import { PVPArenaAPI, PVPArenaDerivedState } from '@midnight-ntwrk/pvp-api';
 import { Physics } from 'phaser';
 import { eq } from 'fp-ts';
-import { makeTooltip, TooltipId } from './tooltip';
+import { closeTooltip, isTooltipOpen, makeTooltip, TooltipId } from './tooltip';
+import { ContractAddress } from '@midnight-ntwrk/ledger';
 
 class SelectHeroActor extends Phaser.GameObjects.Container {
     hero: Hero;
@@ -65,7 +66,7 @@ class SelectHeroActor extends Phaser.GameObjects.Container {
     }
 
     createStatsDisplay(tweens: Phaser.Types.Tweens.TweenBuilderConfig[]) {
-        this.statsDisplay = new StatsDisplay(this.scene, this.x + (this.rank.team == 0 ? (-96 + 40) : (96 - 40)), 80 + 90 * this.rank.index);
+        this.statsDisplay = new StatsDisplay(this.scene, this.x + (this.rank.team == 0 ? (-96 + 40) : (96 - 40)), 84 + 110 * this.rank.index);
         this.statsDisplay.updateStats(pureCircuits.calc_stats(this.hero));
         this.statsDisplay.alpha = 0;
         tweens.push({
@@ -73,7 +74,7 @@ class SelectHeroActor extends Phaser.GameObjects.Container {
             x: this.rank.x(STANCE.neutral),
             duration: 450,
             onStart: () => {
-                this.scene.sound.play('move');
+                playSound(this.scene, 'move');
                 this.refresh();
                 this.anims?.run();
             },
@@ -175,10 +176,10 @@ class StatsDisplay extends Phaser.GameObjects.Container {
     valuesText: Phaser.GameObjects.Text;
     constructor(scene: Phaser.Scene, x: number, y: number) {
         super(scene, x, y);
-        this.add(scene.add.nineslice(0, 0, 'stone_button', undefined, 80, 84, 8, 8, 8, 8));
-        this.descriptions = scene.add.text(8 - 40, -42, 'CRUSH DMG:\nPIERCE DMG:\nCRUSH DEF:\nPIERCE DEF:\nDEX BONUS:\nWEIGHT:', fontStyle(6, {align: 'left'}));
+        this.add(scene.add.nineslice(0, 0, 'stone_button', undefined, 91, 108, 8, 8, 8, 8));
+        this.descriptions = scene.add.text(8 - 45, -50, 'CRUSH DMG:\nPIERCE DMG:\nCRUSH DEF:\nPIERCE DEF:\nDEX BONUS:\nWEIGHT:', fontStyle(8, {align: 'left'}));
         this.add(this.descriptions);
-        this.valuesText = scene.add.text(68 - 40, -42, '', fontStyle(6, {align: 'right'}));
+        this.valuesText = scene.add.text(68 - 42, -50, '', fontStyle(8, {align: 'right'}));
         this.add(this.valuesText);
         console.log(`creating stats display (${x}, ${y})`);
         scene.add.existing(this);
@@ -267,26 +268,26 @@ class SlotSelector extends Phaser.GameObjects.Container {
         this.equip = equip;
         this.hero = hero;
 
-        const left = this.scene.add.image(-48, 0, 'equip_select_arrow').setFlipX(true);
+        const left = this.scene.add.image(-53, 0, 'equip_select_arrow').setFlipX(true);
         left.setInteractive({ useHandCursor: true });
         left.on('pointerup', () => {
-            scene.sound.play('select');
+            playSound(scene, 'select');
             this.shift(-1);
         });
         left.on('pointerover', () => left.setTexture('equip_select_arrow_over'));
         left.on('pointerout', () => left.setTexture('equip_select_arrow'));
         this.add(left);
-        const right = this.scene.add.image(48, 0, 'equip_select_arrow');
+        const right = this.scene.add.image(53, 0, 'equip_select_arrow');
         right.setInteractive({ useHandCursor: true });
         right.on('pointerup', () => {
-            scene.sound.play('select');
+            playSound(scene, 'select');
             this.shift(1);
         });
         right.on('pointerover', () => right.setTexture('equip_select_arrow_over'));
         right.on('pointerout', () => right.setTexture('equip_select_arrow'));
         this.add(right);
 
-        const text = this.scene.add.text(0, 0, '', fontStyle(6)).setOrigin(0.5, 0.65);
+        const text = this.scene.add.text(0, 0, '', fontStyle(8)).setOrigin(0.5, 0.65);
         this.text = text;
         this.add(text);
 
@@ -485,6 +486,11 @@ export class EquipmentMenu extends Phaser.Scene {
         this.add.image(GAME_WIDTH, GAME_HEIGHT, 'arena_bg').setPosition(GAME_WIDTH / 2, GAME_HEIGHT / 2).setDepth(-3);
         this.add.text(GAME_WIDTH / 2 + 2, GAME_HEIGHT / 5, 'EQUIPMENT SELECT', fontStyle(24)).setOrigin(0.5, 0.65);
         this.setupStateText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.9, '', fontStyle(12)).setOrigin(0.5, 0.65);
+        if (this.config.api.deployedContractAddress != OFFLINE_PRACTICE_CONTRACT_ADDR) {
+            makeCopyAddressButton(this, GAME_WIDTH - 80, 16, this.config.api.deployedContractAddress);
+        }
+        makeExitMatchButton(this, GAME_WIDTH - 48, 16);
+        makeSoundToggleButton(this, GAME_WIDTH - 16, 16);
 
         for (let team = 0; team < 2; ++team) {
             let heroes = [];
