@@ -28,7 +28,7 @@ jobs:
     - name: Configure Node to use yarn and install turbo globally
       run: |
         corepack enable
-        corepack install yarn@4.7.0
+        corepack install --global yarn@4.7.0
         corepack use yarn@4.7.0
         npm i -g turbo
 
