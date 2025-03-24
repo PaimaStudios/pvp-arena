@@ -17,6 +17,7 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: '20'
+        cache: 'yarn'
 
     - name: Install compactc dependencies and setup environment
       run: |
@@ -25,10 +26,11 @@ jobs:
         export COMPACT_HOME=$PWD/compactc
         export PATH=$PATH:$COMPACT_HOME
 
-    - name: Configure Node to use yarn and install turbo globally
+    - name: Setup Yarn
+      shell: bash
       run: |
         corepack enable
-        corepack install --global yarn@4.1.0
+        corepack prepare yarn@4.1.0 --activate
         corepack use yarn@4.1.0
         npm i -g turbo
 
