@@ -28,11 +28,11 @@ jobs:
     - name: Configure Node to use yarn and install turbo globally
       run: |
         corepack enable
-        corepack install --global yarn@4.7.0
-        corepack use yarn@4.7.0
+        corepack install --global yarn@4.1.0
+        corepack use yarn@4.1.0
         npm i -g turbo
 
-    - name: Build assets.
+    - name: Build assets
       run: |
-        yarn install
+        yarn install --frozen-lockfile
         yarn build
