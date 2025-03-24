@@ -31,6 +31,14 @@ jobs:
         npm i -g turbo
 
     - name: Build assets
+      env:
+        VITE_NETWORK_ID: TestNet
+        VITE_LOGGING_LEVEL: trace
+        VITE_DEV_MENU: true
+        VITE_BATCHER_MODE_ENABLED: true
+        VITE_BATCHER_MODE_INDEXER_HTTP_URL: https://indexer.testnet-02.midnight.network/api/v1/graphql
+        VITE_BATCHER_MODE_INDEXER_WS_URL: wss://indexer.testnet-02.midnight.network/api/v1/graphql/ws
+        VITE_BATCHER_MODE_BATCHER_URL: https://kachina.paimastudios.com/api
       run: |
         export COMPACT_HOME=$PWD/compactc
         export PATH=$PATH:$COMPACT_HOME      
