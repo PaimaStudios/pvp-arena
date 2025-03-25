@@ -6,3 +6,5 @@ dist
 .vite
 .env
 examples/pvp/contract/src/managed
+examples/pvp/contract/coverage
+examples/pvp/contract/reports

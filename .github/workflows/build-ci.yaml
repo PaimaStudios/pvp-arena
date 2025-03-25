@@ -1,0 +1,51 @@
+name: Build and Deploy CI
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+
+    - name: Install compactc dependencies and setup environment
+      run: |
+        wget https://d3fazakqrumx6p.cloudfront.net/artifacts/compiler/compactc_0.22.0/compactc_v0.22.0_x86_64-unknown-linux-musl.zip
+        unzip compactc_v0.22.0_x86_64-unknown-linux-musl.zip -d compactc
+
+    - name: Configure Node to use yarn and install turbo globally
+      shell: bash
+      run: |
+        corepack enable
+        corepack prepare yarn@4.1.0 --activate
+        corepack use yarn@4.1.0
+        npm i -g turbo
+
+    - name: Build assets
+      run: |
+        export COMPACT_HOME=$PWD/compactc
+        export PATH=$PATH:$COMPACT_HOME      
+        yarn install --frozen-lockfile
+        yarn build
+
+    - name: Deploy to self hosted server
+      env:
+        SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+        SSH_HOST: ${{ secrets.SSH_HOST }}
+        SSH_USERNAME: ${{ secrets.SSH_USERNAME }}
+        SSH_PORT: ${{ secrets.SSH_PORT }}
+      run: |
+        mkdir -p ~/.ssh
+        echo "$SSH_PRIVATE_KEY" > ~/.ssh/private_key
+        chmod 600 ~/.ssh/private_key
+        scp -o StrictHostKeyChecking=no -P $SSH_PORT -i ~/.ssh/private_key -r $PWD/examples/pvp/phaser/dist/* $SSH_USERNAME@$SSH_HOST:/opt/kachina-app/
+        rm ~/.ssh/private_key
