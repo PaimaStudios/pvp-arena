@@ -2,6 +2,8 @@
 
 ## How to build
 
+In this order, run
+
 From `examples/pvp/compact`:
 ```
 yarn install
