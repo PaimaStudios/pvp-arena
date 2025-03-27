@@ -1,5 +1,5 @@
 import { ITEM, RESULT, STANCE, Hero, ARMOR, pureCircuits, GAME_STATE } from '@midnight-ntwrk/pvp-contract';
-import { safeJSONString, MatchState, fontStyle, GAME_WIDTH, rootObject } from '../main';
+import { safeJSONString, MatchState, fontStyle, GAME_WIDTH, rootObject, playSound } from '../main';
 import { Arena } from './arena';
 import { MAX_HP, Rank, BloodDrop, DamageText, hpDiv } from '.';
 import { closeTooltip, makeTooltip, TooltipId } from '../menus/tooltip';
@@ -75,7 +75,7 @@ export class HeroActor extends Phaser.GameObjects.Container {
         arena.input.enableDebug(this);
         this.on('pointerup', () => {
             if (this.arena.matchState == MatchState.WaitingOnPlayer) {
-                arena.sound.play('select');
+                playSound(arena, 'select');
                 const firstEnemy = this.arena.getAliveHeroes(this.arena.opponentTeam())[0];
                 makeTooltip(this.scene, firstEnemy.x, firstEnemy.y - 96, TooltipId.SetFirstAttack, { clickHighlights: [new Phaser.Math.Vector2(firstEnemy.x, firstEnemy.y)] });
                 makeTooltip(this.scene, this.x + 96, this.y + 96, TooltipId.Move, {
@@ -101,7 +101,7 @@ export class HeroActor extends Phaser.GameObjects.Container {
             }
         });
         this.left_arrow.on('pointerup', () => {
-            arena.sound.play('select');
+            playSound(arena, 'select');
             const leftStance = this.leftStance()!;
             // toggle to undo moving if already in this stance
             this.setNextStance(this.nextStance == leftStance ? this.stance : leftStance);
@@ -110,7 +110,7 @@ export class HeroActor extends Phaser.GameObjects.Container {
             makeTooltip(this.scene, GAME_WIDTH / 2, 100, this.rank.team == 0 ? TooltipId.MoveFurther : TooltipId.MoveCloser);
         });
         this.right_arrow.on('pointerup', () => {
-            arena.sound.play('select');
+            playSound(arena, 'select');
             const rightStance = this.rightStance()!;
             this.setNextStance(this.nextStance == rightStance ? this.stance : rightStance);
             this.updateNextStanceArrow();
@@ -143,7 +143,7 @@ export class HeroActor extends Phaser.GameObjects.Container {
 
     // true = killed
     public attack(attacker: HeroActor, dmg: number): boolean {
-        this.arena.sound.play('damage');
+        playSound(this.arena, 'damage');
         const n = 1 + (dmg * (2 + Math.random())) / 100000;
         console.log(`attack(${hpDiv(dmg)}) -> ${n}`);
         for (let i = 0; i < n; ++i) {
@@ -176,7 +176,7 @@ export class HeroActor extends Phaser.GameObjects.Container {
                     alpha: 0,
                     duration: 150,
                     onComplete: () => {
-                        this.arena.sound.play('death');
+                        playSound(this.arena, 'death');
                         this.visible = false;
                         this.arena.add.image(this.x, this.y, 'skull').setFlipX(this.rank.team == 1).setDepth(-1);
                     }
@@ -393,7 +393,7 @@ export class HeroActor extends Phaser.GameObjects.Container {
                 y: meleeAttackY,
                 duration: 40 + dist * 2,
                 onStart: () => {
-                    this.arena.sound.play('move');
+                    playSound(this.arena, 'move');
                     this.anims.run();
                 },
             });
@@ -462,7 +462,7 @@ export class HeroActor extends Phaser.GameObjects.Container {
                 duration: 60 + dist * 3,
                 onStart: () => {
                     // disabled because it sounds weird right after the damage sound
-                    //this.sound.play('move');
+                    //playSound(this, 'move');
                     this.anims.run();
                     this.anims.setFlipX(this.rank.team == 0);
                 },

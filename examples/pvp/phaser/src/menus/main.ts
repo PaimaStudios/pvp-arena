@@ -1,5 +1,5 @@
 import { BrowserDeploymentManager } from '../wallet';
-import { logger, networkId, GAME_WIDTH, GAME_HEIGHT, fontStyle } from '../main';
+import { logger, networkId, GAME_WIDTH, GAME_HEIGHT, fontStyle, makeSoundToggleButton } from '../main';
 import { MockPVPArenaAPI } from '../battle/mockapi';
 import { Arena } from '../battle/arena';
 import { EquipmentMenu } from './equipment';
@@ -29,6 +29,9 @@ export class MainMenu extends Phaser.Scene {
 
         this.load.image('arena_bg', 'arena_bg.png');
         this.load.image('title_screen', 'title_screen.png');
+        this.load.image('clipboard', 'clipboard.png');
+        this.load.image('sound_on', 'sound_on.png');
+        this.load.image('sound_off', 'sound_off.png');
 
         this.load.image('stone_button', 'stone_button.png');
         this.load.image('stone_button_over', 'stone_button_over.png');
@@ -94,6 +97,7 @@ export class MainMenu extends Phaser.Scene {
         // this.add.text(GAME_WIDTH / 2 + 2, GAME_HEIGHT / 4 + 2, 'PVP ARENA', {fontSize: 64, color: 'black'}).setOrigin(0.5, 0.5);
         // this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 4, 'PVP ARENA', {fontSize: 64, color: 'white'}).setOrigin(0.5, 0.5);
         this.text = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.65, '', fontStyle(12)).setOrigin(0.5, 0.65).setVisible(false);
+        makeSoundToggleButton(this, GAME_WIDTH - 16, 16);
 
         // create an off-chain testing world for testing graphical stuff without having to wait a long time
         this.buttons.push(new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.55, 128, 32, 'Practice', 20, () => {
@@ -118,7 +122,6 @@ export class MainMenu extends Phaser.Scene {
                 this.deployProvider.create(false).then((api) => {
                     console.log('====================\napi done from creating\n===============');
                     console.log(`contract address: ${api.deployedContractAddress}`);
-                    navigator.clipboard.writeText(api.deployedContractAddress);
                     this.scene.remove('EquipmentMenu');
                     const equipMenu = new EquipmentMenu({ api, isP1: true });
                     this.scene.add('EquipmentMenu', equipMenu);

@@ -1,6 +1,6 @@
 import { PVPArenaAPI } from "@midnight-ntwrk/pvp-api";
 import { MockPVPArenaAPI } from "../battle/mockapi";
-import { fontStyle, GAME_HEIGHT, GAME_WIDTH, joinContract } from "../main";
+import { fontStyle, GAME_HEIGHT, GAME_WIDTH, joinContract, makeSoundToggleButton } from "../main";
 import { BrowserDeploymentManager } from "../wallet";
 import { Button } from "./button";
 import { EquipmentMenu } from "./equipment";
@@ -487,6 +487,7 @@ export class LobbyMenu extends Phaser.Scene {
             },
             "Return to main menu"
         );
+        makeSoundToggleButton(this, GAME_WIDTH - 16, 16);
     }
 
     join(contractAddress: string) {
