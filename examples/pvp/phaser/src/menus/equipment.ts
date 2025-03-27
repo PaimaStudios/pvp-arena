@@ -1,17 +1,17 @@
 import { ITEM, RESULT, STANCE, Hero, ARMOR, pureCircuits, GAME_STATE, TotalStats } from '@midnight-ntwrk/pvp-contract';
 import { Arena, BattleConfig } from '../battle/arena';
-import { GAME_WIDTH, GAME_HEIGHT, safeJSONString, gameStateStr, fontStyle } from '../main';
+import { GAME_WIDTH, GAME_HEIGHT, safeJSONString, gameStateStr, fontStyle, isMuted, makeCopyAddressButton, makeExitMatchButton, makeSoundToggleButton, playSound } from '../main';
 import { addHeroImages, createHeroAnims, generateRandomHero, HeroAnimationController } from '../battle/hero';
 import { type HeroIndex, Rank, type Team } from '../battle';
 import { Button } from './button';
-import { MockPVPArenaAPI } from '../battle/mockapi';
+import { MockPVPArenaAPI, OFFLINE_PRACTICE_CONTRACT_ADDR } from '../battle/mockapi';
 import { PVPArenaAPI, PVPArenaDerivedState } from '@midnight-ntwrk/pvp-api';
 import { Physics } from 'phaser';
 import { eq } from 'fp-ts';
 import { closeTooltip, isTooltipOpen, makeTooltip, TooltipId } from './tooltip';
+import { ContractAddress } from '@midnight-ntwrk/ledger';
 import { Observable } from 'rxjs/internal/Observable';
 import { Subscription } from 'rxjs';
-import { ContractAddress } from '@midnight-ntwrk/ledger';
 
 class SelectHeroActor extends Phaser.GameObjects.Container {
     hero: Hero;
@@ -68,7 +68,7 @@ class SelectHeroActor extends Phaser.GameObjects.Container {
     }
 
     createStatsDisplay(tweens: Phaser.Types.Tweens.TweenBuilderConfig[]) {
-        this.statsDisplay = new StatsDisplay(this.scene, this.x + (this.rank.team == 0 ? (-96 + 40) : (96 - 40)), 80 + 90 * this.rank.index);
+        this.statsDisplay = new StatsDisplay(this.scene, this.x + (this.rank.team == 0 ? (-96 + 40) : (96 - 40)), 84 + 110 * this.rank.index);
         this.statsDisplay.updateStats(pureCircuits.calc_stats(this.hero));
         this.statsDisplay.alpha = 0;
         tweens.push({
@@ -76,7 +76,7 @@ class SelectHeroActor extends Phaser.GameObjects.Container {
             x: this.rank.x(STANCE.neutral),
             duration: 450,
             onStart: () => {
-                this.scene.sound.play('move');
+                playSound(this.scene, 'move');
                 this.refresh();
                 this.anims?.run();
             },
@@ -178,10 +178,10 @@ class StatsDisplay extends Phaser.GameObjects.Container {
     valuesText: Phaser.GameObjects.Text;
     constructor(scene: Phaser.Scene, x: number, y: number) {
         super(scene, x, y);
-        this.add(scene.add.nineslice(0, 0, 'stone_button', undefined, 80, 84, 8, 8, 8, 8));
-        this.descriptions = scene.add.text(8 - 40, -42, 'CRUSH DMG:\nPIERCE DMG:\nCRUSH DEF:\nPIERCE DEF:\nDEX BONUS:\nWEIGHT:', fontStyle(6, {align: 'left'}));
+        this.add(scene.add.nineslice(0, 0, 'stone_button', undefined, 91, 108, 8, 8, 8, 8));
+        this.descriptions = scene.add.text(8 - 45, -50, 'CRUSH DMG:\nPIERCE DMG:\nCRUSH DEF:\nPIERCE DEF:\nDEX BONUS:\nWEIGHT:', fontStyle(8, {align: 'left'}));
         this.add(this.descriptions);
-        this.valuesText = scene.add.text(68 - 40, -42, '', fontStyle(6, {align: 'right'}));
+        this.valuesText = scene.add.text(68 - 42, -50, '', fontStyle(8, {align: 'right'}));
         this.add(this.valuesText);
         console.log(`creating stats display (${x}, ${y})`);
         scene.add.existing(this);
@@ -270,26 +270,26 @@ class SlotSelector extends Phaser.GameObjects.Container {
         this.equip = equip;
         this.hero = hero;
 
-        const left = this.scene.add.image(-48, 0, 'equip_select_arrow').setFlipX(true);
+        const left = this.scene.add.image(-53, 0, 'equip_select_arrow').setFlipX(true);
         left.setInteractive({ useHandCursor: true });
         left.on('pointerup', () => {
-            scene.sound.play('select');
+            playSound(scene, 'select');
             this.shift(-1);
         });
         left.on('pointerover', () => left.setTexture('equip_select_arrow_over'));
         left.on('pointerout', () => left.setTexture('equip_select_arrow'));
         this.add(left);
-        const right = this.scene.add.image(48, 0, 'equip_select_arrow');
+        const right = this.scene.add.image(53, 0, 'equip_select_arrow');
         right.setInteractive({ useHandCursor: true });
         right.on('pointerup', () => {
-            scene.sound.play('select');
+            playSound(scene, 'select');
             this.shift(1);
         });
         right.on('pointerover', () => right.setTexture('equip_select_arrow_over'));
         right.on('pointerout', () => right.setTexture('equip_select_arrow'));
         this.add(right);
 
-        const text = this.scene.add.text(0, 0, '', fontStyle(6)).setOrigin(0.5, 0.65);
+        const text = this.scene.add.text(0, 0, '', fontStyle(8)).setOrigin(0.5, 0.65);
         this.text = text;
         this.add(text);
 
@@ -300,7 +300,7 @@ class SlotSelector extends Phaser.GameObjects.Container {
     }
 
     // shifts hero's stats and updates visual elements
-    shift(cycle: number) {
+    public shift(cycle: number) {
         const max = equip_slot_max(this.slot);
         const index = (equip_slot_index(this.hero.hero, this.slot) + max + cycle) % max;
         switch (this.slot) {
@@ -309,12 +309,12 @@ class SlotSelector extends Phaser.GameObjects.Container {
                 // disallow bow / non-unarmed
                 if (this.hero.hero.lhs == ITEM.bow || this.hero.hero.rhs == ITEM.bow) {
                     this.hero.hero.rhs = ITEM.nothing;
-                    this.equip.slots.get(EQUIP_SLOT.rhs)!.refresh();
+                    this.equip.slots.get(EQUIP_SLOT.rhs)?.refresh();
                 }
                 // disallow double shields
                 if (this.hero.hero.lhs == ITEM.shield && this.hero.hero.rhs == ITEM.shield) {
                     this.hero.hero.rhs = ITEM.nothing;
-                    this.equip.slots.get(EQUIP_SLOT.rhs)!.refresh();
+                    this.equip.slots.get(EQUIP_SLOT.rhs)?.refresh();
                 }
                 break;
             case EQUIP_SLOT.rhs:
@@ -322,12 +322,12 @@ class SlotSelector extends Phaser.GameObjects.Container {
                 // disallow bow / non-unarmed
                 if (this.hero.hero.rhs == ITEM.bow || this.hero.hero.lhs == ITEM.bow) {
                     this.hero.hero.lhs = ITEM.nothing;
-                    this.equip.slots.get(EQUIP_SLOT.lhs)!.refresh();
+                    this.equip.slots.get(EQUIP_SLOT.lhs)?.refresh();
                 }
                 // disallow double shields
                 if (this.hero.hero.lhs == ITEM.shield && this.hero.hero.rhs == ITEM.shield) {
                     this.hero.hero.lhs = ITEM.nothing;
-                    this.equip.slots.get(EQUIP_SLOT.lhs)!.refresh();
+                    this.equip.slots.get(EQUIP_SLOT.lhs)?.refresh();
                 }
                 break;
             case EQUIP_SLOT.helmet:
@@ -348,7 +348,7 @@ class SlotSelector extends Phaser.GameObjects.Container {
     }
 
     // refreshes the text / hero (stats) based on current hero's stats
-    refresh() {
+    public refresh() {
         switch (this.slot) {
             case EQUIP_SLOT.lhs:
                 this.text.setText(`${equip_slot_name(this.slot)}: ${item_str(this.hero.hero.lhs)}`);
@@ -385,6 +385,7 @@ export class EquipmentMenu extends Phaser.Scene {
     selecting: number;
     selector: EquipmentSelector | undefined;
     setupStateText: Phaser.GameObjects.Text | undefined;
+    subscription: Subscription | undefined;
 
     constructor(config: BattleConfig) {
         super('EquipmentMenu');
@@ -392,12 +393,31 @@ export class EquipmentMenu extends Phaser.Scene {
         this.heroes = [];
         this.selecting = 0;
         this.setupState = config.isP1 ? SetupState.SelectingPlayerHeroes : SetupState.WaitingOnOpponent;
-        const subscription = config.api.state$.subscribe((state) => this.onStateChange(state));
+    }
+
+    preDestroy() {
+        this.subscription?.unsubscribe();
     }
 
     onStateChange(state: PVPArenaDerivedState) {
         console.log(`new state: ${safeJSONString(state)}`);
         console.log(`NOW: ${gameStateStr(state.state)}`);
+
+        // when joining this.selecting could be out of date
+        switch (state.state) {
+            case GAME_STATE.p1_selecting_first_hero:
+                this.selecting = 0;
+                break;
+            case GAME_STATE.p1_selecting_last_heroes:
+                this.selecting = this.config.isP1 ? 1 : 2;
+                break;
+            case GAME_STATE.p2_selecting_first_heroes:
+                this.selecting = this.config.isP1 ? 1 : 0;
+                break;
+            case GAME_STATE.p2_selecting_last_hero:
+                this.selecting = 2;
+                break;
+        }
 
         // update heroes
         let tweens: Phaser.Types.Tweens.TweenBuilderConfig[] = [];
@@ -444,6 +464,8 @@ export class EquipmentMenu extends Phaser.Scene {
                 break;
             case GAME_STATE.p1_commit:
                 // game started
+                console.log(`================skipping equip screen=============`);
+                // This causes black screens when uncommented. TODO: investigate. Issue: https://github.com/PaimaStudios/pvp-arena/issues/22
                 //this.scene.remove('Arena');
                 this.scene.add('Arena', new Arena(this.config, state));
                 this.scene.start('Arena');
@@ -488,8 +510,11 @@ export class EquipmentMenu extends Phaser.Scene {
         this.add.image(GAME_WIDTH, GAME_HEIGHT, 'arena_bg').setPosition(GAME_WIDTH / 2, GAME_HEIGHT / 2).setDepth(-3);
         this.add.text(GAME_WIDTH / 2 + 2, GAME_HEIGHT / 5, 'EQUIPMENT SELECT', fontStyle(24)).setOrigin(0.5, 0.65);
         this.setupStateText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.9, '', fontStyle(12)).setOrigin(0.5, 0.65);
-        makeCopyAddressButton(this, GAME_WIDTH - 48, 16, this.config.api.deployedContractAddress);
-        makeExitMatchButton(this, GAME_WIDTH - 16, 16);
+        if (this.config.api.deployedContractAddress != OFFLINE_PRACTICE_CONTRACT_ADDR) {
+            makeCopyAddressButton(this, GAME_WIDTH - 80, 16, this.config.api.deployedContractAddress);
+        }
+        makeExitMatchButton(this, GAME_WIDTH - 48, 16);
+        makeSoundToggleButton(this, GAME_WIDTH - 16, 16);
 
         for (let team = 0; team < 2; ++team) {
             let heroes = [];
@@ -499,6 +524,8 @@ export class EquipmentMenu extends Phaser.Scene {
             }
             this.heroes.push(heroes);
         }
+
+        this.subscription = this.config.api.state$.subscribe((state) => this.onStateChange(state));
     }
 
     // advances to next step
@@ -544,22 +571,4 @@ export class EquipmentMenu extends Phaser.Scene {
         }
         this.selecting += 1;
     }
-}
-
-export function makeCopyAddressButton(scene: Phaser.Scene, x: number, y: number, address: ContractAddress): Button {
-    const button = new Button(scene, x, y, 24, 24, '', 10, () => {
-        navigator.clipboard.writeText(address);
-    }, 'Copy contract address');
-    button.add(scene.add.image(0, 0, 'clipboard').setAlpha(0.75));
-    return button;
-}
-
-export function makeExitMatchButton(scene: Phaser.Scene, x: number, y: number): Button {
-    return new Button(scene, x, y, 24, 24, '<', 10, () => {
-        if (isTooltipOpen(TooltipId.ExitInProgressMatch) || makeTooltip(scene, GAME_WIDTH / 2, GAME_HEIGHT / 4, TooltipId.ExitInProgressMatch) == undefined) {
-            closeTooltip(TooltipId.ExitInProgressMatch);
-            scene.scene.start('MainMenu');
-            scene.scene.remove('Arena');
-        }
-    }, 'Exit to main menu');
 }

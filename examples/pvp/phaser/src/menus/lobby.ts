@@ -1,6 +1,6 @@
 import { PVPArenaAPI } from "@midnight-ntwrk/pvp-api";
 import { MockPVPArenaAPI } from "../battle/mockapi";
-import { fontStyle, GAME_HEIGHT, GAME_WIDTH } from "../main";
+import { fontStyle, GAME_HEIGHT, GAME_WIDTH, joinContract, makeSoundToggleButton } from "../main";
 import { BrowserDeploymentManager } from "../wallet";
 import { Button } from "./button";
 import { EquipmentMenu } from "./equipment";
@@ -8,6 +8,7 @@ import { MainMenu } from "./main";
 import { PracticeMenu } from "./practice";
 import { levelPrivateStateProvider } from "@midnight-ntwrk/midnight-js-level-private-state-provider";
 import { GAME_STATE, pureCircuits } from "@midnight-ntwrk/pvp-contract";
+import { Arena } from "../battle/arena";
 
 type OpenMatchInfo = {
     lastUpdatedBlock: number;
@@ -486,17 +487,33 @@ export class LobbyMenu extends Phaser.Scene {
             },
             "Return to main menu"
         );
+        makeSoundToggleButton(this, GAME_WIDTH - 16, 16);
     }
 
     join(contractAddress: string) {
         this.setStatusText("Joining match, please wait...");
-        this.deployProvider
-            .join(contractAddress)
-            .then((api) => {
-                this.scene.remove("EquipmentMenu");
-                const equipMenu = new EquipmentMenu({ api, isP1: false });
-                this.scene.add("EquipmentMenu", equipMenu);
-                this.scene.start("EquipmentMenu");
+        joinContract(this.deployProvider, contractAddress)
+            .then((joinInfo) => {
+                switch (joinInfo.state.state) {
+                    case GAME_STATE.p1_selecting_first_hero:
+                    case GAME_STATE.p1_selecting_last_heroes:
+                    case GAME_STATE.p2_selecting_last_hero:
+                    case GAME_STATE.p2_selecting_first_heroes:
+                        this.scene.remove("EquipmentMenu");
+                        this.scene.add("EquipmentMenu", new EquipmentMenu(joinInfo.config));
+                        this.scene.start("EquipmentMenu");
+                        break;
+                    case GAME_STATE.p1_commit:
+                    case GAME_STATE.p1_reveal:
+                    case GAME_STATE.p2_commit_reveal:
+                    case GAME_STATE.p1_win:
+                    case GAME_STATE.p2_win:
+                    case GAME_STATE.tie:
+                        this.scene.remove("Arena");
+                        this.scene.add("Arena", new Arena(joinInfo.config, joinInfo.state));
+                        this.scene.start("Arena");
+                        break;
+                }
             })
             .catch((e) => {
                 const errorString = `Error joining match:\n${e}`;

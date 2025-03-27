@@ -1,7 +1,7 @@
 import { NetworkId, setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 import '@midnight-ntwrk/dapp-connector-api';
 import { ITEM, RESULT, STANCE, Hero, ARMOR, pureCircuits, GAME_STATE } from '@midnight-ntwrk/pvp-contract';
-import { type PVPArenaDerivedState, type DeployedPVPArenaAPI } from '@midnight-ntwrk/pvp-api';
+import { type PVPArenaDerivedState, type DeployedPVPArenaAPI, PVPArenaAPI } from '@midnight-ntwrk/pvp-api';
 import './globals';
 import { type ContractAddress } from '@midnight-ntwrk/compact-runtime';
 import { LedgerState } from '@midnight-ntwrk/ledger';
@@ -44,6 +44,8 @@ import { Subscriber, Observable } from 'rxjs';
 
 import { MainMenu } from './menus/main';
 import { BattleConfig } from './battle/arena';
+import { Button } from './menus/button';
+import { closeTooltip, isTooltipOpen, makeTooltip, TooltipId } from './menus/tooltip';
 
 const COLOR_MAIN = 0x4e342e;
 const COLOR_LIGHT = 0x7b5e57;
@@ -75,6 +77,52 @@ export function fontStyle(fontSize: number, extra?: Phaser.Types.GameObjects.Tex
         fontFamily: 'yana',
         color: '#f5f5ed'//'white'
     };
+}
+
+export function makeCopyAddressButton(scene: Phaser.Scene, x: number, y: number, address: ContractAddress): Button {
+    const button = new Button(scene, x, y, 24, 24, '', 10, () => {
+        navigator.clipboard.writeText(address);
+    }, 'Copy contract address');
+    button.add(scene.add.image(0, 0, 'clipboard').setAlpha(0.75));
+    return button;
+}
+
+export function makeExitMatchButton(scene: Phaser.Scene, x: number, y: number): Button {
+    return new Button(scene, x, y, 24, 24, '<', 10, () => {
+        if (isTooltipOpen(TooltipId.ExitInProgressMatch) || makeTooltip(scene, GAME_WIDTH / 2, GAME_HEIGHT / 4, TooltipId.ExitInProgressMatch) == undefined) {
+            closeTooltip(TooltipId.ExitInProgressMatch);
+            scene.scene.start('MainMenu');
+            scene.scene.remove('Arena');
+        }
+    }, 'Exit to main menu');
+}
+
+export function makeSoundToggleButton(scene: Phaser.Scene, x: number, y: number): Button {
+    const on = scene.add.image(0, 0, 'sound_on').setAlpha(0.75).setVisible(!isMuted());
+    const off = scene.add.image(0, 0, 'sound_off').setAlpha(0.75).setVisible(isMuted());
+    const button = new Button(scene, x, y, 24, 24, '', 10, () => {
+        if (isMuted()) {
+            on.visible = true;
+            off.visible = false;      
+        } else {
+            on.visible = false;
+            off.visible = true;
+        }
+        localStorage.setItem('muted', isMuted() ? 'false' : 'true');
+    }, 'Toggle sound / mute');
+    button
+        .add(on)
+        .add(off);
+    return button;
+}
+
+export const isMuted = () => localStorage.getItem('muted') == 'true';
+
+/// play a sound but only if not muted
+export function playSound(scene: Phaser.Scene, key: string) {
+    if (!isMuted()) {
+        scene.sound.play(key);
+    }
 }
 
 // only converts bigint, but this is the only problem we have with printing ledger types
@@ -124,6 +172,26 @@ export function rootObject(obj: Phaser.GameObjects.GameObject & Phaser.GameObjec
         obj = obj.parentContainer;
     }
     return obj;
+}
+
+export type ContractJoinInfo = {
+    config: BattleConfig;
+    state: PVPArenaDerivedState;
+}
+
+export async function joinContract(deployProvider: BrowserDeploymentManager, contractAddress: ContractAddress): Promise<ContractJoinInfo> {
+    return deployProvider.join(contractAddress).then((api) => new Promise((resolve) => {
+        const subscription = api.state$.subscribe((state) => {
+            subscription.unsubscribe();
+            resolve({
+                config: {
+                    isP1: state.isP1,
+                    api,
+                },
+                state,
+            });
+        });
+    }));
 }
 
 export enum MatchState {

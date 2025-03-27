@@ -8,6 +8,7 @@ import { generateRandomHero } from './hero';
 import { SAT } from 'matter';
 
 const MOCK_DELAY = 500;
+export const OFFLINE_PRACTICE_CONTRACT_ADDR = 'OFFLINE_PRACTICE_CONTRACT_ADDR';
 
 export class MockPVPArenaAPI implements DeployedPVPArenaAPI {
     readonly deployedContractAddress: ContractAddress;
@@ -18,7 +19,7 @@ export class MockPVPArenaAPI implements DeployedPVPArenaAPI {
 
 
     constructor(isP1: boolean) {
-        this.deployedContractAddress = 'mocked address, do not use';
+        this.deployedContractAddress = OFFLINE_PRACTICE_CONTRACT_ADDR;
         this.state$ = new Observable<PVPArenaDerivedState>((subscriber) => {
             this.subscriber = subscriber;
         });
@@ -36,6 +37,9 @@ export class MockPVPArenaAPI implements DeployedPVPArenaAPI {
             p2Dmg: [BigInt(0), BigInt(0), BigInt(0)],
             p2Alive: [true, true, true],
             p2Stances: [STANCE.neutral, STANCE.neutral, STANCE.neutral],
+            nonce: undefined,
+            commit: undefined,
+            secretKey: new Uint8Array(),
         };
         this.isP1 = isP1;
         setTimeout(() => {
