@@ -9,6 +9,7 @@ import { PracticeMenu } from "./practice";
 import { levelPrivateStateProvider } from "@midnight-ntwrk/midnight-js-level-private-state-provider";
 import { GAME_STATE, pureCircuits } from "@midnight-ntwrk/pvp-contract";
 import { Arena } from "../battle/arena";
+import { StatusUI } from ".";
 
 type OpenMatchInfo = {
     lastUpdatedBlock: number;
@@ -299,6 +300,23 @@ class JoinGamesUI<
             );
             this.matchIndex = 0;
             this.makeMatchList();
+        }).catch((e) => {
+            this.refreshing?.spinner.destroy();
+            this.refreshing?.text.destroy();
+            this.refreshing = undefined;
+            const retryButton = new Button(
+                this.scene,
+                0,
+                0,
+                JOIN_WIDTH - 16,
+                96,
+                `Error getting matches:  ${e}.\nClick to retry.`,
+                7,
+                () => this.refreshGames(),
+                ''
+            );
+            this.add(retryButton);
+            this.matchButtons.push(retryButton);
         });
     }
 
@@ -404,7 +422,7 @@ export class LobbyMenu extends Phaser.Scene {
     deployProvider: BrowserDeploymentManager;
     joinPublc: JoinGamesUI<OpenMatchInfo> | undefined;
     rejoin: JoinGamesUI<PlayerMatchInfo> | undefined;
-    statusText: Phaser.GameObjects.Text | undefined;
+    status: StatusUI | undefined;
     joinByAddress: Button | undefined;
     back: Button | undefined;
     pk: string | undefined;
@@ -437,15 +455,6 @@ export class LobbyMenu extends Phaser.Scene {
             () => getPlayerMatches(),
             4
         );
-        this.statusText = this.add
-            .text(
-                GAME_WIDTH / 2,
-                GAME_HEIGHT / 2,
-                "",
-                fontStyle(8, { wordWrap: { width: GAME_WIDTH - 64 } })
-            )
-            .setVisible(false)
-            .setOrigin(0.5, 0.5);
         this.add
             .image(GAME_WIDTH, GAME_HEIGHT, "arena_bg")
             .setPosition(GAME_WIDTH / 2, GAME_HEIGHT / 2)
@@ -487,10 +496,16 @@ export class LobbyMenu extends Phaser.Scene {
             },
             "Return to main menu"
         );
+        this.status = new StatusUI(this, [
+            this.joinPublc,
+            this.rejoin,
+            this.joinByAddress,
+            this.back,
+        ]);
     }
 
     join(contractAddress: string) {
-        this.setStatusText("Joining match, please wait...");
+        this.status!.setText("Joining match, please wait...");
         joinContract(this.deployProvider, contractAddress)
             .then((joinInfo) => {
                 switch (joinInfo.state.state) {
@@ -515,22 +530,7 @@ export class LobbyMenu extends Phaser.Scene {
                 }
             })
             .catch((e) => {
-                const errorString = `Error joining match:\n${e}`;
-                console.log(errorString);
-                this.statusText?.setText(errorString);
-                const statusButton = new Button(
-                    this,
-                    GAME_WIDTH / 2,
-                    GAME_HEIGHT / 2 + 128,
-                    128,
-                    32,
-                    "Back",
-                    12,
-                    () => {
-                        this.clearStatusText();
-                        statusButton.destroy();
-                    }
-                );
+                this.status!.setError(e);
             });
     }
 
@@ -538,23 +538,6 @@ export class LobbyMenu extends Phaser.Scene {
         this.scene.remove('PracticeMenu');
         this.scene.add('PracticeMenu', new PracticeMenu(this.deployProvider));
         this.scene.start('PracticeMenu');
-    }
-
-    private clearStatusText() {
-        this.joinPublc?.setVisible(true);
-        this.rejoin?.setVisible(true);
-        this.statusText?.setVisible(false);
-        this.joinByAddress?.setVisible(true);
-        this.back?.setVisible(true);
-    }
-
-    private setStatusText(text: string) {
-        this.joinPublc?.setVisible(false);
-        this.rejoin?.setVisible(false);
-        this.joinByAddress?.setVisible(false);
-        this.back?.setVisible(false);
-        this.statusText!.visible = true;
-        this.statusText?.setText(text);
     }
 }
 

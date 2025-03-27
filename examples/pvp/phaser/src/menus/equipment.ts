@@ -11,6 +11,7 @@ import { eq } from 'fp-ts';
 import { makeTooltip, TooltipId } from './tooltip';
 import { Observable } from 'rxjs/internal/Observable';
 import { Subscription } from 'rxjs';
+import { StatusUI } from '.';
 
 class SelectHeroActor extends Phaser.GameObjects.Container {
     hero: Hero;
@@ -218,11 +219,12 @@ class EquipmentSelector extends Phaser.GameObjects.Container {
 
         this.add(new Button(scene, 0, 18 * 6, 64, 16, 'Confirm', 10, () => scene.next()));
 
-        this.alpha = 0;
-
         scene.add.existing(this);
 
-        this.createOpeningTweens();
+        // in case we failed to submit it will already be created
+        if (this.hero.statsDisplay == undefined) {
+            this.createOpeningTweens();
+        }
     }
 
     activateSlot(slot: EQUIP_SLOT) {
@@ -235,6 +237,7 @@ class EquipmentSelector extends Phaser.GameObjects.Container {
 
     private createOpeningTweens() {
         const tweens: Phaser.Types.Tweens.TweenBuilderConfig[] = [];
+        this.alpha = 0;
         this.hero.createStatsDisplay(tweens);
         tweens.push({
             targets: this,
@@ -383,7 +386,7 @@ export class EquipmentMenu extends Phaser.Scene {
     setupState: SetupState;
     selecting: number;
     selector: EquipmentSelector | undefined;
-    setupStateText: Phaser.GameObjects.Text | undefined;
+    status: StatusUI | undefined;
     subscription: Subscription | undefined;
 
     constructor(config: BattleConfig) {
@@ -479,13 +482,13 @@ export class EquipmentMenu extends Phaser.Scene {
         this.setupState = state;
         switch (state) {
             case SetupState.SelectingPlayerHeroes:
-                this.setupStateText?.setText('Select your heroes');
+                this.status?.setText('Select your heroes');
                 break;
             case SetupState.WaitingOnOpponent:
-                this.setupStateText?.setText('Waiting on opponent\'s selection...');
+                this.status?.setText('Waiting on opponent\'s selection...');
                 break;
             case SetupState.Submitting:
-                this.setupStateText?.setText('Submitting selection...');
+                this.status?.setText('Submitting selection...');
                 break;
         }
     }
@@ -508,7 +511,6 @@ export class EquipmentMenu extends Phaser.Scene {
 
         this.add.image(GAME_WIDTH, GAME_HEIGHT, 'arena_bg').setPosition(GAME_WIDTH / 2, GAME_HEIGHT / 2).setDepth(-3);
         this.add.text(GAME_WIDTH / 2 + 2, GAME_HEIGHT / 5, 'EQUIPMENT SELECT', fontStyle(24)).setOrigin(0.5, 0.65);
-        this.setupStateText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.9, '', fontStyle(12)).setOrigin(0.5, 0.65);
 
         for (let team = 0; team < 2; ++team) {
             let heroes = [];
@@ -518,6 +520,8 @@ export class EquipmentMenu extends Phaser.Scene {
             }
             this.heroes.push(heroes);
         }
+
+        this.status = new StatusUI(this, []);
 
         this.subscription = this.config.api.state$.subscribe((state) => this.onStateChange(state));
     }
@@ -537,15 +541,17 @@ export class EquipmentMenu extends Phaser.Scene {
         if (this.config.isP1) {
             switch (this.selecting) {
                 case 0:
-                    this.config.api.p1_select_first_hero(this.heroes[0][0].hero);
                     this.setSetupState(SetupState.Submitting);
+                    this.config.api.p1_select_first_hero(this.heroes[0][0].hero)
+                        .catch((e) => this.recoverFromSubmitError(e));
                     break;
                 case 1:
                     this.selector = new EquipmentSelector(this, this.heroes[0][2]);
                     break;
                 case 2:
-                    this.config.api.p1_select_last_heroes([this.heroes[0][1].hero, this.heroes[0][2].hero]);
                     this.setSetupState(SetupState.Submitting);
+                    this.config.api.p1_select_last_heroes([this.heroes[0][1].hero, this.heroes[0][2].hero])
+                    .catch((e) => this.recoverFromSubmitError(e));
                     break;
             }
         } else {
@@ -554,15 +560,26 @@ export class EquipmentMenu extends Phaser.Scene {
                     this.selector = new EquipmentSelector(this, this.heroes[1][1]);
                     break;
                 case 1:
-                    this.config.api.p2_select_first_heroes([this.heroes[1][0].hero, this.heroes[1][1].hero]);
                     this.setSetupState(SetupState.Submitting);
+                    this.config.api.p2_select_first_heroes([this.heroes[1][0].hero, this.heroes[1][1].hero])
+                    .catch((e) => this.recoverFromSubmitError(e));
                     break;
                 case 2:
-                    this.config.api.p2_select_last_hero(this.heroes[1][2].hero);
                     this.setSetupState(SetupState.Submitting);
+                    this.config.api.p2_select_last_hero(this.heroes[1][2].hero)
+                    .catch((e) => this.recoverFromSubmitError(e));
                     break;
             }
         }
         this.selecting += 1;
+    }
+
+    private recoverFromSubmitError(e: Error) {
+        console.log(`submit error: ${e}`);
+        this.status!.setError(e, () => {
+            this.selecting -= 1;
+            this.setSetupState(SetupState.SelectingPlayerHeroes);
+            this.selector = new EquipmentSelector(this, this.heroes[this.config.isP1 ? 0 : 1][this.selecting]);
+        });
     }
 }

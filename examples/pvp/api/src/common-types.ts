@@ -69,6 +69,9 @@ export type PVPArenaDerivedState = {
   readonly p1Alive: boolean[];
   readonly p1Stances: STANCE[];
   readonly isP1: boolean;
+  readonly isP2: boolean;
+  readonly p1PubKey: bigint;
+  readonly p2PubKey: bigint | undefined;
   readonly p2Heroes: Hero[];
   readonly p2Cmds: bigint[] | undefined;
   readonly p2Dmg: bigint[];
