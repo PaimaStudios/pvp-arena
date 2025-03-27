@@ -65,10 +65,4 @@ export class PracticeMenu extends Phaser.Scene {
         this.status?.registerUi(this.add.nineslice(x, y, 'stone_button', undefined, w, h, 8, 8, 8, 8));
         this.status?.registerUi(this.add.text(x, y, desc, fontStyle(10, { wordWrap: { width: w - 8 } })).setOrigin(0.5, 0.5));
     }
-
-    private setStatusText(text: string) {
-        this.uiElements.forEach((e) => e.setVisible(false));
-        this.text!.visible = true;
-        this.text?.setText(text);
-    }
 }
