@@ -3,12 +3,13 @@ import { ITEM, RESULT, STANCE, Hero, ARMOR, pureCircuits, GAME_STATE } from '@mi
 import { type PVPArenaDerivedState, type DeployedPVPArenaAPI } from '@midnight-ntwrk/pvp-api';
 import 'phaser';
 import RexUIPlugin from 'phaser3-rex-plugins/templates/ui/ui-plugin'
-import { GAME_WIDTH, GAME_HEIGHT, gameStateStr, safeJSONString, MatchState, fontStyle } from '../main';
+import { GAME_WIDTH, GAME_HEIGHT, gameStateStr, safeJSONString, MatchState, fontStyle, makeCopyAddressButton, makeExitMatchButton, makeSoundToggleButton, playSound } from '../main';
 import { HeroActor } from './hero';
 import { HeroIndex, hpDiv, Rank, Team } from './index';
 import { Button } from '../menus/button';
 import { init } from 'fp-ts/lib/ReadonlyNonEmptyArray';
 import { closeTooltip, makeTooltip, TooltipId } from '../menus/tooltip';
+import { OFFLINE_PRACTICE_CONTRACT_ADDR } from './mockapi';
 import { Subscription } from 'rxjs';
 import { StatusUI } from '../menus';
 
@@ -93,24 +94,24 @@ export class Arena extends Phaser.Scene
                 break;
             case MatchState.GameOverP1Win:
                 if (this.config.isP1) {
-                    this.sound.play('win');
+                    playSound(this, 'win');
                     this.displayEndMatchText('You won!');
                 } else {
-                    this.sound.play('lose');
+                    playSound(this, 'lose');
                     this.displayEndMatchText('Opponent\nwon!');
                 }
                 break;
             case MatchState.GameOverP2Win:
                 if (this.config.isP1) {
-                    this.sound.play('lose');
+                    playSound(this, 'lose');
                     this.displayEndMatchText('Opponent\nwon!');
                 } else {
-                    this.sound.play('win');
+                    playSound(this, 'win');
                     this.displayEndMatchText('You won!');
                 }
                 break;
             case MatchState.GameOverTie:
-                this.sound.play('select'); // wasn't sure what to play, it's unlikely anyway
+                playSound(this, 'select'); // wasn't sure what to play, it's unlikely anyway
                 this.displayEndMatchText('Battle tied!');
                 break;
         }
@@ -235,7 +236,7 @@ export class Arena extends Phaser.Scene
                     ease: 'Linear',
                     x: hero.rank.x(hero.nextStance),
                     onStart: () => {
-                        this.sound.play('move');
+                        playSound(this, 'move');
                         // TODO: put in function
                         hero.left_arrow.visible = false;
                         hero.right_arrow.visible = false;
@@ -346,6 +347,11 @@ export class Arena extends Phaser.Scene
 
     create() {
         this.add.image(GAME_WIDTH, GAME_HEIGHT, 'arena_bg').setPosition(GAME_WIDTH / 2, GAME_HEIGHT / 2).setDepth(-3);
+        if (this.config.api.deployedContractAddress != OFFLINE_PRACTICE_CONTRACT_ADDR) {
+            makeCopyAddressButton(this, GAME_WIDTH - 80, 16, this.config.api.deployedContractAddress);
+        }
+        makeExitMatchButton(this, GAME_WIDTH - 48, 16);
+        makeSoundToggleButton(this, GAME_WIDTH - 16, 16);
 
         // should we get rid of these?
         this.input?.keyboard?.on('keydown-ONE', () => {
@@ -503,10 +509,9 @@ export class Arena extends Phaser.Scene
 
         this.setMatchState(MatchState.Initializing);
 
-        this.createHeroes(this.initialState);
-        
         if (this.initialState.round != BigInt(0) || this.initialState.state != GAME_STATE.p1_commit) {
-            console.log('===================re-doing initial state=========');
+            this.createHeroes(this.initialState);
+
             this.round = Number(this.initialState.round);
             // we can't know previous stances for player 2 so to make the resuming consistent just default to the on-chain values
             for (let team = 0; team < 2; ++team) {
@@ -573,6 +578,8 @@ export class Arena extends Phaser.Scene
                     }
                     break;
             }
+        } else {
+            this.onStateChange(this.initialState);
         }
 
         this.subscription = this.config.api.state$.subscribe((state) => this.onStateChange(state));

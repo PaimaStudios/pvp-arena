@@ -15,6 +15,7 @@ export enum TooltipId {
     MoveFurther,
     SetFirstAttack,
     SetAllAttacks,
+    ExitInProgressMatch,
 };
 
 const localStorageId = (id: TooltipId) => `seen_tooltip_${id}`;
@@ -43,6 +44,8 @@ function tooltipString(id: TooltipId): string {
             return 'Confirm a target for your other 2 gladiators and commit your move.';
         case TooltipId.SetFirstAttack:
             return 'Click on an enemy gladiator to target them.';
+        case TooltipId.ExitInProgressMatch:
+            return 'Click again to close the match. It can be resumed at any point from the Join menu.';
     }
 }
 

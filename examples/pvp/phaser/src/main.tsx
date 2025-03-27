@@ -44,6 +44,8 @@ import { Subscriber, Observable } from 'rxjs';
 
 import { MainMenu } from './menus/main';
 import { BattleConfig } from './battle/arena';
+import { Button } from './menus/button';
+import { closeTooltip, isTooltipOpen, makeTooltip, TooltipId } from './menus/tooltip';
 
 const COLOR_MAIN = 0x4e342e;
 const COLOR_LIGHT = 0x7b5e57;
@@ -75,6 +77,52 @@ export function fontStyle(fontSize: number, extra?: Phaser.Types.GameObjects.Tex
         fontFamily: 'yana',
         color: '#f5f5ed'//'white'
     };
+}
+
+export function makeCopyAddressButton(scene: Phaser.Scene, x: number, y: number, address: ContractAddress): Button {
+    const button = new Button(scene, x, y, 24, 24, '', 10, () => {
+        navigator.clipboard.writeText(address);
+    }, 'Copy contract address');
+    button.add(scene.add.image(0, 0, 'clipboard').setAlpha(0.75));
+    return button;
+}
+
+export function makeExitMatchButton(scene: Phaser.Scene, x: number, y: number): Button {
+    return new Button(scene, x, y, 24, 24, '<', 10, () => {
+        if (isTooltipOpen(TooltipId.ExitInProgressMatch) || makeTooltip(scene, GAME_WIDTH / 2, GAME_HEIGHT / 4, TooltipId.ExitInProgressMatch) == undefined) {
+            closeTooltip(TooltipId.ExitInProgressMatch);
+            scene.scene.start('MainMenu');
+            scene.scene.remove('Arena');
+        }
+    }, 'Exit to main menu');
+}
+
+export function makeSoundToggleButton(scene: Phaser.Scene, x: number, y: number): Button {
+    const on = scene.add.image(0, 0, 'sound_on').setAlpha(0.75).setVisible(!isMuted());
+    const off = scene.add.image(0, 0, 'sound_off').setAlpha(0.75).setVisible(isMuted());
+    const button = new Button(scene, x, y, 24, 24, '', 10, () => {
+        if (isMuted()) {
+            on.visible = true;
+            off.visible = false;      
+        } else {
+            on.visible = false;
+            off.visible = true;
+        }
+        localStorage.setItem('muted', isMuted() ? 'false' : 'true');
+    }, 'Toggle sound / mute');
+    button
+        .add(on)
+        .add(off);
+    return button;
+}
+
+export const isMuted = () => localStorage.getItem('muted') == 'true';
+
+/// play a sound but only if not muted
+export function playSound(scene: Phaser.Scene, key: string) {
+    if (!isMuted()) {
+        scene.sound.play(key);
+    }
 }
 
 // only converts bigint, but this is the only problem we have with printing ledger types

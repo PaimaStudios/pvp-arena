@@ -1,4 +1,4 @@
-import { fontStyle, rootObject } from "../main";
+import { fontStyle, GAME_HEIGHT, GAME_WIDTH, playSound, rootObject } from "../main";
 import BBCodeText from 'phaser3-rex-plugins/plugins/bbcodetext.js';
 export class Button extends Phaser.GameObjects.Container {
     bg: Phaser.GameObjects.NineSlice;
@@ -34,8 +34,10 @@ export class Button extends Phaser.GameObjects.Container {
             this.add(this.helpText);
         }
         this.on('pointerup', () => {
-            scene.sound.play('select');
+            // we play sound after to make the mute button make more sense
+            // e.g. if you unmute the sound should play, and muting doesn't
             onClick();
+            playSound(scene, 'select');
         });
         this.on('pointerover', (pointer: Phaser.Input.Pointer, localX: number, localY: number) => {
             this.bg.visible = false;
@@ -71,9 +73,11 @@ export class Button extends Phaser.GameObjects.Container {
     preUpdate() {
         if (this.helpText != undefined && this.helpText.visible) {
             const parent = rootObject(this);
+            const mx = this.scene.input.activePointer.worldX;
+            const my = this.scene.input.activePointer.worldY;
             this.helpText.setPosition(
-                this.scene.input.activePointer.worldX - parent.x,
-                this.scene.input.activePointer.worldY - parent.y - 32,
+                Math.min(GAME_WIDTH - this.helpText.width / 2, Math.max(mx, 16 + this.helpText.width / 2)) - parent.x,
+                Math.min(GAME_HEIGHT - this.helpText.height / 2, my - 32 > this.helpText.height / 2 ? my - 32 : my + 32) - parent.y,
             );
         }
     }
