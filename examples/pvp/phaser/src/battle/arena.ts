@@ -506,10 +506,9 @@ export class Arena extends Phaser.Scene
 
         this.setMatchState(MatchState.Initializing);
 
-        this.createHeroes(this.initialState);
-        
         if (this.initialState.round != BigInt(0) || this.initialState.state != GAME_STATE.p1_commit) {
-            console.log('===================re-doing initial state=========');
+            this.createHeroes(this.initialState);
+
             this.round = Number(this.initialState.round);
             // we can't know previous stances for player 2 so to make the resuming consistent just default to the on-chain values
             for (let team = 0; team < 2; ++team) {
@@ -576,6 +575,8 @@ export class Arena extends Phaser.Scene
                     }
                     break;
             }
+        } else {
+            this.onStateChange(this.initialState);
         }
 
         this.subscription = this.config.api.state$.subscribe((state) => this.onStateChange(state));
