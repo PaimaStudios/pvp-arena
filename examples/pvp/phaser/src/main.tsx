@@ -109,7 +109,7 @@ export function makeSoundToggleButton(scene: Phaser.Scene, x: number, y: number)
             off.visible = true;
         }
         localStorage.setItem('muted', isMuted() ? 'false' : 'true');
-    }, 'Copy contract address');
+    }, 'Toggle sound / mute');
     button
         .add(on)
         .add(off);

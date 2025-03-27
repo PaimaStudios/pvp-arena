@@ -73,9 +73,11 @@ export class Button extends Phaser.GameObjects.Container {
     preUpdate() {
         if (this.helpText != undefined && this.helpText.visible) {
             const parent = rootObject(this);
+            const mx = this.scene.input.activePointer.worldX;
+            const my = this.scene.input.activePointer.worldY;
             this.helpText.setPosition(
-                Math.min(GAME_WIDTH - this.helpText.width / 2, Math.max(this.scene.input.activePointer.worldX, 16 + this.helpText.width / 2)) - parent.x,
-                Math.min(GAME_HEIGHT - this.helpText.height / 2, Math.max(this.scene.input.activePointer.worldY, 42 + this.helpText.height / 2)) - parent.y - 32,
+                Math.min(GAME_WIDTH - this.helpText.width / 2, Math.max(mx, 16 + this.helpText.width / 2)) - parent.x,
+                Math.min(GAME_HEIGHT - this.helpText.height / 2, my - 32 > this.helpText.height / 2 ? my - 32 : my + 32) - parent.y,
             );
         }
     }
