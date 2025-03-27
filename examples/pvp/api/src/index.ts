@@ -198,6 +198,9 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
           p2Dmg: [ledgerState.p2Dmg0, ledgerState.p2Dmg1, ledgerState.p2Dmg2],
           p2Alive: [ledgerState.p2Alive0, ledgerState.p2Alive1, ledgerState.p2Alive2],
           p2Stances: ledgerState.p2Stances,
+          secretKey: privateState.secretKey,
+          nonce: ledgerState.commitNonce,
+          commit: ledgerState.p1Commit,
         };
       },
     );

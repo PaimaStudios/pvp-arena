@@ -10,6 +10,8 @@ import { Physics } from 'phaser';
 import { eq } from 'fp-ts';
 import { closeTooltip, isTooltipOpen, makeTooltip, TooltipId } from './tooltip';
 import { ContractAddress } from '@midnight-ntwrk/ledger';
+import { Observable } from 'rxjs/internal/Observable';
+import { Subscription } from 'rxjs';
 
 class SelectHeroActor extends Phaser.GameObjects.Container {
     hero: Hero;
@@ -298,7 +300,7 @@ class SlotSelector extends Phaser.GameObjects.Container {
     }
 
     // shifts hero's stats and updates visual elements
-    shift(cycle: number) {
+    public shift(cycle: number) {
         const max = equip_slot_max(this.slot);
         const index = (equip_slot_index(this.hero.hero, this.slot) + max + cycle) % max;
         switch (this.slot) {
@@ -307,12 +309,12 @@ class SlotSelector extends Phaser.GameObjects.Container {
                 // disallow bow / non-unarmed
                 if (this.hero.hero.lhs == ITEM.bow || this.hero.hero.rhs == ITEM.bow) {
                     this.hero.hero.rhs = ITEM.nothing;
-                    this.equip.slots.get(EQUIP_SLOT.rhs)!.refresh();
+                    this.equip.slots.get(EQUIP_SLOT.rhs)?.refresh();
                 }
                 // disallow double shields
                 if (this.hero.hero.lhs == ITEM.shield && this.hero.hero.rhs == ITEM.shield) {
                     this.hero.hero.rhs = ITEM.nothing;
-                    this.equip.slots.get(EQUIP_SLOT.rhs)!.refresh();
+                    this.equip.slots.get(EQUIP_SLOT.rhs)?.refresh();
                 }
                 break;
             case EQUIP_SLOT.rhs:
@@ -320,12 +322,12 @@ class SlotSelector extends Phaser.GameObjects.Container {
                 // disallow bow / non-unarmed
                 if (this.hero.hero.rhs == ITEM.bow || this.hero.hero.lhs == ITEM.bow) {
                     this.hero.hero.lhs = ITEM.nothing;
-                    this.equip.slots.get(EQUIP_SLOT.lhs)!.refresh();
+                    this.equip.slots.get(EQUIP_SLOT.lhs)?.refresh();
                 }
                 // disallow double shields
                 if (this.hero.hero.lhs == ITEM.shield && this.hero.hero.rhs == ITEM.shield) {
                     this.hero.hero.lhs = ITEM.nothing;
-                    this.equip.slots.get(EQUIP_SLOT.lhs)!.refresh();
+                    this.equip.slots.get(EQUIP_SLOT.lhs)?.refresh();
                 }
                 break;
             case EQUIP_SLOT.helmet:
@@ -346,7 +348,7 @@ class SlotSelector extends Phaser.GameObjects.Container {
     }
 
     // refreshes the text / hero (stats) based on current hero's stats
-    refresh() {
+    public refresh() {
         switch (this.slot) {
             case EQUIP_SLOT.lhs:
                 this.text.setText(`${equip_slot_name(this.slot)}: ${item_str(this.hero.hero.lhs)}`);
@@ -383,6 +385,7 @@ export class EquipmentMenu extends Phaser.Scene {
     selecting: number;
     selector: EquipmentSelector | undefined;
     setupStateText: Phaser.GameObjects.Text | undefined;
+    subscription: Subscription | undefined;
 
     constructor(config: BattleConfig) {
         super('EquipmentMenu');
@@ -390,12 +393,31 @@ export class EquipmentMenu extends Phaser.Scene {
         this.heroes = [];
         this.selecting = 0;
         this.setupState = config.isP1 ? SetupState.SelectingPlayerHeroes : SetupState.WaitingOnOpponent;
-        const subscription = config.api.state$.subscribe((state) => this.onStateChange(state));
+    }
+
+    preDestroy() {
+        this.subscription?.unsubscribe();
     }
 
     onStateChange(state: PVPArenaDerivedState) {
         console.log(`new state: ${safeJSONString(state)}`);
         console.log(`NOW: ${gameStateStr(state.state)}`);
+
+        // when joining this.selecting could be out of date
+        switch (state.state) {
+            case GAME_STATE.p1_selecting_first_hero:
+                this.selecting = 0;
+                break;
+            case GAME_STATE.p1_selecting_last_heroes:
+                this.selecting = this.config.isP1 ? 1 : 2;
+                break;
+            case GAME_STATE.p2_selecting_first_heroes:
+                this.selecting = this.config.isP1 ? 1 : 0;
+                break;
+            case GAME_STATE.p2_selecting_last_hero:
+                this.selecting = 2;
+                break;
+        }
 
         // update heroes
         let tweens: Phaser.Types.Tweens.TweenBuilderConfig[] = [];
@@ -442,6 +464,8 @@ export class EquipmentMenu extends Phaser.Scene {
                 break;
             case GAME_STATE.p1_commit:
                 // game started
+                console.log(`================skipping equip screen=============`);
+                // This causes black screens when uncommented. TODO: investigate. Issue: https://github.com/PaimaStudios/pvp-arena/issues/22
                 //this.scene.remove('Arena');
                 this.scene.add('Arena', new Arena(this.config, state));
                 this.scene.start('Arena');
@@ -500,6 +524,8 @@ export class EquipmentMenu extends Phaser.Scene {
             }
             this.heroes.push(heroes);
         }
+
+        this.subscription = this.config.api.state$.subscribe((state) => this.onStateChange(state));
     }
 
     // advances to next step

@@ -76,7 +76,8 @@ export type PVPArenaDerivedState = {
   readonly p2Stances: STANCE[];
   readonly round: bigint;
   readonly state: GAME_STATE;
-  // readonly p2Dmg0: bigint;
-  // readonly p2Dmg1: bigint;
-  // readonly p2Dmg2: bigint;
+  // needed for resuming games as P1
+  readonly secretKey: Uint8Array;
+  readonly nonce: Uint8Array | undefined;
+  readonly commit: bigint | undefined;
 };
