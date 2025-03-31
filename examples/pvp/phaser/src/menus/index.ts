@@ -24,7 +24,7 @@ export class StatusUI {
     }
 
     public setError(e: Error, onClick?: () => void, override?: string) {
-        const errorString = `Error deploying match:\n${e}`;
+        const errorString = `Error:\n${e}`;
         console.log(errorString);
         this.setText(errorString);
         this.text.y = GAME_HEIGHT / 2;
