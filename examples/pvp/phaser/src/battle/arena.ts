@@ -11,6 +11,7 @@ import { init } from 'fp-ts/lib/ReadonlyNonEmptyArray';
 import { closeTooltip, makeTooltip, TooltipId } from '../menus/tooltip';
 import { OFFLINE_PRACTICE_CONTRACT_ADDR } from './mockapi';
 import { Subscription } from 'rxjs';
+import { StatusUI } from '../menus';
 
 export type BattleConfig = {
     isP1: boolean,
@@ -28,7 +29,7 @@ export class Arena extends Phaser.Scene
     initialState: PVPArenaDerivedState;
     onChainState: GAME_STATE;
     matchState: MatchState;
-    matchStateText: Phaser.GameObjects.Text | undefined;
+    status: StatusUI | undefined;
     round: number;
     submitButton: Button | undefined;
     subscription: Subscription | undefined;
@@ -61,10 +62,10 @@ export class Arena extends Phaser.Scene
         this.matchState = state;
         switch (state) {
             case MatchState.Initializing:
-                this.matchStateText?.setText('Initializing...');
+                this.status?.setText('Initializing...');
                 break;
             case MatchState.WaitingOnPlayer:
-                this.matchStateText?.setText('Make your move');
+                this.status?.setText('Make your move');
                 for (const hero of this.getAliveHeroes(this.playerTeam())) {
                     hero.setInteractive({useHandCursor: true});
                 }
@@ -72,10 +73,10 @@ export class Arena extends Phaser.Scene
                 makeTooltip(this, firstHero.x, firstHero.y - 96, TooltipId.SelectHero, { clickHighlights: [new Phaser.Math.Vector2(firstHero.x, firstHero.y)] });
                 break;
             case MatchState.WaitingOnOpponent:
-                this.matchStateText?.setText('Waiting on opponent (submit)...');
+                this.status?.setText('Waiting on opponent (submit)...');
                 break;
             case MatchState.SubmittingMove:
-                this.matchStateText?.setText('Submitting move...');
+                this.status?.setText('Submitting move...');
                 this.selected?.deselect();
                 this.selected = undefined;
                 for (const hero of this.getAliveHeroes(this.playerTeam())) {
@@ -83,13 +84,13 @@ export class Arena extends Phaser.Scene
                 }
                 break;
             case MatchState.RevealingMove:
-                this.matchStateText?.setText('Revealing move...');
+                this.status?.setText('Revealing move...');
                 break;
             case MatchState.WaitingOtherPlayerReveal:
-                this.matchStateText?.setText('Waiting on opponent (reveal)...');
+                this.status?.setText('Waiting on opponent (reveal)...');
                 break;
             case MatchState.CombatResolving:
-                this.matchStateText?.setText('Battle!');
+                this.status?.setText('Battle!');
                 break;
             case MatchState.GameOverP1Win:
                 if (this.config.isP1) {
@@ -117,8 +118,7 @@ export class Arena extends Phaser.Scene
     }
 
     displayEndMatchText(message: string) {
-        this.matchStateText?.destroy();
-        this.matchStateText = undefined;
+        this.status?.clearStatusText();
         this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.4, message, fontStyle(64, { align: 'center' })).setOrigin(0.5, 0.65);
         new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.9, 128, 32, 'Main Menu', 18, () => {
             this.scene.start('MainMenu');
@@ -201,10 +201,11 @@ export class Arena extends Phaser.Scene
                 if (this.config.isP1) {
                     console.log('revealing move (as p1)');
                     this.setMatchState(MatchState.RevealingMove);
-                    // TODO: what happens if player cancels or closes window?
-                    this.config.api.p1Reveal(this.movesForContract(), this.stancesForContract()).then(() => {
-                        // ??? (probably nothing - resolved by onStateChange)
-                    });
+                    this.config.api.p1Reveal(this.movesForContract(), this.stancesForContract())
+                        .catch((e) => {
+                            // just re-try
+                            this.status!.setError(e, () => this.runStateChange(), 'Retry');
+                        });
                 } else {
                     this.setMatchState(MatchState.WaitingOtherPlayerReveal);
                 }
@@ -352,8 +353,6 @@ export class Arena extends Phaser.Scene
         makeExitMatchButton(this, GAME_WIDTH - 48, 16);
         makeSoundToggleButton(this, GAME_WIDTH - 16, 16);
 
-        this.matchStateText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.9, '', fontStyle(12)).setOrigin(0.5, 0.65);
-
         // should we get rid of these?
         this.input?.keyboard?.on('keydown-ONE', () => {
             if (this.matchState == MatchState.WaitingOnPlayer) {
@@ -468,14 +467,12 @@ export class Arena extends Phaser.Scene
                     // still must send moves for dead units to make sure indexing works, so pad with 0's
                     if (this.config.isP1) {
                         console.log('submitting move (as p1)');
-                        this.config.api.p1Commit(this.movesForContract(), this.stancesForContract()).then(() => {
-                            // ???
-                        });
+                        this.config.api.p1Commit(this.movesForContract(), this.stancesForContract())
+                            .catch((e) => this.recoverFromSubmitError(MatchState.WaitingOnPlayer, e));
                     } else {
                         console.log('submitting move (as p2)');
-                        this.config.api.p2Commit(this.movesForContract(), this.stancesForContract()).then(() => {
-                            // ???
-                        });
+                        this.config.api.p2Commit(this.movesForContract(), this.stancesForContract())
+                           .catch((e) => this.recoverFromSubmitError(MatchState.WaitingOnPlayer, e));
                     }
                 } else {
                     console.log(`invalid move: |${moves.length} < ${this.getAliveHeroes(this.playerTeam()).length}| ${JSON.stringify(this.heroes[this.playerTeam()].map((hero) => hero.target))}`);
@@ -494,19 +491,19 @@ export class Arena extends Phaser.Scene
             // still must send moves for dead units to make sure indexing works, so pad with 0's
             if (this.config.isP1) {
                 console.log('submitting move (as p1)');
-                this.config.api.p1Commit(this.movesForContract(), this.stancesForContract()).then(() => {
-                    // ???
-                });
+                this.config.api.p1Commit(this.movesForContract(), this.stancesForContract())
+                    .catch((e) => this.recoverFromSubmitError(MatchState.WaitingOnPlayer, e));
             } else {
                 console.log('submitting move (as p2)');
-                this.config.api.p2Commit(this.movesForContract(), this.stancesForContract()).then(() => {
-                    // ???
-                });
+                this.config.api.p2Commit(this.movesForContract(), this.stancesForContract())
+                    .catch((e) => this.recoverFromSubmitError(MatchState.WaitingOnPlayer, e));
             }
             this.submitButton!.visible = false;
-            this.matchStateText!.visible = true;
             closeTooltip(TooltipId.SetAllAttacks);
         });
+        this.status = new StatusUI(this, [
+            this.submitButton,
+        ]);
         this.submitButton!.visible = false;
         this.add.existing(this.submitButton);
 
@@ -605,7 +602,7 @@ export class Arena extends Phaser.Scene
 
     public enableSubmitButton() {
         this.submitButton!.visible = true;
-        this.matchStateText!.visible = false;
+        this.status?.clearStatusText();
     }
 
     private movesForContract(): bigint[] {
@@ -614,5 +611,13 @@ export class Arena extends Phaser.Scene
 
     private stancesForContract(): STANCE[] {
         return this.heroes[this.playerTeam()].map((hero) => hero.nextStance);
+    }
+
+    private recoverFromSubmitError(recoveryState: MatchState, e: Error) {
+        console.log(`submit error: ${e}`);
+        this.status!.setError(e, () => {
+            this.setMatchState(recoveryState);
+            this.enableSubmitButton();
+        });
     }
 }

@@ -180,16 +180,20 @@ export type ContractJoinInfo = {
 }
 
 export async function joinContract(deployProvider: BrowserDeploymentManager, contractAddress: ContractAddress): Promise<ContractJoinInfo> {
-    return deployProvider.join(contractAddress).then((api) => new Promise((resolve) => {
+    return deployProvider.join(contractAddress).then((api) => new Promise((resolve, reject) => {
         const subscription = api.state$.subscribe((state) => {
             subscription.unsubscribe();
-            resolve({
-                config: {
-                    isP1: state.isP1,
-                    api,
-                },
-                state,
-            });
+            if (state.isP1 || state.isP2 || state.p2PubKey == undefined) {
+                resolve({
+                    config: {
+                        isP1: state.isP1,
+                        api,
+                    },
+                    state,
+                });
+            } else {
+                reject(new Error('User authentication failed - pub key does not match P1 or P2'));
+            }
         });
     }));
 }

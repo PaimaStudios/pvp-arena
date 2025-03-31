@@ -183,6 +183,7 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
         const localPublicKey = pureCircuits.derive_public_key(privateState.secretKey);
 
         const isP1 = ledgerState.p1PublicKey === localPublicKey;
+        const isP2 = ledgerState.p2PublicKey.is_some && (ledgerState.p2PublicKey.value === localPublicKey);
 
         return {
           round: ledgerState.round,
@@ -193,11 +194,14 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
           p1Alive: [ledgerState.p1Alive0, ledgerState.p1Alive1, ledgerState.p1Alive2],
           p1Stances: ledgerState.p1Stances,
           isP1,
+          isP2,
+          p1PubKey: ledgerState.p1PublicKey,
           p2Heroes: ledgerState.p2Heroes.filter((h) => h.is_some).map((h) => h.value),
           p2Cmds: ledgerState.p2Cmds.is_some ? ledgerState.p2Cmds.value : undefined,
           p2Dmg: [ledgerState.p2Dmg0, ledgerState.p2Dmg1, ledgerState.p2Dmg2],
           p2Alive: [ledgerState.p2Alive0, ledgerState.p2Alive1, ledgerState.p2Alive2],
           p2Stances: ledgerState.p2Stances,
+          p2PubKey: ledgerState.p2PublicKey.is_some ? ledgerState.p2PublicKey.value : undefined,
           secretKey: privateState.secretKey,
           nonce: ledgerState.commitNonce,
           commit: ledgerState.p1Commit,
