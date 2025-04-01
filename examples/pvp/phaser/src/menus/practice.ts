@@ -29,13 +29,17 @@ export class PracticeMenu extends Phaser.Scene {
         this.status = new StatusUI(this, [
             new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.3, 128, 32, 'On-chain Practice', 10, () => {
                 this.status?.setText('Creating match, please wait...');
-                this.deployProvider.create({ isPractice: true, isPublic: false }).then((api) => {
-                    console.log(`contract address: ${api.deployedContractAddress}`);
-                    this.scene.remove('EquipmentMenu');
-                    const equipMenu = new EquipmentMenu({ api, isP1: true });
-                    this.scene.add('EquipmentMenu', equipMenu);
-                    this.scene.start('EquipmentMenu');
-                });
+                this.deployProvider
+                    .create({ isPractice: true, isPublic: false }).then((api) => {
+                        console.log(`contract address: ${api.deployedContractAddress}`);
+                        this.scene.remove('EquipmentMenu');
+                        const equipMenu = new EquipmentMenu({ api, isP1: true });
+                        this.scene.add('EquipmentMenu', equipMenu);
+                        this.scene.start('EquipmentMenu');
+                    })
+                    .catch((e) => {
+                        this.status!.setError(e);
+                    });
             }, 'Practice on-chain against the AI'),
             new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.55, 128, 32, 'Offline Practice', 10, () => {
                 this.status?.setText('Entering offline practice arena...');
@@ -62,7 +66,7 @@ export class PracticeMenu extends Phaser.Scene {
         const x = GAME_WIDTH / 2;
         const w = 320;
         const h = 48;
-        this.status?.registerUi(this.add.nineslice(x, y, 'stone_button', undefined, w, h, 8, 8, 8, 8));
-        this.status?.registerUi(this.add.text(x, y, desc, fontStyle(10, { wordWrap: { width: w - 8 } })).setOrigin(0.5, 0.5));
+        this.status?.registerUi(this.add.nineslice(x, y, 'stone_button', undefined, w, h, 8, 8, 8, 8).setDepth(-1));
+        this.status?.registerUi(this.add.text(x, y, desc, fontStyle(10, { wordWrap: { width: w - 8 } })).setDepth(-1).setOrigin(0.5, 0.5));
     }
 }

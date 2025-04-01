@@ -9,7 +9,6 @@ import { HeroIndex, hpDiv, Rank, Team } from './index';
 import { Button } from '../menus/button';
 import { init } from 'fp-ts/lib/ReadonlyNonEmptyArray';
 import { closeTooltip, makeTooltip, TooltipId } from '../menus/tooltip';
-import { makeCopyAddressButton, makeExitMatchButton } from '../menus/equipment';
 import { OFFLINE_PRACTICE_CONTRACT_ADDR } from './mockapi';
 import { Subscription } from 'rxjs';
 import { StatusUI } from '../menus';
