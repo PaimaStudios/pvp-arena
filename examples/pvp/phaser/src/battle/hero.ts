@@ -1,7 +1,7 @@
 import { ITEM, RESULT, STANCE, Hero, ARMOR, pureCircuits, GAME_STATE } from '@midnight-ntwrk/pvp-contract';
 import { safeJSONString, MatchState, fontStyle, GAME_WIDTH, rootObject, playSound } from '../main';
 import { Arena } from './arena';
-import { MAX_HP, Rank, BloodDrop, DamageText, hpDiv } from '.';
+import { MAX_HP, Rank, BloodDrop, DamageText, SandKickup, hpDiv } from '.';
 import { closeTooltip, makeTooltip, TooltipId } from '../menus/tooltip';
 
 const MELEE_ATTACK_TIME = 300;
@@ -610,7 +610,20 @@ export class HeroAnimationController extends Phaser.GameObjects.Container {
             this.add(this.rhsAttackAnim);
         }
 
-        this.idle();
+        // I could not get random idle animation durations (to stop everyone from being in sync at the start)
+        // I tried passing in a duration of Phaser.Math.Between(IDLE_ANIM_TIME * 0.9, IDLE_ANIM_TIME * 1.1) but it was being ignored
+        // and only the one from createHeroAnims() was used. I tried passing in undefined during creation to see if it was
+        // overridden but it would just default to instant (1 offset?)
+        // So this hack just adds a random offset to the idle animation instead of calling this.anim() in the constructor
+        this.runAnim.visible = false;
+        this.lhsAttackAnim?.setVisible(false);
+        this.rhsAttackAnim?.setVisible(false);
+        setTimeout(() => {
+            if (this.idleAnim.visible) {
+                this.idle();
+            }
+        }, Math.ceil(Math.random() * 1000));
+
 
         this.setFlipX(isP2);
 
@@ -631,6 +644,7 @@ export class HeroAnimationController extends Phaser.GameObjects.Container {
         this.idleAnim.visible = true;
         this.lhsAttackAnim?.setVisible(false);
         this.rhsAttackAnim?.setVisible(false);
+        // this duration isn't being overridden for some reason, hence the setTimeout() hack in the constructor
         this.idleAnim.play(Phaser.Math.Between(IDLE_ANIM_TIME * 0.9, IDLE_ANIM_TIME * 1.1));
     }
 
@@ -664,6 +678,10 @@ export class HeroAnimationController extends Phaser.GameObjects.Container {
         this.runAnim.preUpdate();
         this.lhsAttackAnim?.preUpdate();
         this.rhsAttackAnim?.preUpdate();
+        if (this.runAnim.visible) {
+            const root = rootObject(this);
+            this.scene.add.existing(new SandKickup(this.scene, root.x, root.y + 29));
+        }
     }
 }
 

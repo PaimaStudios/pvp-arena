@@ -76,6 +76,44 @@ export class BloodDrop extends Phaser.GameObjects.Sprite {
     }
 }
 
+export class SandKickup extends Phaser.GameObjects.Sprite {
+    xPrev: number;
+    yPrev: number;
+    // moving in 3d space so use our own super-basic physics
+    xSpeed: number;
+    ySpeed: number;
+    zSpeed: number;
+
+    constructor(scene: Phaser.Scene, x: number, y: number) {
+        super(scene, x, y, 'dust');//`dust${Phaser.Math.Between(0, 1)}`);
+        this.xPrev = x;
+        this.yPrev = y;
+        const dir = Phaser.Math.Angle.Random();
+        const spd = 0.15 + Math.random() * 0.35;
+        // probably fine but might need to look at Phaser.Math.SinCosTableGenerator
+        this.xSpeed = spd * Math.cos(dir);
+        this.ySpeed = spd * Math.sin(dir);
+        this.zSpeed = -(Math.random() * 0.9 + 0.3);
+        this.angle = Phaser.Math.Angle.Random();
+        this.setAlpha(0.3 + 0.3 * Math.random());
+    }
+
+    preUpdate() {
+        this.x += this.xSpeed;
+        this.y += this.ySpeed + this.zSpeed;
+        //this.z += this.zSpeed;
+
+        this.rotation = Phaser.Math.Angle.Between(this.xPrev, this.yPrev, this.x, this.y);
+        this.xPrev = this.x;
+        this.yPrev = this.y;
+
+        if (this.alpha <= 0) {
+            this.destroy();
+        }
+        this.alpha -= 0.03;
+    }
+}
+
 export type HeroIndex = 0 | 1 | 2;
 export type Team = 0 | 1;
 
