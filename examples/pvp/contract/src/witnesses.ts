@@ -15,8 +15,7 @@ import { WitnessContext } from '@midnight-ntwrk/compact-runtime';
  */
 
 export type PVPArenaPrivateState = {
-  // EXERCISE 1a: FILL IN A REPRESENTATION OF THE PRIVATE STATE
-  readonly secretKey: Uint8Array; // EXERCISE ANSWER
+  readonly secretKey: Uint8Array;
   commands: bigint[];
   stances: STANCE[];
 };

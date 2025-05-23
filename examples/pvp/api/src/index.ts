@@ -6,7 +6,7 @@
 
 import { type ContractAddress, convert_bigint_to_Uint8Array } from '@midnight-ntwrk/compact-runtime';
 import { type Logger } from 'pino';
-import type { PVPArenaDerivedState, PVPArenaContract, PVPArenaProviders, DeployedPVPArenaContract } from './common-types.js';
+import type { PVPArenaDerivedState, PVPArenaContract, PVPArenaProviders, DeployedPVPArenaContract, PrivateStates } from './common-types.js';
 import {
   type PVPArenaPrivateState,
   Contract,
@@ -24,9 +24,8 @@ import {
  // Command,
 } from '@midnight-ntwrk/pvp-contract';
 import * as utils from './utils/index.js';
-import { deployContract, findDeployedContract } from '@midnight-ntwrk/midnight-js-contracts';
+import { deployContract, findDeployedContract, FoundContract } from '@midnight-ntwrk/midnight-js-contracts';
 import { combineLatest, map, tap, from, type Observable } from 'rxjs';
-import { toHex } from '@midnight-ntwrk/midnight-js-utils';
 import { PrivateStateProvider } from '@midnight-ntwrk/midnight-js-types';
 
 /** @internal */
@@ -440,10 +439,9 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
   static async deploy(providers: PVPArenaProviders, isPractice: boolean, logger?: Logger): Promise<PVPArenaAPI> {
     logger?.info('deployContract');
 
-    // EXERCISE 5: FILL IN THE CORRECT ARGUMENTS TO deployContract
-    const deployedPVPArenaContract = await deployContract(providers, {
+    const deployedPVPArenaContract: FoundContract<PVPArenaContract> = await deployContract(providers, {
       // EXERCISE ANSWER
-      privateStateKey: 'pvpPrivateState', // EXERCISE ANSWER
+      privateStateId: 'pvpPrivateState', // EXERCISE ANSWER
       contract: pvpContractInstance,
       initialPrivateState: await PVPArenaAPI.getPrivateState(providers.privateStateProvider), // EXERCISE ANSWER
       //args: [],
@@ -476,7 +474,7 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
     const deployedPVPArenaContract = await findDeployedContract(providers, {
       contractAddress,
       contract: pvpContractInstance,
-      privateStateKey: 'pvpPrivateState',
+      privateStateId: 'pvpPrivateState',
       initialPrivateState: await PVPArenaAPI.getPrivateState(providers.privateStateProvider),
     });
 
