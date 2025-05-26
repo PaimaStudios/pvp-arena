@@ -50,14 +50,14 @@ export type PVPArenaCircuitKeys = Exclude<keyof PVPArenaContract['impureCircuits
  *
  * @public
  */
-export type PVPArenaProviders = MidnightProviders<PVPArenaCircuitKeys, PrivateStates>;
+export type PVPArenaProviders = MidnightProviders<PVPArenaCircuitKeys, 'pvpPrivateState', PVPArenaPrivateState>;
 
 /**
  * A {@link PVPArenaContract} that has been deployed to the network.
  *
  * @public
  */
-export type DeployedPVPArenaContract = FoundContract<PVPArenaPrivateState, PVPArenaContract>;
+export type DeployedPVPArenaContract = FoundContract<PVPArenaContract>;
 
 /**
  * A type that represents the derived combination of public (or ledger), and private state.

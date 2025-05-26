@@ -20,45 +20,23 @@ import { getRuntimeNetworkId } from "@midnight-ntwrk/midnight-js-network-id";
 import init, {
   initThreadPool,
   WasmProver,
-  ParamsProver,
+  MidnightWasmParamsProvider,
   Rng,
   NetworkId,
   ZkConfig,
 } from "@paima/midnight-vm-bindings";
-//@ts-expect-error
-import kzg from "../public/kzg.bin";
 
-let kzgPromise: Promise<ParamsProver> | undefined = undefined;
-
-async function getParamsProver(): Promise<ParamsProver> {
-  if (kzgPromise === undefined) {
-    kzgPromise = (async () => {
-      const response = await fetch(kzg);
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! Status: ${response.status}`);
-      }
-
-      const arrayBuffer = await response.arrayBuffer();
-      const uint8Array = new Uint8Array(arrayBuffer);
-
-      const pp = ParamsProver.read(uint8Array);
-
-      return pp;
-    })();
-  }
-
-  return kzgPromise;
-}
 
 const localProofServer = {
   async proveTx<K extends string>(
     tx: UnprovenTransaction,
     proveTxConfig?: ProveTxConfig<K>
   ): Promise<UnbalancedTransaction> {
-    const pp = await getParamsProver();
+    const baseUrl = new URL(window.location.href).toString();
 
-    const prover = WasmProver.new(pp);
+    const pp = MidnightWasmParamsProvider.new(baseUrl);
+
+    const prover = WasmProver.new();
 
     const rng = Rng.new();
 
@@ -79,25 +57,28 @@ const localProofServer = {
       }
     })();
 
+    console.log('Starting ZK proof');
+
     const startTime = performance.now();
 
-    const unbalancedTxRaw = await prover.prove_tx(
-      rng,
-      rawTx,
-      networkId === LedgerNetworkId.Undeployed
-        ? NetworkId.undeployed()
-        : NetworkId.testnet(),
-      zkConfig
+    let unbalancedTxRaw = await prover.prove_tx(
+        rng,
+        rawTx,
+        networkId === LedgerNetworkId.Undeployed
+            ? NetworkId.undeployed()
+            : NetworkId.testnet(),
+        zkConfig,
+        pp
     );
 
     const endTime = performance.now();
     console.log(
-      `Proved unbalanced tx in: ${Math.floor(endTime - startTime)} ms`
+        `Proved unbalanced tx in: ${Math.floor(endTime - startTime)} ms`
     );
 
     const unbalancedTx = Transaction.deserialize(
-      unbalancedTxRaw,
-      getRuntimeNetworkId()
+        unbalancedTxRaw,
+        getRuntimeNetworkId()
     );
 
     return createUnbalancedTx(unbalancedTx);
@@ -114,6 +95,7 @@ export const initializeProviders = async (
 
   const batcherAddress = await getBatcherAddress();
 
+  const batcherAddressParts = batcherAddress.split("|");
   return {
     privateStateProvider: levelPrivateStateProvider({
       privateStateStoreName: "pvp-private-state",
@@ -130,7 +112,8 @@ export const initializeProviders = async (
     walletProvider: {
       // not entirely sure what's this used for, but since we don't have a
       // wallet we can only use the batcher's address
-      coinPublicKey: batcherAddress.split("|")[0],
+      coinPublicKey: batcherAddressParts[0],
+      encryptionPublicKey: batcherAddressParts[1],
       balanceTx(
         tx: UnbalancedTransaction,
         newCoins: CoinInfo[]
