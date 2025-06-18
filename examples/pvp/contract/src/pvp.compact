@@ -339,7 +339,8 @@ export circuit p1_select_last_heroes(last_p1_heroes: Vector<2, HeroHack>): [] {
     
     base_damage_cache_p2_0_2 = ((100 - p1_stats[2].crush_def) * p2_stats[0].crush_dmg + (100 - p1_stats[2].pierce_def) * p2_stats[0].pierce_dmg + (50 +p1_stats[2].weight - p2_stats[0].weight) * p2_stats[0].dex_bonus) as Uint<32>;
     base_damage_cache_p2_1_2 = ((100 - p1_stats[2].crush_def) * p2_stats[1].crush_dmg + (100 - p1_stats[2].pierce_def) * p2_stats[1].pierce_dmg + (50 +p1_stats[2].weight - p2_stats[1].weight) * p2_stats[1].dex_bonus) as Uint<32>;
-    base_damage_cache_p2_0_1 = ((100 - p1_stats[1].crush_def) * p2_stats[0].crush_dmg + (100 - p1_stats[1].pierce_def) * p2_stats[0].pierce_dmg + (50 +p1_stats[1].weight - p2_stats[0].weight) * p2_stats[0].dex_bonus) as Uint<32>;
+    // moved to p2_select_last_hero to work around compact limits being sometimes hit
+    // base_damage_cache_p2_0_1 = ((100 - p1_stats[1].crush_def) * p2_stats[0].crush_dmg + (100 - p1_stats[1].pierce_def) * p2_stats[0].pierce_dmg + (50 +p1_stats[1].weight - p2_stats[0].weight) * p2_stats[0].dex_bonus) as Uint<32>;
     base_damage_cache_p2_1_1 = ((100 - p1_stats[1].crush_def) * p2_stats[1].crush_dmg + (100 - p1_stats[1].pierce_def) * p2_stats[1].pierce_dmg + (50 +p1_stats[1].weight - p2_stats[1].weight) * p2_stats[1].dex_bonus) as Uint<32>;
 }
 
@@ -350,6 +351,9 @@ export circuit p2_select_last_hero(last_hero: HeroHack): [] {
     p2_heroes = [p2_heroes[0], p2_heroes[1], some<Hero>(hack_to_hero(last_hero))];
     p2_stats = [p2_stats[0], p2_stats[1], calc_stats(p2_heroes[2].value)];
     game_state = GAME_STATE.p1_commit;
+
+    // moved from p1_select_last_heroes to be more balanced
+    base_damage_cache_p2_0_1 = ((100 - p1_stats[1].crush_def) * p2_stats[0].crush_dmg + (100 - p1_stats[1].pierce_def) * p2_stats[0].pierce_dmg + (50 +p1_stats[1].weight - p2_stats[0].weight) * p2_stats[0].dex_bonus) as Uint<32>;
 
 
     base_damage_cache_p1_0_2 = ((100 - p2_stats[2].crush_def) * p1_stats[0].crush_dmg + (100 - p2_stats[2].pierce_def) * p1_stats[0].pierce_dmg + (50 +p2_stats[2].weight - p1_stats[0].weight) * p1_stats[0].dex_bonus) as Uint<32>;
