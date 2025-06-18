@@ -90,59 +90,78 @@ export class MainMenu extends Phaser.Scene {
         this.load.spritesheet('hero_sword_l_attack_swing_l', 'hero_sword_l_attack_swing_l.png', { frameWidth: 48, frameHeight: 64 });
         this.load.spritesheet('hero_sword_r_attack_swing_r', 'hero_sword_r_attack_swing_r.png', { frameWidth: 48, frameHeight: 64 });
         
+        this.load.image('dust', 'dust.png');
     }
 
     create() {
         this.add.image(GAME_WIDTH, GAME_HEIGHT, 'arena_bg').setPosition(GAME_WIDTH / 2, GAME_HEIGHT / 2).setDepth(-3);
-        this.add.image(GAME_WIDTH / 2, GAME_HEIGHT * 0.3, 'title_screen');
-        // this.add.text(GAME_WIDTH / 2 + 2, GAME_HEIGHT / 4 + 2, 'PVP ARENA', {fontSize: 64, color: 'black'}).setOrigin(0.5, 0.5);
-        // this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 4, 'PVP ARENA', {fontSize: 64, color: 'white'}).setOrigin(0.5, 0.5);
+        const title = this.add.image(GAME_WIDTH / 2, GAME_HEIGHT * 0.3, 'title_screen').setAlpha(0);
+        this.tweens.add({
+            targets: title,
+            duration: 750,
+            alpha: 1,
+            onComplete: () => {
+                // create an off-chain testing world for testing graphical stuff without having to wait a long time
+                this.buttons.push(new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.55, 128, 32, 'Practice', 20, () => {
+                    closeTooltip(TooltipId.PlayPracticeFirst);
+                    this.scene.remove('PracticeMenu');
+                    this.scene.add('PracticeMenu', new PracticeMenu(this.deployProvider));
+                    this.scene.start('PracticeMenu');
+                }, 'Play a match against a local computer AI'));
+
+                this.buttons.push(new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.7, 128, 32, 'Join', 20, () => {
+                    if (isTooltipOpen(TooltipId.PlayPracticeFirst) || makeTooltip(this, GAME_WIDTH / 2, GAME_HEIGHT / 4, TooltipId.PlayPracticeFirst) == undefined) {
+                        closeTooltip(TooltipId.PlayPracticeFirst);
+                        this.scene.remove('LobbyMenu');
+                        this.scene.add('LobbyMenu', new LobbyMenu(this.deployProvider));
+                        this.scene.start('LobbyMenu');
+                    }
+                }, 'Join an on-chain match'));
+                this.buttons.push(new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.85, 128, 32, 'Create', 20, () => {
+                    if (isTooltipOpen(TooltipId.PlayPracticeFirst) || makeTooltip(this, GAME_WIDTH / 2, GAME_HEIGHT / 4, TooltipId.PlayPracticeFirst) == undefined) {
+                        closeTooltip(TooltipId.PlayPracticeFirst);
+                        this.scene.remove('CreateMenu');
+                        this.scene.add('CreateMenu', new CreateMenu(this.deployProvider));
+                        this.scene.start('CreateMenu');
+                    }
+                }, 'Create an on-chain match'));
+
+                // dev menu
+                // TODO: how to load the .env.testnet file? I can't access the VITE env variables to check this
+                if (networkId == NetworkId.Undeployed) {
+                    this.add.text(160 + GAME_WIDTH / 2, GAME_HEIGHT * 0.55, 'Dev Menu', fontStyle(12)).setOrigin(0.5, 0.65);
+                    this.buttons.push(new Button(this, 160 + GAME_WIDTH / 2, GAME_HEIGHT * 0.7, 128, 32, 'Balancing', 20, () => {
+                        //this.scene.remove('BalancingTest');
+                        this.scene.add('BalancingTest', new BalancingTest());
+                        this.scene.start('BalancingTest');
+                    }, 'Run a balancing test (DEV ONLY)'));
+                    this.buttons.push(new Button(this, 160 + GAME_WIDTH / 2, GAME_HEIGHT * 0.85, 128, 32, 'Practice (P2)', 14, () => {
+                        this.setStatusText('Entering mocked test arena (as P2)...');
+                        setTimeout(() => {
+                            this.scene.remove('EquipmentMenu');
+                            this.scene.add('EquipmentMenu', new EquipmentMenu({ api: new MockPVPArenaAPI(false), isP1: false }));
+                            this.scene.start('EquipmentMenu');
+                        }, 1000);
+                    }, 'Play a match against a local computer AI (DEV ONLY - as player 2)'));
+                }
+
+                const tweens = [];
+                for (const button of this.buttons) {
+                    button.alpha = 0;
+                    tweens.push({
+                        targets: button,
+                        alpha: 1,
+                        duration: 200,
+                    });
+                }
+                this.tweens.chain({
+                    targets: this, // does nothing to this since always ovrerridden but crashes otherwise
+                    tweens,
+                });
+            },
+        })
         this.text = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.65, '', fontStyle(12)).setOrigin(0.5, 0.65).setVisible(false);
         makeSoundToggleButton(this, GAME_WIDTH - 16, 16);
-
-        // create an off-chain testing world for testing graphical stuff without having to wait a long time
-        this.buttons.push(new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.55, 128, 32, 'Practice', 20, () => {
-            closeTooltip(TooltipId.PlayPracticeFirst);
-            this.scene.remove('PracticeMenu');
-            this.scene.add('PracticeMenu', new PracticeMenu(this.deployProvider));
-            this.scene.start('PracticeMenu');
-        }, 'Play a match against a local computer AI'));
-        
-        this.buttons.push(new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.7, 128, 32, 'Join', 20, () => {
-            if (isTooltipOpen(TooltipId.PlayPracticeFirst) || makeTooltip(this, GAME_WIDTH / 2, GAME_HEIGHT / 4, TooltipId.PlayPracticeFirst) == undefined) {
-                closeTooltip(TooltipId.PlayPracticeFirst);
-                this.scene.remove('LobbyMenu');
-                this.scene.add('LobbyMenu', new LobbyMenu(this.deployProvider));
-                this.scene.start('LobbyMenu');
-            }
-        }, 'Join an on-chain match'));
-        this.buttons.push(new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.85, 128, 32, 'Create', 20, () => {
-            if (isTooltipOpen(TooltipId.PlayPracticeFirst) || makeTooltip(this, GAME_WIDTH / 2, GAME_HEIGHT / 4, TooltipId.PlayPracticeFirst) == undefined) {
-                closeTooltip(TooltipId.PlayPracticeFirst);
-                this.scene.remove('CreateMenu');
-                this.scene.add('CreateMenu', new CreateMenu(this.deployProvider));
-                this.scene.start('CreateMenu');
-            }
-        }, 'Create an on-chain match'));
-
-        // dev menu
-        // TODO: how to load the .env.testnet file? I can't access the VITE env variables to check this
-        if (networkId == NetworkId.Undeployed) {
-            this.add.text(160 + GAME_WIDTH / 2, GAME_HEIGHT * 0.55, 'Dev Menu', fontStyle(12)).setOrigin(0.5, 0.65);
-            this.buttons.push(new Button(this, 160 + GAME_WIDTH / 2, GAME_HEIGHT * 0.7, 128, 32, 'Balancing', 20, () => {
-                //this.scene.remove('BalancingTest');
-                this.scene.add('BalancingTest', new BalancingTest());
-                this.scene.start('BalancingTest');
-            }, 'Run a balancing test (DEV ONLY)'));
-            this.buttons.push(new Button(this, 160 + GAME_WIDTH / 2, GAME_HEIGHT * 0.85, 128, 32, 'Practice (P2)', 14, () => {
-                this.setStatusText('Entering mocked test arena (as P2)...');
-                setTimeout(() => {
-                    this.scene.remove('EquipmentMenu');
-                    this.scene.add('EquipmentMenu', new EquipmentMenu({ api: new MockPVPArenaAPI(false), isP1: false }));
-                    this.scene.start('EquipmentMenu');
-                }, 1000);
-            }, 'Play a match against a local computer AI (DEV ONLY - as player 2)'));
-        }
 
         createHeroAnims(this);
         this.anims.create({
