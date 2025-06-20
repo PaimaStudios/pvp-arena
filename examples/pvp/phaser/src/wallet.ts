@@ -1,4 +1,4 @@
-import { type DeployedPVPArenaAPI, PVPArenaAPI, type PVPArenaProviders } from '@midnight-ntwrk/pvp-api';
+import { CreateMatchOptions, type DeployedPVPArenaAPI, PVPArenaAPI, type PVPArenaProviders } from '@midnight-ntwrk/pvp-api';
 import { CompactTypeBytes, transientCommit, type ContractAddress } from '@midnight-ntwrk/compact-runtime';
 import {
   concatMap,
@@ -46,11 +46,11 @@ export class BrowserDeploymentManager {
   constructor(private readonly logger: Logger) {
   }
 
-  async create(isPractice: boolean): Promise<PVPArenaAPI> {
+  async create(options: CreateMatchOptions): Promise<PVPArenaAPI> {
     console.log('getting providers');
     const providers = await this.getProviders();
     console.log('trying to create');
-    return PVPArenaAPI.deploy(providers, isPractice, this.logger).then((api) => {
+    return PVPArenaAPI.deploy(providers, options, this.logger).then((api) => {
       console.log('got create api');
       return api;
     });

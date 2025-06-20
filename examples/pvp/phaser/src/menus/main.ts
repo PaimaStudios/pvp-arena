@@ -6,6 +6,7 @@ import { EquipmentMenu } from './equipment';
 import { Button } from './button';
 import { HeroAnimationController, createHeroAnims, generateRandomHero } from '../battle/hero';
 import { ARMOR, ITEM } from '@midnight-ntwrk/pvp-contract';
+import { CreateMenu } from './create';
 import { LobbyMenu } from './lobby';
 import { closeTooltip, isTooltipOpen, makeTooltip, TooltipId } from './tooltip';
 import { BalancingTest, heroBalancing } from '../balancing';
@@ -107,7 +108,7 @@ export class MainMenu extends Phaser.Scene {
                     this.scene.add('PracticeMenu', new PracticeMenu(this.deployProvider));
                     this.scene.start('PracticeMenu');
                 }, 'Play a match against a local computer AI'));
-                
+
                 this.buttons.push(new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.7, 128, 32, 'Join', 20, () => {
                     if (isTooltipOpen(TooltipId.PlayPracticeFirst) || makeTooltip(this, GAME_WIDTH / 2, GAME_HEIGHT / 4, TooltipId.PlayPracticeFirst) == undefined) {
                         closeTooltip(TooltipId.PlayPracticeFirst);
@@ -119,15 +120,9 @@ export class MainMenu extends Phaser.Scene {
                 this.buttons.push(new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.85, 128, 32, 'Create', 20, () => {
                     if (isTooltipOpen(TooltipId.PlayPracticeFirst) || makeTooltip(this, GAME_WIDTH / 2, GAME_HEIGHT / 4, TooltipId.PlayPracticeFirst) == undefined) {
                         closeTooltip(TooltipId.PlayPracticeFirst);
-                        this.setStatusText('Creating match, please wait...');
-                        this.deployProvider.create(false).then((api) => {
-                            console.log('====================\napi done from creating\n===============');
-                            console.log(`contract address: ${api.deployedContractAddress}`);
-                            this.scene.remove('EquipmentMenu');
-                            const equipMenu = new EquipmentMenu({ api, isP1: true });
-                            this.scene.add('EquipmentMenu', equipMenu);
-                            this.scene.start('EquipmentMenu');
-                        });
+                        this.scene.remove('CreateMenu');
+                        this.scene.add('CreateMenu', new CreateMenu(this.deployProvider));
+                        this.scene.start('CreateMenu');
                     }
                 }, 'Create an on-chain match'));
 
@@ -149,6 +144,7 @@ export class MainMenu extends Phaser.Scene {
                         }, 1000);
                     }, 'Play a match against a local computer AI (DEV ONLY - as player 2)'));
                 }
+
                 const tweens = [];
                 for (const button of this.buttons) {
                     button.alpha = 0;

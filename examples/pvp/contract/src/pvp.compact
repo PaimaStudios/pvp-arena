@@ -134,10 +134,11 @@ export ledger round: Uint<32>;
 export ledger game_state: GAME_STATE;
 export ledger p1_public_key: Field;
 export ledger p2_public_key: Maybe<Field>;
+export ledger public: Boolean;
 
 witness player_secret_key(): Bytes<32>;
 
-constructor() {
+constructor(is_match_public: Boolean) {
     p1_heroes = [none<Hero>(), none<Hero>(), none<Hero>()];
     p2_heroes = [none<Hero>(), none<Hero>(), none<Hero>()];
     //p1_dmg = [0, 0, 0];
@@ -161,6 +162,7 @@ constructor() {
     p2_alive_0 = true;
     p2_alive_1 = true;
     p2_alive_2 = true;
+    public = is_match_public;
 }
 
 export pure circuit calc_stats(hero: Hero): TotalStats {

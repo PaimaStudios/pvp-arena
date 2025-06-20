@@ -1,5 +1,6 @@
 import { fontStyle, GAME_HEIGHT, GAME_WIDTH, playSound, rootObject } from "../main";
 import BBCodeText from 'phaser3-rex-plugins/plugins/bbcodetext.js';
+
 export class Button extends Phaser.GameObjects.Container {
     bg: Phaser.GameObjects.NineSlice;
     bgOver: Phaser.GameObjects.NineSlice;
