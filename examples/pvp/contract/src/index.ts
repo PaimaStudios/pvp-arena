@@ -1,2 +1,2 @@
-export * from './managed/pvp/contract/index.cjs';
+export * from './managed/pvp/contract/index.js';
 export * from './witnesses.js';

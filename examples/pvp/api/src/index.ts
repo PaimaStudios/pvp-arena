@@ -4,7 +4,7 @@
  * @packageDocumentation
  */
 
-import { type ContractAddress, convert_bigint_to_Uint8Array } from '@midnight-ntwrk/compact-runtime';
+import { type ContractAddress } from '@midnight-ntwrk/compact-runtime';
 import { type Logger } from 'pino';
 import type { PVPArenaDerivedState, PVPArenaContract, PVPArenaProviders, DeployedPVPArenaContract, PrivateStates } from './common-types.js';
 import {
@@ -163,7 +163,7 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
       [
         // Combine public (ledger) state with...
         providers.publicDataProvider.contractStateObservable(this.deployedContractAddress, { type: 'latest' }).pipe(
-          map((contractState) => ledger(contractState.data)),
+          map((contractState) => ledger(contractState.data.state)),
           tap((ledgerState) =>
             logger?.trace({
               ledgerStateChanged: {
@@ -186,29 +186,29 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
       (ledgerState, privateState) => {
         const localPublicKey = pureCircuits.derive_public_key(privateState.secretKey);
 
-        const isP1 = ledgerState.p1PublicKey === localPublicKey;
-        const isP2 = ledgerState.p2PublicKey.is_some && (ledgerState.p2PublicKey.value === localPublicKey);
+        const isP1 = ledgerState.p1_public_key === localPublicKey;
+        const isP2 = ledgerState.p2_public_key.is_some && (ledgerState.p2_public_key.value === localPublicKey);
 
         return {
           round: ledgerState.round,
-          state: ledgerState.gameState,
-          p1Heroes: ledgerState.p1Heroes.filter((h) => h.is_some).map((h) => h.value),
-          p1Cmds: ledgerState.p1Cmds.is_some ? ledgerState.p1Cmds.value : undefined,
-          p1Dmg: [ledgerState.p1Dmg0, ledgerState.p1Dmg1, ledgerState.p1Dmg2],
-          p1Alive: [ledgerState.p1Alive0, ledgerState.p1Alive1, ledgerState.p1Alive2],
-          p1Stances: ledgerState.p1Stances,
+          state: ledgerState.game_state,
+          p1Heroes: ledgerState.p1_heroes.filter((h) => h.is_some).map((h) => h.value),
+          p1Cmds: ledgerState.p1_cmds.is_some ? ledgerState.p1_cmds.value : undefined,
+          p1Dmg: [ledgerState.p1_dmg_0, ledgerState.p1_dmg_1, ledgerState.p1_dmg_2],
+          p1Alive: [ledgerState.p1_alive_0, ledgerState.p1_alive_1, ledgerState.p1_alive_2],
+          p1Stances: ledgerState.p1_stances,
           isP1,
           isP2,
-          p1PubKey: ledgerState.p1PublicKey,
-          p2Heroes: ledgerState.p2Heroes.filter((h) => h.is_some).map((h) => h.value),
-          p2Cmds: ledgerState.p2Cmds.is_some ? ledgerState.p2Cmds.value : undefined,
-          p2Dmg: [ledgerState.p2Dmg0, ledgerState.p2Dmg1, ledgerState.p2Dmg2],
-          p2Alive: [ledgerState.p2Alive0, ledgerState.p2Alive1, ledgerState.p2Alive2],
-          p2Stances: ledgerState.p2Stances,
-          p2PubKey: ledgerState.p2PublicKey.is_some ? ledgerState.p2PublicKey.value : undefined,
+          p1PubKey: ledgerState.p1_public_key,
+          p2Heroes: ledgerState.p2_heroes.filter((h) => h.is_some).map((h) => h.value),
+          p2Cmds: ledgerState.p2_cmds.is_some ? ledgerState.p2_cmds.value : undefined,
+          p2Dmg: [ledgerState.p2_dmg_0, ledgerState.p2_dmg_1, ledgerState.p2_dmg_2],
+          p2Alive: [ledgerState.p2_alive_0, ledgerState.p2_alive_1, ledgerState.p2_alive_2],
+          p2Stances: ledgerState.p2_stances,
+          p2PubKey: ledgerState.p2_public_key.is_some ? ledgerState.p2_public_key.value : undefined,
           secretKey: privateState.secretKey,
-          nonce: ledgerState.commitNonce,
-          commit: ledgerState.p1Commit,
+          nonce: ledgerState.commit_nonce,
+          commit: ledgerState.p1_commit,
         };
       },
     );

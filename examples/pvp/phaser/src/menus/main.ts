@@ -128,7 +128,7 @@ export class MainMenu extends Phaser.Scene {
 
                 // dev menu
                 // TODO: how to load the .env.testnet file? I can't access the VITE env variables to check this
-                if (networkId == NetworkId.Undeployed) {
+                if (networkId == "undeployed") {
                     this.add.text(160 + GAME_WIDTH / 2, GAME_HEIGHT * 0.55, 'Dev Menu', fontStyle(12)).setOrigin(0.5, 0.65);
                     this.buttons.push(new Button(this, 160 + GAME_WIDTH / 2, GAME_HEIGHT * 0.7, 128, 32, 'Balancing', 20, () => {
                         //this.scene.remove('BalancingTest');

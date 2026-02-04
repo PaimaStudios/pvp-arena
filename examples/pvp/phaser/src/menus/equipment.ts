@@ -4,15 +4,11 @@ import { GAME_WIDTH, GAME_HEIGHT, safeJSONString, gameStateStr, fontStyle, isMut
 import { addHeroImages, createHeroAnims, generateRandomHero, HeroAnimationController } from '../battle/hero';
 import { type HeroIndex, Rank, type Team } from '../battle';
 import { Button } from './button';
-import { MockPVPArenaAPI, OFFLINE_PRACTICE_CONTRACT_ADDR } from '../battle/mockapi';
-import { PVPArenaAPI, PVPArenaDerivedState } from '@midnight-ntwrk/pvp-api';
-import { Physics } from 'phaser';
-import { eq } from 'fp-ts';
-import { closeTooltip, isTooltipOpen, makeTooltip, TooltipId } from './tooltip';
-import { ContractAddress } from '@midnight-ntwrk/ledger';
-import { Observable } from 'rxjs/internal/Observable';
+import { OFFLINE_PRACTICE_CONTRACT_ADDR } from '../battle/mockapi';
+import { PVPArenaDerivedState } from '@midnight-ntwrk/pvp-api';
 import { Subscription } from 'rxjs';
 import { StatusUI } from '.';
+import { makeTooltip, TooltipId } from './tooltip';
 
 class SelectHeroActor extends Phaser.GameObjects.Container {
     hero: Hero;

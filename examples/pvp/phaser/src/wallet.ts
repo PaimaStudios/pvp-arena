@@ -15,26 +15,30 @@ import {
 } from 'rxjs';
 import { pipe as fnPipe } from 'fp-ts/function';
 import { type Logger } from 'pino';
-import {
-  type DAppConnectorAPI,
-  type DAppConnectorWalletAPI,
-  type ServiceUriConfig,
-} from '@midnight-ntwrk/dapp-connector-api';
+// import {
+//   type DAppConnectorAPI,
+//   type DAppConnectorWalletAPI,
+//   type ServiceUriConfig,
+// } from '@midnight-ntwrk/dapp-connector-api';
+import type { ConnectedAPI, InitialAPI } from "@midnight-ntwrk/dapp-connector-api";
 import { levelPrivateStateProvider } from '@midnight-ntwrk/midnight-js-level-private-state-provider';
 import { FetchZkConfigProvider } from '@midnight-ntwrk/midnight-js-fetch-zk-config-provider';
 import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider';
 import { indexerPublicDataProvider } from '@midnight-ntwrk/midnight-js-indexer-public-data-provider';
 import {
-  type BalancedTransaction,
-  type UnbalancedTransaction,
-  createBalancedTx,
+  BalancedProvingRecipe,
+  TRANSACTION_TO_PROVE,
+  // type BalancedTransaction,
+  // type UnbalancedTransaction,
+  // createBalancedTx,
 } from '@midnight-ntwrk/midnight-js-types';
-import { type CoinInfo, Transaction, type TransactionId } from '@midnight-ntwrk/ledger';
+import { CoinPublicKey, EncPublicKey, type ShieldedCoinInfo, Transaction, type TransactionId, UnprovenTransaction } from '@midnight-ntwrk/ledger-v6';
 import { Transaction as ZswapTransaction } from '@midnight-ntwrk/zswap';
 import semver from 'semver';
-import { getLedgerNetworkId, getZswapNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
-import { initializeProviders as initializeBatcherModeProviders } from './batcher-providers';
-
+import { getNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
+//import { initializeProviders as initializeBatcherModeProviders } from './batcher-providers';
+import { NodeZkConfigProvider } from '@midnight-ntwrk/midnight-js-node-zk-config-provider';
+import * as ledgerv6 from '@midnight-ntwrk/ledger-v6';
 export class BrowserDeploymentManager {
   #initializedProviders: Promise<PVPArenaProviders> | undefined;
 
@@ -73,121 +77,308 @@ export class BrowserDeploymentManager {
     //    `Promise`.
     return (
       this.#initializedProviders ??
-      (this.#initializedProviders = import.meta.env.VITE_BATCHER_MODE_ENABLED
+      (/*this.#initializedProviders = import.meta.env.VITE_BATCHER_MODE_ENABLED
         ? initializeBatcherModeProviders(this.logger)
-        : initializeProviders(this.logger))
+        :*/ initializeProviders(this.logger))
     );
   }
 }
 
 /** @internal */
+const toHex = (data: Uint8Array): string =>
+  Array.from(data)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+
+const fromHex = (hex: string): Uint8Array => {
+  const cleanHex = hex.startsWith("0x") ? hex.slice(2) : hex;
+  const match = cleanHex.match(/.{1,2}/g);
+  return new Uint8Array(match ? match.map((byte) => parseInt(byte, 16)) : []);
+};
+
 const initializeProviders = async (logger: Logger): Promise<PVPArenaProviders> => {
-  const { wallet, uris } = await connectToWallet(logger);
-  const walletState = await wallet.state();
+  const wallet = await connectToWallet(logger, getNetworkId());
+  const { shieldedCoinPublicKey, shieldedEncryptionPublicKey } = await wallet.getShieldedAddresses();
+
+  const walletConfig = await wallet.getConfiguration();
+
+  const walletProvider = {
+      getCoinPublicKey(): CoinPublicKey {
+        return shieldedCoinPublicKey;
+      },
+      getEncryptionPublicKey(): EncPublicKey {
+        return shieldedEncryptionPublicKey;
+      },
+      // balanceTx(tx: UnbalancedTransaction, newCoins: ShieldedCoinInfo[]): Promise<BalancedTransaction> {
+      //   return wallet
+      //     .balanceTransaction(
+      //       ZswapTransaction.deserialize(tx.serialize(getNetworkId()), getNetworkId()),
+      //       newCoins
+      //     )
+      //     .then((tx) => wallet.proveTransaction(tx))
+      //     .then((zswapTx) => Transaction.deserialize(zswapTx.serialize(getNetworkId()), getNetworkId()))
+      //     .then(createBalancedTx);
+      // },
+      async balanceTx(
+        tx: UnprovenTransaction,
+      ): Promise<BalancedProvingRecipe> {
+        return wallet
+          .balanceUnsealedTransaction(toHex(tx.serialize()))
+          .then(({ tx }: { tx: string }) => {
+            const balancedTx = ledgerv6.Transaction.deserialize(
+              'signature' as const,
+              'pre-proof' as const,
+              'pre-binding' as const,
+              fromHex(tx)
+            ) as UnprovenTransaction;
+
+            return {
+              type: TRANSACTION_TO_PROVE,
+              transaction: balancedTx,
+            };
+        });
+      }
+    };
 
   return {
-    privateStateProvider: levelPrivateStateProvider({
+    // privateStateProvider: levelPrivateStateProvider({
+    //   privateStateStoreName: 'pvp-private-state',
+    // }),
+    privateStateProvider: levelPrivateStateProvider<string>({
       privateStateStoreName: 'pvp-private-state',
+      walletProvider,
     }),
     zkConfigProvider: new FetchZkConfigProvider(window.location.origin, fetch.bind(window)),
-    proofProvider: httpClientProofProvider(uris.proverServerUri),
-    publicDataProvider: indexerPublicDataProvider(uris.indexerUri, uris.indexerWsUri),
-    walletProvider: {
-      coinPublicKey: walletState.coinPublicKey,
-      encryptionPublicKey: walletState.encryptionPublicKey,
-      balanceTx(tx: UnbalancedTransaction, newCoins: CoinInfo[]): Promise<BalancedTransaction> {
-        return wallet
-          .balanceTransaction(
-            ZswapTransaction.deserialize(tx.serialize(getLedgerNetworkId()), getZswapNetworkId()),
-            newCoins
-          )
-          .then((tx) => wallet.proveTransaction(tx))
-          .then((zswapTx) => Transaction.deserialize(zswapTx.serialize(getZswapNetworkId()), getLedgerNetworkId()))
-          .then(createBalancedTx);
-      },
-    },
+    //zkConfigProider: new NodeZkConfigProvider<'increment'>(contractConfig.zkConfigPath),
+    proofProvider: httpClientProofProvider(walletConfig.proverServerUri ?? 'TODO: what to put here? default proof server @ 6300 port?'),
+    publicDataProvider: indexerPublicDataProvider(walletConfig.indexerUri, walletConfig.indexerWsUri),
+    walletProvider,
     midnightProvider: {
-      submitTx(tx: BalancedTransaction): Promise<TransactionId> {
-        return wallet.submitTransaction(tx);
+      async submitTx(tx: ledgerv6.FinalizedTransaction): Promise<TransactionId> {
+        logger.debug(" wallet.tx: submitTx called", { tx });
+
+        try {
+          const hexTx = toHex(tx.serialize());
+          console.log(" wallet.ts: Submitting final balanced transaction to submitTransaction", { hexTx });
+
+          // Compute transaction ID (hash) locally from the serialized transaction
+          const txId = ledgerv6.Transaction.deserialize(
+            'signature' as const,
+            'proof' as const,
+            'binding' as const,
+            fromHex(hexTx)
+          ).transactionHash();
+
+          console.log(" wallet.ts: Computed transaction ID:", txId);
+
+          await wallet.submitTransaction(hexTx);
+          console.log(" wallet.ts: transaction submitted successfully");
+
+          return txId as unknown as TransactionId;
+        } catch (error) {
+          console.error(" wallet.ts: submitTransaction failed", error);
+          if (error instanceof Error) {
+            console.error(" wallet.ts: error message", error.message);
+          }
+          throw error;
+        }
       },
     },
   };
 };
 
 /** @internal */
-const connectToWallet = (logger: Logger): Promise<{ wallet: DAppConnectorWalletAPI; uris: ServiceUriConfig }> => {
-  const COMPATIBLE_CONNECTOR_API_VERSION = '1.x';
+const connectToWallet = async (logger: Logger, networkId: string): Promise<ConnectedAPI> => {
+  const COMPATIBLE_CONNECTOR_API_VERSION = '>=1.0.0';
+  const midnight = (window as any).midnight;
 
-  return firstValueFrom(
-    fnPipe(
-      interval(100),
-      map(() => window.midnight?.mnLace),
-      tap((connectorAPI) => {
-        logger.info(connectorAPI, 'Check for wallet connector API');
-      }),
-      filter((connectorAPI): connectorAPI is DAppConnectorAPI => !!connectorAPI),
-      concatMap((connectorAPI) =>
-        semver.satisfies(connectorAPI.apiVersion, COMPATIBLE_CONNECTOR_API_VERSION)
-          ? of(connectorAPI)
-          : throwError(() => {
-              logger.error(
-                {
-                  expected: COMPATIBLE_CONNECTOR_API_VERSION,
-                  actual: connectorAPI.apiVersion,
-                },
-                'Incompatible version of wallet connector API',
-              );
+  if (!midnight) {
+    throw new Error("Midnight Lace wallet not found. Extension installed?");
+  }
 
-              return new Error(
-                `Incompatible version of Midnight Lace wallet found. Require '${COMPATIBLE_CONNECTOR_API_VERSION}', got '${connectorAPI.apiVersion}'.`,
-              );
-            }),
-      ),
-      tap((connectorAPI) => {
-        logger.info(connectorAPI, 'Compatible wallet connector API found. Connecting.');
-      }),
-      take(1),
-      timeout({
-        first: 1_000,
-        with: () =>
-          throwError(() => {
-            logger.error('Could not find wallet connector API');
+  const wallets = Object.entries(midnight).filter(([_, api]: [string, any]) => 
+    api.apiVersion && semver.satisfies(api.apiVersion, COMPATIBLE_CONNECTOR_API_VERSION)
+  ) as [string, any][];
 
-            return new Error('Could not find Midnight Lace wallet. Extension installed?');
-          }),
-      }),
-      concatMap(async (connectorAPI) => {
-        const isEnabled = await connectorAPI.isEnabled();
+  if (wallets.length === 0) {
+    throw new Error("No compatible Midnight wallet found.");
+  }
 
-        logger.info(isEnabled, 'Wallet connector API enabled status');
+  console.log(`wallet count = ${wallets.length}`);
 
-        return connectorAPI;
-      }),
-      timeout({
-        first: 5_000,
-        with: () =>
-          throwError(() => {
-            logger.error('Wallet connector API has failed to respond');
+  // for (const wallet of wallets) {
+  //   console.log(`wallet found: ${wallet}`);
+  // }
 
-            return new Error('Midnight Lace wallet has failed to respond. Extension enabled?');
-          }),
-      }),
-      concatMap(async (connectorAPI) => ({ walletConnectorAPI: await connectorAPI.enable(), connectorAPI })),
-      catchError((error, apis) =>
-        error
-          ? throwError(() => {
-              logger.error('Unable to enable connector API');
-              return new Error('Application is not authorized');
-            })
-          : apis,
-      ),
-      concatMap(async ({ walletConnectorAPI, connectorAPI }) => {
-        const uris = await connectorAPI.serviceUriConfig();
+  const [name, api] = wallets[0];
+  logger.debug(`Connecting to wallet: ${name} (version ${api.apiVersion})`);
 
-        logger.info('Connected to wallet connector API and retrieved service configuration');
+  // // KEY: Hardcoded Password Provider
+  // const passwordProvider = async () => "PAIMA_STORAGE_PASSWORD";
 
-        return { wallet: walletConnectorAPI, uris };
-      }),
-    ),
-  );
+  // const apiWithPassword: any = { ...api };
+  // if (typeof apiWithPassword.connect !== 'function') {
+  //   apiWithPassword.connect = api.connect;
+  // }
+  // apiWithPassword.privateStoragePasswordProvider = passwordProvider;
+
+  // return await apiWithPassword.connect(networkId);
+
+  return api.connect(networkId);
 };
+
+// const createWalletAndMidnightProvider = (
+//   connectedAPI: ConnectedAPI,
+//   coinPublicKey: CoinPublicKey,
+//   encryptionPublicKey: EncPublicKey
+// ): WalletProvider & MidnightProvider => {
+//   return {
+//     getCoinPublicKey(): CoinPublicKey {
+//       return coinPublicKey;
+//     },
+//     getEncryptionPublicKey(): EncPublicKey {
+//       return encryptionPublicKey;
+//     },
+//     async balanceTx(
+//       tx: UnprovenTransaction,
+//       _newCoins?: ShieldedCoinInfo[],
+//       _ttl?: Date
+//     ): Promise<BalancedProvingRecipe> {
+//       console.log(" erc20.ts: balanceTx called", { tx, _newCoins, _ttl });
+
+//       try {
+//         const hexTx = toHex(tx.serialize());
+//         console.log(" erc20.ts: Sending UNPROVEN transaction to balanceUnsealedTransaction", { hexTx });
+
+//         const result = await connectedAPI.balanceUnsealedTransaction(hexTx);
+//         console.log(" erc20.ts: received result from balanceUnsealedTransaction", result);
+
+//         const balancedTx = LedgerV6Transaction.deserialize(
+//           'signature' as const,
+//           'pre-proof' as const,
+//           'pre-binding' as const,
+//           fromHex(result.tx)
+//         ) as UnprovenTransaction;
+
+//         return {
+//           type: TRANSACTION_TO_PROVE,
+//           transaction: balancedTx,
+//         };
+//       } catch (error) {
+//         console.error(" erc20.ts: balanceUnsealedTransaction failed", error);
+//         if (error instanceof Error) {
+//            console.error(" erc20.ts: error message", error.message);
+//            console.error(" erc20.ts: error stack", error.stack);
+//         }
+//         throw error;
+//       }
+//     },
+//     async submitTx(tx: FinalizedTransaction): Promise<TransactionId> {
+//       console.log(" erc20.ts: submitTx called", { tx });
+
+//       try {
+//         const hexTx = toHex(tx.serialize());
+//         console.log(" erc20.ts: Submitting final balanced transaction to submitTransaction", { hexTx });
+
+//         // Compute transaction ID (hash) locally from the serialized transaction
+//         const txId = LedgerV6Transaction.deserialize(
+//           'signature' as const,
+//           'proof' as const,
+//           'binding' as const,
+//           fromHex(hexTx)
+//         ).transactionHash();
+
+//         console.log(" erc20.ts: Computed transaction ID:", txId);
+
+//         await connectedAPI.submitTransaction(hexTx);
+//         console.log(" erc20.ts: transaction submitted successfully");
+
+//         return txId as unknown as TransactionId;
+//       } catch (error) {
+//         console.error(" erc20.ts: submitTransaction failed", error);
+//         if (error instanceof Error) {
+//            console.error(" erc20.ts: error message", error.message);
+//         }
+//         throw error;
+//       }
+//     },
+//   };
+// };
+
+
+// const connectToWallet = (logger: Logger): Promise<{ wallet: DAppConnectorWalletAPI; uris: ServiceUriConfig }> => {
+//   const COMPATIBLE_CONNECTOR_API_VERSION = '1.x';
+
+//   return firstValueFrom(
+//     fnPipe(
+//       interval(100),
+//       map(() => window.midnight?.mnLace),
+//       tap((connectorAPI) => {
+//         logger.info(connectorAPI, 'Check for wallet connector API');
+//       }),
+//       filter((connectorAPI): connectorAPI is DAppConnectorAPI => !!connectorAPI),
+//       concatMap((connectorAPI) =>
+//         semver.satisfies(connectorAPI.apiVersion, COMPATIBLE_CONNECTOR_API_VERSION)
+//           ? of(connectorAPI)
+//           : throwError(() => {
+//               logger.error(
+//                 {
+//                   expected: COMPATIBLE_CONNECTOR_API_VERSION,
+//                   actual: connectorAPI.apiVersion,
+//                 },
+//                 'Incompatible version of wallet connector API',
+//               );
+
+//               return new Error(
+//                 `Incompatible version of Midnight Lace wallet found. Require '${COMPATIBLE_CONNECTOR_API_VERSION}', got '${connectorAPI.apiVersion}'.`,
+//               );
+//             }),
+//       ),
+//       tap((connectorAPI) => {
+//         logger.info(connectorAPI, 'Compatible wallet connector API found. Connecting.');
+//       }),
+//       take(1),
+//       timeout({
+//         first: 1_000,
+//         with: () =>
+//           throwError(() => {
+//             logger.error('Could not find wallet connector API');
+
+//             return new Error('Could not find Midnight Lace wallet. Extension installed?');
+//           }),
+//       }),
+//       concatMap(async (connectorAPI) => {
+//         const isEnabled = await connectorAPI.isEnabled();
+
+//         logger.info(isEnabled, 'Wallet connector API enabled status');
+
+//         return connectorAPI;
+//       }),
+//       timeout({
+//         first: 5_000,
+//         with: () =>
+//           throwError(() => {
+//             logger.error('Wallet connector API has failed to respond');
+
+//             return new Error('Midnight Lace wallet has failed to respond. Extension enabled?');
+//           }),
+//       }),
+//       concatMap(async (connectorAPI) => ({ walletConnectorAPI: await connectorAPI.enable(), connectorAPI })),
+//       catchError((error, apis) =>
+//         error
+//           ? throwError(() => {
+//               logger.error('Unable to enable connector API');
+//               return new Error('Application is not authorized');
+//             })
+//           : apis,
+//       ),
+//       concatMap(async ({ walletConnectorAPI, connectorAPI }) => {
+//         const uris = await connectorAPI.serviceUriConfig();
+
+//         logger.info('Connected to wallet connector API and retrieved service configuration');
+
+//         return { wallet: walletConnectorAPI, uris };
+//       }),
+//     ),
+//   );
+// };

@@ -4,7 +4,7 @@ import { ITEM, RESULT, STANCE, Hero, ARMOR, pureCircuits, GAME_STATE } from '@mi
 import { type PVPArenaDerivedState, type DeployedPVPArenaAPI, PVPArenaAPI } from '@midnight-ntwrk/pvp-api';
 import './globals';
 import { type ContractAddress } from '@midnight-ntwrk/compact-runtime';
-import { LedgerState } from '@midnight-ntwrk/ledger';
+import { LedgerState } from '@midnight-ntwrk/ledger-v6';
 import { BrowserDeploymentManager } from './wallet';
 import * as pino from 'pino';
 
@@ -14,15 +14,18 @@ import * as pino from 'pino';
 export const networkId = getNetworkId();
 
 function getNetworkId(): NetworkId {
-    switch (import.meta.env.MODE) {
-        case 'undeployed':
-            return NetworkId.Undeployed;
-        case 'testnet':
-            return NetworkId.TestNet;
-        default:
-            console.error(`Unknown Vite MODE ${import.meta.env.MODE}, defaulting to undeployed`);
-            return NetworkId.Undeployed;
-    }
+    // switch (import.meta.env.MODE) {
+    //     case 'undeployed':
+    //         return NetworkId.Undeployed;
+    //     case 'testnet':
+    //         return NetworkId.TestNet;
+    //     case 'preview':
+    //         return ;
+    //     default:
+    //         console.error(`Unknown Vite MODE ${import.meta.env.MODE}, defaulting to undeployed`);
+    //         return NetworkId.Undeployed;
+    // }
+    return import.meta.env.MODE;
 }
 // Ensure that the network IDs are set within the Midnight libraries.
 setNetworkId(networkId);

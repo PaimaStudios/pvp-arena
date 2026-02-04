@@ -3,7 +3,7 @@
  * as well as the single witness function that accesses it.
  */
 
-import { Ledger, STANCE } from './managed/pvp/contract/index.cjs';
+import { Ledger, STANCE } from './managed/pvp/contract/index.js';
 import { WitnessContext } from '@midnight-ntwrk/compact-runtime';
 
 /* **********************************************************************
