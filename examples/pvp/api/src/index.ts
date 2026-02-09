@@ -6,7 +6,7 @@
 
 import { type ContractAddress } from '@midnight-ntwrk/compact-runtime';
 import { type Logger } from 'pino';
-import type { PVPArenaDerivedState, PVPArenaContract, PVPArenaProviders, DeployedPVPArenaContract, PrivateStates } from './common-types.js';
+import type { PVPArenaDerivedState, PVPArenaContract, PVPArenaProviders, DeployedPVPArenaContract, PrivateStates, PVPArenaDerivedMatchState } from './common-types.js';
 import {
   type PVPArenaPrivateState,
   Contract,
@@ -124,10 +124,11 @@ export interface DeployedPVPArenaAPI {
   readonly deployedContractAddress: ContractAddress;
   readonly state$: Observable<PVPArenaDerivedState>;
 
-  p1_select_first_hero: (first_hero: Hero) => Promise<void>
-  p2_select_first_heroes: (first_heroes: Hero[]) => Promise<void>
-  p1_select_last_heroes: (last_heroes: Hero[]) => Promise<void>
-  p2_select_last_hero: (last_p1_hero: Hero) => Promise<void>
+  create_new_match: (is_match_public: boolean, is_match_practice: boolean) => Promise<bigint>;
+  p1_select_first_hero: (first_hero: Hero) => Promise<void>;
+  p2_select_first_heroes: (first_heroes: Hero[]) => Promise<void>;
+  p1_select_last_heroes: (last_heroes: Hero[]) => Promise<void>;
+  p2_select_last_hero: (last_p1_hero: Hero) => Promise<void>;
   p1Commit: (commands: bigint[], stances: STANCE[]) => Promise<void>;
   p2Commit: (commands: bigint[], stances: STANCE[]) => Promise<void>;
   p1Reveal: (commands: bigint[], stances: STANCE[]) => Promise<void>;
@@ -155,7 +156,6 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
   private constructor(
     public readonly deployedContract: DeployedPVPArenaContract,
     private readonly providers: PVPArenaProviders,
-    private readonly launchPracticeMode: boolean,
     private readonly logger?: Logger,
   ) {
     this.deployedContractAddress = deployedContract.deployTxData.public.contractAddress;
@@ -186,72 +186,85 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
       (ledgerState, privateState) => {
         const localPublicKey = pureCircuits.derive_public_key(privateState.secretKey);
 
-        const isP1 = ledgerState.p1_public_key === localPublicKey;
-        const isP2 = ledgerState.p2_public_key.is_some && (ledgerState.p2_public_key.value === localPublicKey);
+        const parseMatchState = (matchId: bigint): PVPArenaDerivedMatchState => {
+          const isP1 = ledgerState.p1_public_key.lookup(matchId) === localPublicKey;
+          const isP2 = ledgerState.p2_public_key.lookup(matchId).is_some && (ledgerState.p2_public_key.lookup(matchId).value === localPublicKey);
 
-        return {
-          round: ledgerState.round,
-          state: ledgerState.game_state,
-          p1Heroes: ledgerState.p1_heroes.filter((h) => h.is_some).map((h) => h.value),
-          p1Cmds: ledgerState.p1_cmds.is_some ? ledgerState.p1_cmds.value : undefined,
-          p1Dmg: [ledgerState.p1_dmg_0, ledgerState.p1_dmg_1, ledgerState.p1_dmg_2],
-          p1Alive: [ledgerState.p1_alive_0, ledgerState.p1_alive_1, ledgerState.p1_alive_2],
-          p1Stances: ledgerState.p1_stances,
-          isP1,
-          isP2,
-          p1PubKey: ledgerState.p1_public_key,
-          p2Heroes: ledgerState.p2_heroes.filter((h) => h.is_some).map((h) => h.value),
-          p2Cmds: ledgerState.p2_cmds.is_some ? ledgerState.p2_cmds.value : undefined,
-          p2Dmg: [ledgerState.p2_dmg_0, ledgerState.p2_dmg_1, ledgerState.p2_dmg_2],
-          p2Alive: [ledgerState.p2_alive_0, ledgerState.p2_alive_1, ledgerState.p2_alive_2],
-          p2Stances: ledgerState.p2_stances,
-          p2PubKey: ledgerState.p2_public_key.is_some ? ledgerState.p2_public_key.value : undefined,
-          secretKey: privateState.secretKey,
-          nonce: ledgerState.commit_nonce,
-          commit: ledgerState.p1_commit,
+          return {
+            round: ledgerState.round.lookup(matchId),
+            state: ledgerState.game_state.lookup(matchId),
+            p1Heroes: ledgerState.p1_heroes.lookup(matchId).filter((h) => h.is_some).map((h) => h.value),
+            p1Cmds: ledgerState.p1_cmds.lookup(matchId).is_some ? ledgerState.p1_cmds.lookup(matchId).value : undefined,
+            p1Dmg: [ledgerState.p1_dmg_0.lookup(matchId), ledgerState.p1_dmg_1.lookup(matchId), ledgerState.p1_dmg_2.lookup(matchId)],
+            p1Alive: [ledgerState.p1_alive_0.lookup(matchId), ledgerState.p1_alive_1.lookup(matchId), ledgerState.p1_alive_2.lookup(matchId)],
+            p1Stances: ledgerState.p1_stances.lookup(matchId),
+            isP1,
+            isP2,
+            p1PubKey: ledgerState.p1_public_key.lookup(matchId),
+            p2Heroes: ledgerState.p2_heroes.lookup(matchId).filter((h) => h.is_some).map((h) => h.value),
+            p2Cmds: ledgerState.p2_cmds.lookup(matchId).is_some ? ledgerState.p2_cmds.lookup(matchId).value : undefined,
+            p2Dmg: [ledgerState.p2_dmg_0.lookup(matchId), ledgerState.p2_dmg_1.lookup(matchId), ledgerState.p2_dmg_2.lookup(matchId)],
+            p2Alive: [ledgerState.p2_alive_0.lookup(matchId), ledgerState.p2_alive_1.lookup(matchId), ledgerState.p2_alive_2.lookup(matchId)],
+            p2Stances: ledgerState.p2_stances.lookup(matchId),
+            p2PubKey: ledgerState.p2_public_key.lookup(matchId).is_some ? ledgerState.p2_public_key.lookup(matchId).value : undefined,
+            secretKey: privateState.secretKey,
+            nonce: ledgerState.commit_nonce.lookup(matchId),
+            commit: ledgerState.p1_commit.lookup(matchId),
+            isPractice: ledgerState.is_practice.lookup(matchId),
+          };
         };
-      },
-    );
 
-    // in practice mode we locally run everything in the mockapi but ran on-chain
-    if (launchPracticeMode) {
+        const currentMatch = privateState.currentMatchId == null ? parseMatchState(privateState.currentMatchId!) : null;
+
+            // in practice mode we locally run everything in the mockapi but ran on-chain
+    if (currentMatch?.isPractice === true) {
       this.state$.subscribe((state) => {
-        // nothing is awaited since not async + doesn't matter as it's always the last thing called
-        // also, this won't be called again until the execution is completed and state changes on the network
-        switch (state.state) {
-          case GAME_STATE.p2_selecting_first_heroes:
-            this.p2_select_first_heroes([generateRandomHero(), generateRandomHero()]);
+        if (state.currentMatch != null) {
+          const curentMatch = state.currentMatch!;
+          // nothing is awaited since not async + doesn't matter as it's always the last thing called
+          // also, this won't be called again until the execution is completed and state changes on the network
+          switch (curentMatch.state) {
+            case GAME_STATE.p2_selecting_first_heroes:
+              this.p2_select_first_heroes([generateRandomHero(), generateRandomHero()]);
+              break;
+            case GAME_STATE.p2_selecting_last_hero:
+              this.p2_select_last_hero(generateRandomHero());
+              break;
+            case GAME_STATE.p2_commit_reveal:
+              const commands = [0, 1, 2].map((i) => {
+                if (curentMatch.p2Alive[i]) {
+                    const availableTargets = [0, 1, 2].filter((j) => curentMatch.p1Alive[j]);
+                    return BigInt(availableTargets[randIntBetween(0, availableTargets.length - 1)]);
+                }
+                // this should never be read anyway
+                return BigInt(3);
+              });
+              const stances = curentMatch.p2Stances.map((stance, i) => {
+                if (curentMatch.p2Alive[i]) {
+                    switch (stance) {
+                        case STANCE.defensive:
+                            return randIntBetween(0, 1) as STANCE;
+                        case STANCE.aggressive:
+                            return randIntBetween(1, 2) as STANCE;
+                        case STANCE.neutral:
+                            return randIntBetween(0, 2) as STANCE;
+                    }
+                }
+                return stance;
+              });
+              this.p2Commit(commands, stances);
             break;
-          case GAME_STATE.p2_selecting_last_hero:
-            this.p2_select_last_hero(generateRandomHero());
-            break;
-          case GAME_STATE.p2_commit_reveal:
-            const commands = [0, 1, 2].map((i) => {
-              if (state.p2Alive[i]) {
-                  const availableTargets = [0, 1, 2].filter((j) => state.p1Alive[j]);
-                  return BigInt(availableTargets[randIntBetween(0, availableTargets.length - 1)]);
-              }
-              // this should never be read anyway
-              return BigInt(3);
-            });
-            const stances = state.p2Stances.map((stance, i) => {
-              if (state.p2Alive[i]) {
-                  switch (stance) {
-                      case STANCE.defensive:
-                          return randIntBetween(0, 1) as STANCE;
-                      case STANCE.aggressive:
-                          return randIntBetween(1, 2) as STANCE;
-                      case STANCE.neutral:
-                          return randIntBetween(0, 2) as STANCE;
-                  }
-              }
-              return stance;
-            });
-            this.p2Commit(commands, stances);
-          break;
+          }
         }
       });
     }
+
+        return {
+          currentMatch,
+          myMatches: []
+        };
+      },
+    );
   }
 
   /**
@@ -264,6 +277,26 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
    * and private state data.
    */
   readonly state$: Observable<PVPArenaDerivedState>;
+
+  /**
+   * Create a new match as player 1
+   * 
+   * @param is_match_public If the match should be tracked in the public lobby system
+   */
+  async create_new_match(is_match_public: boolean, is_match_practice: boolean): Promise<bigint> {
+    const txData = await this.deployedContract.callTx.create_new_match(is_match_public, is_match_practice);
+
+    this.logger?.trace({
+      transactionAdded: {
+        circuit: 'create_new_match',
+        txHash: txData.public.txHash,
+        blockHeight: txData.public.blockHeight,
+      },
+    });
+
+    return txData.private.result;
+  }
+
   /**
    * Select the first hero for Player 1
    *
@@ -441,14 +474,14 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
    * @returns A `Promise` that resolves with a {@link PVPArenaAPI} instance that manages the newly deployed
    * {@link DeployedPVPArenaContract}; or rejects with a deployment error.
    */
-  static async deploy(providers: PVPArenaProviders, options: CreateMatchOptions, logger?: Logger): Promise<PVPArenaAPI> {
+  static async deploy(providers: PVPArenaProviders, logger?: Logger): Promise<PVPArenaAPI> {
     logger?.info('deployContract');
 
     const deployedPVPArenaContract: FoundContract<PVPArenaContract> = await deployContract(providers, {
       privateStateId: 'pvpPrivateState',
       contract: pvpContractInstance,
       initialPrivateState: await PVPArenaAPI.getPrivateState(providers.privateStateProvider),
-      args: [options.isPublic],
+      //args: [],
     });
     logger?.trace({
       contractDeployed: {
@@ -456,7 +489,7 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
       },
     });
 
-    return new PVPArenaAPI(deployedPVPArenaContract, providers, options.isPractice, logger);
+    return new PVPArenaAPI(deployedPVPArenaContract, providers, logger);
   }
 
   /**
@@ -488,7 +521,7 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
       },
     });
 
-    return new PVPArenaAPI(deployedPVPArenaContract, providers, false, logger);
+    return new PVPArenaAPI(deployedPVPArenaContract, providers, logger);
   }
 
   static async getPrivateState(

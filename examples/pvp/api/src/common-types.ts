@@ -59,10 +59,7 @@ export type PVPArenaProviders = MidnightProviders<PVPArenaCircuitKeys, 'pvpPriva
  */
 export type DeployedPVPArenaContract = FoundContract<PVPArenaContract>;
 
-/**
- * A type that represents the derived combination of public (or ledger), and private state.
- */
-export type PVPArenaDerivedState = {
+export type PVPArenaDerivedMatchState = {
   readonly p1Heroes: Hero[];
   readonly p1Cmds: bigint[] | undefined;
   readonly p1Dmg: bigint[];
@@ -83,4 +80,14 @@ export type PVPArenaDerivedState = {
   readonly secretKey: Uint8Array;
   readonly nonce: Uint8Array | undefined;
   readonly commit: bigint | undefined;
+  // extra meta information
+  readonly isPractice: boolean;
+};
+
+/**
+ * A type that represents the derived combination of public (or ledger), and private state.
+ */
+export type PVPArenaDerivedState = {
+  currentMatch: PVPArenaDerivedMatchState | null;
+  myMatches: bigint[],// TODO: more info, right?
 };

@@ -15,14 +15,18 @@ import { WitnessContext } from '@midnight-ntwrk/compact-runtime';
  */
 
 export type PVPArenaPrivateState = {
+  // this is your actual identity and is persistent
   readonly secretKey: Uint8Array;
+
+  // these are per match
+  currentMatchId: bigint | null;
   commands: bigint[];
   stances: STANCE[];
 };
 
 export const createPVPArenaPrivateState = (secretKey: Uint8Array) => ({
-  // EXERCISE 1b: INITIALIZE THE OBJECT OF TYPE PVPArenaPrivateState
-  secretKey, // EXERCISE ANSWER
+  secretKey,
+  currentMatchId: null,
   commands: [],
   stances: []
 });
@@ -58,6 +62,11 @@ export const witnesses = {
   player_secret_key: ({ privateState }: WitnessContext<Ledger, PVPArenaPrivateState>): [PVPArenaPrivateState, Uint8Array] => [
     privateState,
     privateState.secretKey,
+  ],
+
+  current_match_id: ({ privateState }: WitnessContext<Ledger, PVPArenaPrivateState>): [PVPArenaPrivateState, bigint] => [
+    privateState,
+    privateState.currentMatchId!,
   ],
 
   player_commands: ({ privateState }: WitnessContext<Ledger, PVPArenaPrivateState>): [PVPArenaPrivateState, bigint[]] => [
