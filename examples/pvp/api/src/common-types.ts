@@ -81,6 +81,7 @@ export type PVPArenaDerivedMatchState = {
   readonly nonce: Uint8Array | undefined;
   readonly commit: bigint | undefined;
   // extra meta information
+  readonly isPublic: boolean;
   readonly isPractice: boolean;
 };
 
@@ -89,5 +90,6 @@ export type PVPArenaDerivedMatchState = {
  */
 export type PVPArenaDerivedState = {
   currentMatch: PVPArenaDerivedMatchState | null;
-  myMatches: bigint[],// TODO: more info, right?
+  myMatches: Map<bigint, PVPArenaDerivedMatchState>;
+  openMatches: Map<bigint, PVPArenaDerivedMatchState>;
 };

@@ -12,17 +12,22 @@ import { closeTooltip, isTooltipOpen, makeTooltip, TooltipId } from './tooltip';
 import { BalancingTest, heroBalancing } from '../balancing';
 import { PracticeMenu } from './practice';
 import { NetworkId } from '@midnight-ntwrk/midnight-js-network-id';
+import { DeployedPVPArenaAPI, PVPArenaDerivedState } from '@midnight-ntwrk/pvp-api';
+import { Subscription } from 'rxjs/internal/Subscription';
 
 
 export class MainMenu extends Phaser.Scene {
-    deployProvider: BrowserDeploymentManager;
+    api: DeployedPVPArenaAPI;
     text: Phaser.GameObjects.Text | undefined;
     buttons: Button[];
+    state:  PVPArenaDerivedState;
+    subscription: Subscription | undefined;
 
-    constructor() {
+    constructor(api: DeployedPVPArenaAPI, initialState: PVPArenaDerivedState) {
         super('MainMenu');
-        this.deployProvider = new BrowserDeploymentManager(logger);
+        this.api = api;
         this.buttons = [];
+        this.state = initialState;
     }
 
     preload() {
@@ -105,7 +110,7 @@ export class MainMenu extends Phaser.Scene {
                 this.buttons.push(new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.55, 128, 32, 'Practice', 20, () => {
                     closeTooltip(TooltipId.PlayPracticeFirst);
                     this.scene.remove('PracticeMenu');
-                    this.scene.add('PracticeMenu', new PracticeMenu(this.deployProvider));
+                    this.scene.add('PracticeMenu', new PracticeMenu(this.api, this.state));
                     this.scene.start('PracticeMenu');
                 }, 'Play a match against a local computer AI'));
 
@@ -113,7 +118,7 @@ export class MainMenu extends Phaser.Scene {
                     if (isTooltipOpen(TooltipId.PlayPracticeFirst) || makeTooltip(this, GAME_WIDTH / 2, GAME_HEIGHT / 4, TooltipId.PlayPracticeFirst) == undefined) {
                         closeTooltip(TooltipId.PlayPracticeFirst);
                         this.scene.remove('LobbyMenu');
-                        this.scene.add('LobbyMenu', new LobbyMenu(this.deployProvider));
+                        this.scene.add('LobbyMenu', new LobbyMenu(this.api, this.state));
                         this.scene.start('LobbyMenu');
                     }
                 }, 'Join an on-chain match'));
@@ -121,7 +126,7 @@ export class MainMenu extends Phaser.Scene {
                     if (isTooltipOpen(TooltipId.PlayPracticeFirst) || makeTooltip(this, GAME_WIDTH / 2, GAME_HEIGHT / 4, TooltipId.PlayPracticeFirst) == undefined) {
                         closeTooltip(TooltipId.PlayPracticeFirst);
                         this.scene.remove('CreateMenu');
-                        this.scene.add('CreateMenu', new CreateMenu(this.deployProvider));
+                        this.scene.add('CreateMenu', new CreateMenu(this.api, this.state));
                         this.scene.start('CreateMenu');
                     }
                 }, 'Create an on-chain match'));

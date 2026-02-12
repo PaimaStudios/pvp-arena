@@ -1,9 +1,9 @@
 import '@midnight-ntwrk/dapp-connector-api';
 import { ITEM, RESULT, STANCE, Hero, ARMOR, pureCircuits, GAME_STATE } from '@midnight-ntwrk/pvp-contract';
-import { type PVPArenaDerivedState, type DeployedPVPArenaAPI } from '@midnight-ntwrk/pvp-api';
+import { type PVPArenaDerivedState, type DeployedPVPArenaAPI, safeJSONString } from '@midnight-ntwrk/pvp-api';
 import 'phaser';
 import RexUIPlugin from 'phaser3-rex-plugins/templates/ui/ui-plugin'
-import { GAME_WIDTH, GAME_HEIGHT, gameStateStr, safeJSONString, MatchState, fontStyle, makeCopyAddressButton, makeExitMatchButton, makeSoundToggleButton, playSound } from '../main';
+import { GAME_WIDTH, GAME_HEIGHT, gameStateStr, MatchState, fontStyle, makeCopyAddressButton, makeExitMatchButton, makeSoundToggleButton, playSound } from '../main';
 import { HeroActor } from './hero';
 import { HeroIndex, hpDiv, Rank, Team } from './index';
 import { Button } from '../menus/button';
@@ -134,7 +134,7 @@ export class Arena extends Phaser.Scene
                 for (let i = 0; i < 3; ++i) {
                     const rank = new Rank(i as HeroIndex, team as Team);
                     // TODO: how to do these loops so typescript knows that team/i are 0-1 and 0-2?
-                    hero_actors.push(new HeroActor(this, team == 0 ? state.p1Heroes[i] : state.p2Heroes[i], rank));
+                    hero_actors.push(new HeroActor(this, team == 0 ? state.currentMatch!.p1Heroes[i] : state.currentMatch!.p2Heroes[i], rank));
                 }
                 this.heroes.push(hero_actors);
             }
@@ -143,9 +143,9 @@ export class Arena extends Phaser.Scene
 
     onStateChange(state: PVPArenaDerivedState) {
         console.log(`new state: ${safeJSONString(state)}`);
-        console.log(`NOW: ${gameStateStr(state.state)}`);
+        console.log(`NOW: ${gameStateStr(state.currentMatch!.state)}`);
 
-        if (state.state == GAME_STATE.p1_selecting_first_hero || state.state == GAME_STATE.p2_selecting_first_heroes || state.state == GAME_STATE.p1_selecting_last_heroes || state.state == GAME_STATE.p2_selecting_last_hero) {
+        if (state.currentMatch!.state == GAME_STATE.p1_selecting_first_hero || state.currentMatch!.state == GAME_STATE.p2_selecting_first_heroes || state.currentMatch!.state == GAME_STATE.p1_selecting_last_heroes || state.currentMatch!.state == GAME_STATE.p2_selecting_last_hero) {
             // for some reason we're getting updates here using old state that we can ignore
             // it calls onStateChange for every state update that had previously happened on the equipment screen
             return;
@@ -154,21 +154,21 @@ export class Arena extends Phaser.Scene
         this.createHeroes(state);
 
         // update commands/stances/damages
-        if (state.p1Cmds != undefined && state.p2Cmds != undefined/* && (state.state == GAME_STATE.p1_commit)*/) {
+        if (state.currentMatch!.p1Cmds != undefined && state.currentMatch!.p2Cmds != undefined/* && (state.currentMatch!.state == GAME_STATE.p1_commit)*/) {
             console.log(`***** UPDATING CMDS ****`);
             const newTargets = [
-                state.p1Cmds.map(Number),
-                state.p2Cmds.map(Number)
+                state.currentMatch!.p1Cmds.map(Number),
+                state.currentMatch!.p2Cmds.map(Number)
             ];
             for (let team = 0; team < 2; ++team) {
-                const heroes = team == 0 ? state.p1Heroes : state.p2Heroes;
-                const dmgs = team == 0 ? state.p1Dmg : state.p2Dmg;
-                const stances = team == 0 ? state.p1Stances : state.p2Stances;
+                const heroes = team == 0 ? state.currentMatch!.p1Heroes : state.currentMatch!.p2Heroes;
+                const dmgs = team == 0 ? state.currentMatch!.p1Dmg : state.currentMatch!.p2Dmg;
+                const stances = team == 0 ? state.currentMatch!.p1Stances : state.currentMatch!.p2Stances;
                 for (let i = 0; i < 3; ++i) {
                     const hero = this.heroes[team][i];
                     // update damage now, but no graphical effect shown
                     hero.realDmg = Number(dmgs[i]);
-                    //if ((i == 0 && state.state == GAME_STATE.p1_commit) || (i == 1 && state.state == GAME_STATE.p1_reveal)) {
+                    //if ((i == 0 && state.currentMatch!.state == GAME_STATE.p1_commit) || (i == 1 && state.currentMatch!.state == GAME_STATE.p1_reveal)) {
                     if (team != this.playerTeam()) {
                         hero.nextStance = stances[i];
                         hero.target = new Rank(newTargets[team][i] as HeroIndex, team == 0 ? 1 : 0);
@@ -179,11 +179,11 @@ export class Arena extends Phaser.Scene
         
         // TODO: it's weird we have both this and the combat animations to control MatchState
         // we should consolidate this
-        this.onChainState = state.state;
+        this.onChainState = state.currentMatch!.state;
 
-        if (this.round < state.round) {
+        if (this.round < state.currentMatch!.round) {
             this.runCombatAnims();
-            this.round = Number(state.round);
+            this.round = Number(state.currentMatch!.round);
         } else {
             this.runStateChange();
         }
@@ -509,14 +509,14 @@ export class Arena extends Phaser.Scene
 
         this.setMatchState(MatchState.Initializing);
 
-        if (this.initialState.round != BigInt(0) || this.initialState.state != GAME_STATE.p1_commit) {
+        if (this.initialState.currentMatch!.round != BigInt(0) || this.initialState.currentMatch!.state != GAME_STATE.p1_commit) {
             this.createHeroes(this.initialState);
 
-            this.round = Number(this.initialState.round);
+            this.round = Number(this.initialState.currentMatch!.round);
             // we can't know previous stances for player 2 so to make the resuming consistent just default to the on-chain values
             for (let team = 0; team < 2; ++team) {
-                const stances = team == 0 ? this.initialState.p1Stances : this.initialState.p2Stances;
-                const dmgs = team == 0 ? this.initialState.p1Dmg : this.initialState.p2Dmg;
+                const stances = team == 0 ? this.initialState.currentMatch!.p1Stances : this.initialState.currentMatch!.p2Stances;
+                const dmgs = team == 0 ? this.initialState.currentMatch!.p1Dmg : this.initialState.currentMatch!.p2Dmg;
                 for (let i = 0; i < 3; ++i) {
                     const stance = stances[i];
                     const hero = this.heroes[team][i];
@@ -539,12 +539,12 @@ export class Arena extends Phaser.Scene
                                 for (let target1 = 0; target1 < 4; ++target1) {
                                     for (let target2 = 0; target2 < 4; ++target2) {
                                         const commit = pureCircuits.calc_commit_for_checking(
-                                            this.initialState.secretKey,
+                                            this.initialState.currentMatch!.secretKey,
                                             [BigInt(target0), BigInt(target1), BigInt(target2)],
                                             [stance0, stance1, stance2],
-                                            this.initialState.nonce!,
+                                            this.initialState.currentMatch!.nonce!,
                                         );
-                                        if (commit == this.initialState.commit) {
+                                        if (commit == this.initialState.currentMatch!.commit) {
                                             console.log(`found match [${stance0}, ${stance1}, ${stance2}]; [${target0}, ${target1}, ${target2}] in ${Date.now() - startTime}ms`);
                                             this.heroes[0][0].setNextStance(stance0);
                                             this.heroes[0][1].setNextStance(stance1);
@@ -562,7 +562,7 @@ export class Arena extends Phaser.Scene
                 }
                 throw new Error('could not find matching commit');
             };
-            switch (this.initialState.state) {
+            switch (this.initialState.currentMatch!.state) {
                 case GAME_STATE.p2_commit_reveal:
                     if (this.config.isP1) {
                         guessTargetsForP1();
@@ -573,7 +573,7 @@ export class Arena extends Phaser.Scene
                         guessTargetsForP1();
                     } else {
                         for (let i = 0; i < 3; ++i) {
-                            this.heroes[1][i].setTarget(new Rank(Number(this.initialState.p2Cmds![i]) as HeroIndex, 0));
+                            this.heroes[1][i].setTarget(new Rank(Number(this.initialState.currentMatch!.p2Cmds![i]) as HeroIndex, 0));
                         }
                     }
                     break;

@@ -54,45 +54,45 @@ function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// only converts bigint, but this is the only problem we have with printing ledger types
 export function safeJSONString(obj: object): string {
-  // hacky but just doing it manually since otherwise: 'string' can't be used to index type '{}'
-  // let newObj = {}
-  // for (let [key, val] of Object.entries(obj)) {
-  //     if (typeof val == 'bigint') {
-  //         newObj[key] = Number(val);
-  //     } else {
-  //         newObj[key] = val;
-  //     }
-  // }
-  // return JSON.stringify(newObj);
-  if (typeof obj == 'bigint') {
-      return Number(obj).toString();
-  } else if (Array.isArray(obj)) {
-      let str = '[';
-      let innerFirst = true;
-      for (let i = 0; i < obj.length; ++i) {
-          if (!innerFirst) {
-              str += ', ';
-          }
-          innerFirst = false;
-          str += safeJSONString(obj[i]);
-      }
-      str += ']';
-      return str;
-  } else if (typeof obj == 'object') {
-      let str = '{';
-      let first = true;
-      for (let [key, val] of Object.entries(obj)) {
-          if (!first) {
-              str += ', ';
-          }
-          first = false;
-          str += `"${key}": ${safeJSONString(val)}`;
-      }
-      str += '}';
-      return str;
+  if (obj === null) {
+    return 'null';
   }
-  return JSON.stringify(obj);
+    if (typeof obj == 'bigint') {
+        return Number(obj).toString();
+    } else if (Array.isArray(obj)) {
+        let str = '[';
+        let innerFirst = true;
+        for (let i = 0; i < obj.length; ++i) {
+            if (!innerFirst) {
+                str += ', ';
+            }
+            innerFirst = false;
+            str += safeJSONString(obj[i]);
+        }
+        str += ']';
+        return str;
+    } else if (typeof obj == 'object') {
+        let entries = Object.entries(obj);
+        // this allows us to print Map properly
+        let len = ('length' in obj ? obj.length : undefined) ?? ('size' in obj ? obj.size : undefined) ?? entries.length;;
+        if ('entries' in obj && typeof obj.entries === "function") {
+            entries = obj.entries();
+        }
+        let str = `[${len}]{`;
+        let first = true;
+        for (let [key, val] of entries) {
+            if (!first) {
+                str += ', ';
+            }
+            first = false;
+            str += `"${key}": ${safeJSONString(val)}`;
+        }
+        str += '}';
+        return str;
+    }
+    return JSON.stringify(obj);
 }
 
 export function generateRandomHero(): Hero {
@@ -132,6 +132,7 @@ export interface DeployedPVPArenaAPI {
   p1Commit: (commands: bigint[], stances: STANCE[]) => Promise<void>;
   p2Commit: (commands: bigint[], stances: STANCE[]) => Promise<void>;
   p1Reveal: (commands: bigint[], stances: STANCE[]) => Promise<void>;
+  setCurrentMatch: (matchId: bigint) => Promise<void>;
 }
 
 /**
@@ -188,7 +189,7 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
 
         const parseMatchState = (matchId: bigint): PVPArenaDerivedMatchState => {
           const isP1 = ledgerState.p1_public_key.lookup(matchId) === localPublicKey;
-          const isP2 = ledgerState.p2_public_key.lookup(matchId).is_some && (ledgerState.p2_public_key.lookup(matchId).value === localPublicKey);
+          const isP2 = ledgerState.p2_public_key.member(matchId) && (ledgerState.p2_public_key.lookup(matchId) === localPublicKey);
 
           return {
             round: ledgerState.round.lookup(matchId),
@@ -206,24 +207,24 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
             p2Dmg: [ledgerState.p2_dmg_0.lookup(matchId), ledgerState.p2_dmg_1.lookup(matchId), ledgerState.p2_dmg_2.lookup(matchId)],
             p2Alive: [ledgerState.p2_alive_0.lookup(matchId), ledgerState.p2_alive_1.lookup(matchId), ledgerState.p2_alive_2.lookup(matchId)],
             p2Stances: ledgerState.p2_stances.lookup(matchId),
-            p2PubKey: ledgerState.p2_public_key.lookup(matchId).is_some ? ledgerState.p2_public_key.lookup(matchId).value : undefined,
+            p2PubKey: ledgerState.p2_public_key.member(matchId) ? ledgerState.p2_public_key.lookup(matchId) : undefined,
             secretKey: privateState.secretKey,
             nonce: ledgerState.commit_nonce.lookup(matchId),
             commit: ledgerState.p1_commit.lookup(matchId),
+            isPublic: ledgerState.public.lookup(matchId),
             isPractice: ledgerState.is_practice.lookup(matchId),
           };
         };
 
+        const matchStates = new Map(ledgerState.game_state);
+
         const currentMatch = privateState.currentMatchId == null ? parseMatchState(privateState.currentMatchId!) : null;
 
-            // in practice mode we locally run everything in the mockapi but ran on-chain
-    if (currentMatch?.isPractice === true) {
-      this.state$.subscribe((state) => {
-        if (state.currentMatch != null) {
-          const curentMatch = state.currentMatch!;
+        // in practice mode we locally run everything in the mockapi but ran on-chain
+        if (currentMatch?.isPractice === true) {
           // nothing is awaited since not async + doesn't matter as it's always the last thing called
           // also, this won't be called again until the execution is completed and state changes on the network
-          switch (curentMatch.state) {
+          switch (currentMatch.state) {
             case GAME_STATE.p2_selecting_first_heroes:
               this.p2_select_first_heroes([generateRandomHero(), generateRandomHero()]);
               break;
@@ -232,15 +233,15 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
               break;
             case GAME_STATE.p2_commit_reveal:
               const commands = [0, 1, 2].map((i) => {
-                if (curentMatch.p2Alive[i]) {
-                    const availableTargets = [0, 1, 2].filter((j) => curentMatch.p1Alive[j]);
+                if (currentMatch.p2Alive[i]) {
+                    const availableTargets = [0, 1, 2].filter((j) => currentMatch.p1Alive[j]);
                     return BigInt(availableTargets[randIntBetween(0, availableTargets.length - 1)]);
                 }
                 // this should never be read anyway
                 return BigInt(3);
               });
-              const stances = curentMatch.p2Stances.map((stance, i) => {
-                if (curentMatch.p2Alive[i]) {
+              const stances = currentMatch.p2Stances.map((stance, i) => {
+                if (currentMatch.p2Alive[i]) {
                     switch (stance) {
                         case STANCE.defensive:
                             return randIntBetween(0, 1) as STANCE;
@@ -256,12 +257,11 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
             break;
           }
         }
-      });
-    }
 
         return {
           currentMatch,
-          myMatches: []
+          myMatches: new Map(matchStates.keys().filter((id) => ledgerState.p1_public_key.lookup(id) == localPublicKey || ledgerState.p2_public_key.lookup(id)).map((id) => [id, parseMatchState(id)])),
+          openMatches: new Map(matchStates.keys().filter((id) => ledgerState.p1_public_key.lookup(id) != localPublicKey && !ledgerState.p2_public_key.member(id)).map((id) => [id, parseMatchState(id)])),
         };
       },
     );
@@ -464,6 +464,12 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
         blockHeight: txData.public.blockHeight,
       },
     });
+  }
+
+  async setCurrentMatch(matchId: bigint): Promise<void> {
+      const state = await PVPArenaAPI.getPrivateState(this.providers.privateStateProvider);
+      state!.currentMatchId = matchId;
+      await this.providers.privateStateProvider.set('pvpPrivateState', state);
   }
 
   /**

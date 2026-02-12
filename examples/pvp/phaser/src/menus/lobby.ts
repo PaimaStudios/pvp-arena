@@ -1,6 +1,6 @@
-import { PVPArenaAPI } from "@midnight-ntwrk/pvp-api";
+import { DeployedPVPArenaAPI, PVPArenaAPI, PVPArenaDerivedMatchState, PVPArenaDerivedState } from "@midnight-ntwrk/pvp-api";
 import { MockPVPArenaAPI } from "../battle/mockapi";
-import { fontStyle, GAME_HEIGHT, GAME_WIDTH, joinContract, makeSoundToggleButton } from "../main";
+import { fontStyle, GAME_HEIGHT, GAME_WIDTH, makeSoundToggleButton } from "../main";
 import { BrowserDeploymentManager } from "../wallet";
 import { Button } from "./button";
 import { EquipmentMenu } from "./equipment";
@@ -10,10 +10,11 @@ import { levelPrivateStateProvider } from "@midnight-ntwrk/midnight-js-level-pri
 import { GAME_STATE, pureCircuits } from "@midnight-ntwrk/pvp-contract";
 import { Arena } from "../battle/arena";
 import { StatusUI } from ".";
+import { init } from "fp-ts/lib/ReadonlyNonEmptyArray";
+import { Subscription } from "rxjs/internal/Subscription";
 
 type OpenMatchInfo = {
-    lastUpdatedBlock: number;
-    contractAddress: string;
+    matchId: bigint;
 };
 
 const WON = "[color=green]Won[/color]";
@@ -28,160 +29,63 @@ type PlayerMatchStatus =
     | "Tie";
 
 type PlayerMatchInfo = {
-    lastUpdatedBlock: number;
-    contractAddress: string;
+    matchId: bigint;
     status: PlayerMatchStatus;
 };
 
-async function getOpenMatches(): Promise<OpenMatchInfo[]> {
-    let batcherUrl = import.meta.env.VITE_BATCHER_MODE_BATCHER_URL;
+function getPlayerMatches(state: PVPArenaDerivedState): PlayerMatchInfo[] {
+    const isPlayerOneTurn = (state: number): boolean =>
+        [
+            GAME_STATE.p1_selecting_first_hero,
+            GAME_STATE.p1_selecting_last_heroes,
+            GAME_STATE.p1_commit,
+            GAME_STATE.p1_reveal,
+        ].some((s) => s === state);
 
-    if (batcherUrl) {
-        const playerPublicKey = await getPlayerPublicKey();
+    const isPlayerTwoTurn = (state: number): boolean =>
+        [
+            GAME_STATE.p2_selecting_first_heroes,
+            GAME_STATE.p2_selecting_last_hero,
+            GAME_STATE.p2_commit_reveal,
+        ].some((s) => s === state);
 
-        const query = () =>
-            fetch(
-                `${batcherUrl}/lobbies/open?count=255&exclude_player=${playerPublicKey}`,
-                {
-                    method: "GET",
-                }
-            );
-
-        const result = await query();
-
-        const json: {
-            address: string;
-            block_height: number;
-            p1_public_key: string;
-        }[] = await result.json();
-
-        return json.map((raw) => ({
-            lastUpdatedBlock: raw.block_height,
-            contractAddress: raw.address,
-        }));
-    } else {
-        return [];
-    }
-}
-
-let cachedPublicKey: Promise<string> | undefined;
-
-async function getPlayerPublicKey(): Promise<string> {
-    if (cachedPublicKey) {
-        return cachedPublicKey;
-    }
-
-    const privateStateProvider = levelPrivateStateProvider({
-        privateStateStoreName: "pvp-private-state",
-    });
-
-    cachedPublicKey = (async () => {
-        const privateState =
-            await PVPArenaAPI.getPrivateState(privateStateProvider);
-
-        const commit = pureCircuits.derive_public_key(privateState?.secretKey);
-
-        // for some reason that I don't understand the bytes are reversed when creating the bigint
-        let hexBigEndian = commit.toString(16);
-
-        if (hexBigEndian.length % 2 === 1) {
-            hexBigEndian = `0${hexBigEndian}`;
+    const matchStatus = (state: PVPArenaDerivedMatchState): PlayerMatchStatus => {
+        if (state.state === GAME_STATE.tie) {
+            return "Tie";
         }
 
-        const nibbles = hexBigEndian.split("");
+        if (state.isP1) {
+            if (state.state === GAME_STATE.p1_win) {
+                return WON;
+            } else if (state.state === GAME_STATE.p2_win) {
+                return LOST;
+            }
 
-        for (let i = 0; i < hexBigEndian.length; i += 2) {
-            var tmp = nibbles[i];
+            if (isPlayerOneTurn(state.state)) {
+                return YOUR_TURN;
+            }
 
-            nibbles[i] = nibbles[i + 1];
-            nibbles[i + 1] = tmp;
+            return OPPONENT_TURN;
+        } else {
+            if (state.state === GAME_STATE.p2_win) {
+                return WON;
+            } else if (state.state === GAME_STATE.p1_win) {
+                return LOST;
+            }
+
+            if (isPlayerTwoTurn(state.state)) {
+                return YOUR_TURN;
+            }
+
+            return OPPONENT_TURN;
         }
-
-        const publicKey = nibbles.reverse().join("");
-
-        return publicKey;
-    })();
-
-    return cachedPublicKey!;
-}
-
-async function getPlayerMatches(): Promise<PlayerMatchInfo[]> {
-    let batcherUrl = import.meta.env.VITE_BATCHER_MODE_BATCHER_URL;
-
-    if (batcherUrl) {
-        const pk = await getPlayerPublicKey();
-        const query = () =>
-            fetch(`${batcherUrl}/lobbies/player/${pk}?count=255`, {
-                method: "GET",
-            });
-
-        const result = await query();
-
-        const json: {
-            address: string;
-            block_height: number;
-            p1_public_key: string;
-            p2_public_key: string;
-            state: string;
-        }[] = await result.json();
-
-        const isPlayerOneTurn = (state: number): boolean =>
-            [
-                GAME_STATE.p1_selecting_first_hero,
-                GAME_STATE.p1_selecting_last_heroes,
-                GAME_STATE.p1_commit,
-                GAME_STATE.p1_reveal,
-            ].some((s) => s === state);
-
-        const isPlayerTwoTurn = (state: number): boolean =>
-            [
-                GAME_STATE.p2_selecting_first_heroes,
-                GAME_STATE.p2_selecting_last_hero,
-                GAME_STATE.p2_commit_reveal,
-            ].some((s) => s === state);
-
-        const matchStatus = (raw: (typeof json)[0]): PlayerMatchStatus => {
-            const state = Number(raw.state);
-
-            if (state === GAME_STATE.tie) {
-                return "Tie";
-            }
-
-            if (raw.p1_public_key === pk) {
-                if (state === GAME_STATE.p1_win) {
-                    return WON;
-                } else if (state === GAME_STATE.p2_win) {
-                    return LOST;
-                }
-
-                if (isPlayerOneTurn(state)) {
-                    return YOUR_TURN;
-                }
-
-                return OPPONENT_TURN;
-            } else {
-                if (state === GAME_STATE.p2_win) {
-                    return WON;
-                } else if (state === GAME_STATE.p1_win) {
-                    return LOST;
-                }
-
-                if (isPlayerTwoTurn(state)) {
-                    return YOUR_TURN;
-                }
-
-                return OPPONENT_TURN;
-            }
+    };
+    return state.myMatches.entries().map(([id, state]) => {
+        return {
+            matchId: id,
+            status: matchStatus(state),
         };
-
-        return json.map((raw) => ({
-            lastUpdatedBlock: raw.block_height,
-            contractAddress: raw.address,
-            status: matchStatus(raw),
-        }));
-    } else {
-        return [];
-    }
+    }).toArray();
 }
 
 type RefreshingGrapihcs = {
@@ -202,7 +106,7 @@ class JoinGamesUI<
     matchIndex: number;
     matchButtons: Button[];
     suggestPractice: boolean;
-    getMatches: () => Promise<MatchInfo[]>;
+    getMatches: () => MatchInfo[];
     maxMatchesShown: number;
 
     constructor(
@@ -211,7 +115,7 @@ class JoinGamesUI<
         y: number,
         title: string,
         suggestPractice: boolean,
-        getMatches: () => Promise<MatchInfo[]>,
+        getMatches: () => MatchInfo[],
         maxMatchesShown: number,
     ) {
         super(lobby, x, y);
@@ -291,33 +195,17 @@ class JoinGamesUI<
         this.matchButtons.forEach((b) => b.destroy());
         this.matchButtons = [];
         this.matches = [];
-        this.getMatches().then((matches) => {
+        setTimeout(() => {
             this.refreshing?.spinner.destroy();
             this.refreshing?.text.destroy();
             this.refreshing = undefined;
-            this.matches = matches.sort(
-                (a, b) => b.lastUpdatedBlock - a.lastUpdatedBlock
-            );
+            this.matches = this.getMatches();
+            // this.matches = matches.sort(
+            //     (a, b) => b.lastUpdatedBlock - a.lastUpdatedBlock
+            // );// we can't do this until ledger v8 now that's in one contract
             this.matchIndex = 0;
             this.makeMatchList();
-        }).catch((e) => {
-            this.refreshing?.spinner.destroy();
-            this.refreshing?.text.destroy();
-            this.refreshing = undefined;
-            const retryButton = new Button(
-                this.scene,
-                0,
-                0,
-                JOIN_WIDTH - 16,
-                96,
-                `Error getting matches:  ${e}.\nClick to retry.`,
-                7,
-                () => this.refreshGames(),
-                ''
-            );
-            this.add(retryButton);
-            this.matchButtons.push(retryButton);
-        });
+        }, 100);
     }
 
     preUpdate() {
@@ -336,7 +224,7 @@ class JoinGamesUI<
         this.matchButtons = this.matches
             .slice(this.matchIndex, this.matchIndex + this.maxMatchesShown)
             .map((match, i) => {
-                let buttonText = `${contractAddressShortString(match.contractAddress)}\nlast update: ${match.lastUpdatedBlock}`;
+                let buttonText = match.matchId.toString();
 
                 if ("status" in match) {
                     buttonText = `${buttonText}\nstatus: ${match.status}`;
@@ -356,7 +244,7 @@ class JoinGamesUI<
                     MATCH_HEIGHT + ("status" in match ? 16 : 0),
                     buttonText,
                     7,
-                    () => this.lobby.join(match.contractAddress)
+                    () => this.lobby.join(match.matchId)
                 );
                 this.add(button);
                 return button;
@@ -419,17 +307,21 @@ class JoinGamesUI<
 }
 
 export class LobbyMenu extends Phaser.Scene {
-    deployProvider: BrowserDeploymentManager;
+    api: DeployedPVPArenaAPI;
     joinPublc: JoinGamesUI<OpenMatchInfo> | undefined;
     rejoin: JoinGamesUI<PlayerMatchInfo> | undefined;
     status: StatusUI | undefined;
     joinByAddress: Button | undefined;
     back: Button | undefined;
     pk: string | undefined;
+    state: PVPArenaDerivedState;
+    subscription: Subscription | undefined;
 
-    constructor(deployProvider: BrowserDeploymentManager) {
+    constructor(api: DeployedPVPArenaAPI, initialState: PVPArenaDerivedState) {
         super("LobbyMenu");
-        this.deployProvider = deployProvider;
+        this.api = api;
+        this.state = initialState;
+        // todo: update state?
     }
 
     preload() {
@@ -443,7 +335,7 @@ export class LobbyMenu extends Phaser.Scene {
             GAME_HEIGHT / 2,
             "Public Matches",
             true,
-            () => getOpenMatches(),
+            () => this.state.openMatches.entries().filter(([_, state]) => state.isPublic).map(([id, _]) => { return { matchId: id }; }).toArray(),
             5
         );
         this.rejoin = new JoinGamesUI(
@@ -452,7 +344,7 @@ export class LobbyMenu extends Phaser.Scene {
             GAME_HEIGHT / 2,
             "Your Matches",
             false,
-            () => getPlayerMatches(),
+            () => getPlayerMatches(this.state),
             4
         );
         this.add
@@ -472,11 +364,15 @@ export class LobbyMenu extends Phaser.Scene {
             "Direct Join",
             10,
             () => {
-                const address = window.prompt(
+                const matchId = window.prompt(
                     "Copy contract address to join directly"
                 );
-                if (address != undefined) {
-                    this.join(address);
+                if (matchId != undefined) {
+                    try {
+                        this.join(BigInt(matchId));
+                    } catch {
+                        alert("Invalid match id");
+                    }
                 }
             },
             "Join a match by pasting the contract address"
@@ -491,7 +387,7 @@ export class LobbyMenu extends Phaser.Scene {
             11,
             () => {
                 this.scene.remove("MainMenu");
-                this.scene.add("MainMenu", new MainMenu());
+                this.scene.add("MainMenu", new MainMenu(this.api, this.state));
                 this.scene.start("MainMenu");
             },
             "Return to main menu"
@@ -505,19 +401,36 @@ export class LobbyMenu extends Phaser.Scene {
         ]);
 
         makeSoundToggleButton(this, GAME_WIDTH - 16, 16);
+
+        this.subscription = this.api.state$.subscribe((state) => this.onStateChange(state));
     }
 
-    join(contractAddress: string) {
+    onStateChange(state: PVPArenaDerivedState) {
+        this.state = state;
+    }
+
+    join(matchId: bigint) {
         this.status!.setText("Joining match, please wait...");
-        joinContract(this.deployProvider, contractAddress)
-            .then((joinInfo) => {
-                switch (joinInfo.state.state) {
+        this
+            .api
+            .setCurrentMatch(matchId)
+            .then(() => {
+                let isP1 = false;
+                let matchState = this.state.openMatches.get(matchId);
+                if (matchState == undefined) {
+                    matchState = this.state.myMatches.get(matchId);
+                    if (matchState == undefined) {
+                        throw new Error(`could not find match with id: ${matchId}`);
+                    }
+                    isP1 = matchState.isP1;
+                }
+                switch (matchState.state) {
                     case GAME_STATE.p1_selecting_first_hero:
                     case GAME_STATE.p1_selecting_last_heroes:
                     case GAME_STATE.p2_selecting_last_hero:
                     case GAME_STATE.p2_selecting_first_heroes:
                         this.scene.remove("EquipmentMenu");
-                        this.scene.add("EquipmentMenu", new EquipmentMenu(joinInfo.config));
+                        this.scene.add("EquipmentMenu", new EquipmentMenu({ api: this.api, isP1 }));
                         this.scene.start("EquipmentMenu");
                         break;
                     case GAME_STATE.p1_commit:
@@ -527,7 +440,7 @@ export class LobbyMenu extends Phaser.Scene {
                     case GAME_STATE.p2_win:
                     case GAME_STATE.tie:
                         this.scene.remove("Arena");
-                        this.scene.add("Arena", new Arena(joinInfo.config, joinInfo.state));
+                        this.scene.add("Arena", new Arena({ api: this.api, isP1 }, this.state));
                         this.scene.start("Arena");
                         break;
                 }
@@ -539,7 +452,7 @@ export class LobbyMenu extends Phaser.Scene {
 
     joinPractice() {
         this.scene.remove('PracticeMenu');
-        this.scene.add('PracticeMenu', new PracticeMenu(this.deployProvider));
+        this.scene.add('PracticeMenu', new PracticeMenu(this.api, this.state));
         this.scene.start('PracticeMenu');
     }
 }

@@ -1,11 +1,11 @@
 import { ITEM, RESULT, STANCE, Hero, ARMOR, pureCircuits, GAME_STATE, TotalStats } from '@midnight-ntwrk/pvp-contract';
 import { Arena, BattleConfig } from '../battle/arena';
-import { GAME_WIDTH, GAME_HEIGHT, safeJSONString, gameStateStr, fontStyle, isMuted, makeCopyAddressButton, makeExitMatchButton, makeSoundToggleButton, playSound } from '../main';
+import { GAME_WIDTH, GAME_HEIGHT, gameStateStr, fontStyle, isMuted, makeCopyAddressButton, makeExitMatchButton, makeSoundToggleButton, playSound } from '../main';
 import { addHeroImages, createHeroAnims, generateRandomHero, HeroAnimationController } from '../battle/hero';
 import { type HeroIndex, Rank, type Team } from '../battle';
 import { Button } from './button';
 import { OFFLINE_PRACTICE_CONTRACT_ADDR } from '../battle/mockapi';
-import { PVPArenaDerivedState } from '@midnight-ntwrk/pvp-api';
+import { PVPArenaDerivedState, safeJSONString } from '@midnight-ntwrk/pvp-api';
 import { Subscription } from 'rxjs';
 import { StatusUI } from '.';
 import { makeTooltip, TooltipId } from './tooltip';
@@ -400,10 +400,10 @@ export class EquipmentMenu extends Phaser.Scene {
 
     onStateChange(state: PVPArenaDerivedState) {
         console.log(`new state: ${safeJSONString(state)}`);
-        console.log(`NOW: ${gameStateStr(state.state)}`);
+        console.log(`NOW: ${gameStateStr(state.currentMatch!.state)}`);
 
         // when joining this.selecting could be out of date
-        switch (state.state) {
+        switch (state.currentMatch!.state) {
             case GAME_STATE.p1_selecting_first_hero:
                 this.selecting = 0;
                 break;
@@ -421,7 +421,7 @@ export class EquipmentMenu extends Phaser.Scene {
         // update heroes
         let tweens: Phaser.Types.Tweens.TweenBuilderConfig[] = [];
         for (let team = 0; team < 2; ++team) {
-            const newHeroes = team == 0 ? state.p1Heroes : state.p2Heroes;
+            const newHeroes = team == 0 ? state.currentMatch!.p1Heroes : state.currentMatch!.p2Heroes;
             for (let i = 0; i < newHeroes.length; ++i) {
                 const heroActor = this.heroes[team][i];
                 
@@ -445,8 +445,8 @@ export class EquipmentMenu extends Phaser.Scene {
     }
 
     runStateChange(state: PVPArenaDerivedState) {
-        console.log(`running state change: ${state.state}`);
-        switch (state.state) {
+        console.log(`running state change: ${state.currentMatch!.state}`);
+        switch (state.currentMatch!.state) {
             case GAME_STATE.p1_selecting_first_hero:
             case GAME_STATE.p1_selecting_last_heroes:
                 if (this.config.isP1 && this.selector == undefined) {
@@ -470,7 +470,7 @@ export class EquipmentMenu extends Phaser.Scene {
                 this.scene.start('Arena');
                 break;
             default:
-                console.error(`invalid equipment state: ${gameStateStr(state.state)}`);
+                console.error(`invalid equipment state: ${gameStateStr(state.currentMatch!.state)}`);
                 break;
         }
     }

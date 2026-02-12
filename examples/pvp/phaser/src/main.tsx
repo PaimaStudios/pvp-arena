@@ -49,6 +49,7 @@ import { MainMenu } from './menus/main';
 import { BattleConfig } from './battle/arena';
 import { Button } from './menus/button';
 import { closeTooltip, isTooltipOpen, makeTooltip, TooltipId } from './menus/tooltip';
+import { ContractLoader } from './menus/boot';
 
 const COLOR_MAIN = 0x4e342e;
 const COLOR_LIGHT = 0x7b5e57;
@@ -128,48 +129,7 @@ export function playSound(scene: Phaser.Scene, key: string) {
     }
 }
 
-// only converts bigint, but this is the only problem we have with printing ledger types
-export function safeJSONString(obj: object): string {
-    // hacky but just doing it manually since otherwise: 'string' can't be used to index type '{}'
-    // let newObj = {}
-    // for (let [key, val] of Object.entries(obj)) {
-    //     if (typeof val == 'bigint') {
-    //         newObj[key] = Number(val);
-    //     } else {
-    //         newObj[key] = val;
-    //     }
-    // }
-    // return JSON.stringify(newObj);
-    if (typeof obj == 'bigint') {
-        return Number(obj).toString();
-    } else if (Array.isArray(obj)) {
-        let str = '[';
-        let innerFirst = true;
-        for (let i = 0; i < obj.length; ++i) {
-            if (!innerFirst) {
-                str += ', ';
-            }
-            innerFirst = false;
-            str += safeJSONString(obj[i]);
-        }
-        str += ']';
-        return str;
-    } else if (typeof obj == 'object') {
-        let str = '{';
-        let first = true;
-        for (let [key, val] of Object.entries(obj)) {
-            if (!first) {
-                str += ', ';
-            }
-            first = false;
-            str += `"${key}": ${safeJSONString(val)}`;
-        }
-        str += '}';
-        return str;
-    }
-    return JSON.stringify(obj);
-}
-
+s
 export function rootObject(obj: Phaser.GameObjects.GameObject & Phaser.GameObjects.Components.Transform): Phaser.GameObjects.Components.Transform {
     while (obj.parentContainer != undefined) {
         obj = obj.parentContainer;
@@ -182,24 +142,6 @@ export type ContractJoinInfo = {
     state: PVPArenaDerivedState;
 }
 
-export async function joinContract(deployProvider: BrowserDeploymentManager, contractAddress: ContractAddress): Promise<ContractJoinInfo> {
-    return deployProvider.join(contractAddress).then((api) => new Promise((resolve, reject) => {
-        const subscription = api.state$.subscribe((state) => {
-            subscription.unsubscribe();
-            if (state.isP1 || state.isP2 || state.p2PubKey == undefined) {
-                resolve({
-                    config: {
-                        isP1: state.isP1,
-                        api,
-                    },
-                    state,
-                });
-            } else {
-                reject(new Error('User authentication failed - pub key does not match P1 or P2'));
-            }
-        });
-    }));
-}
 
 export enum MatchState {
     Initializing,
@@ -248,7 +190,7 @@ const config = {
   type: Phaser.AUTO,
   width: GAME_WIDTH,
   height: GAME_HEIGHT,
-  scene: [MainMenu],
+  scene: [ContractLoader],
   render: {
     pixelArt: true,
   },

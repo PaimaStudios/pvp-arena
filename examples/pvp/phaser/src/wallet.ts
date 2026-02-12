@@ -50,11 +50,11 @@ export class BrowserDeploymentManager {
   constructor(private readonly logger: Logger) {
   }
 
-  async create(options: CreateMatchOptions): Promise<PVPArenaAPI> {
+  async create(): Promise<PVPArenaAPI> {
     console.log('getting providers');
     const providers = await this.getProviders();
     console.log('trying to create');
-    return PVPArenaAPI.deploy(providers, options, this.logger).then((api) => {
+    return PVPArenaAPI.deploy(providers, this.logger).then((api) => {
       console.log('got create api');
       return api;
     });

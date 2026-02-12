@@ -1,8 +1,9 @@
 import { ITEM, RESULT, STANCE, Hero, ARMOR, pureCircuits, GAME_STATE } from '@midnight-ntwrk/pvp-contract';
-import { safeJSONString, MatchState, fontStyle, GAME_WIDTH, rootObject, playSound } from '../main';
+import { MatchState, fontStyle, GAME_WIDTH, rootObject, playSound } from '../main';
 import { Arena } from './arena';
 import { MAX_HP, Rank, BloodDrop, DamageText, SandKickup, hpDiv } from '.';
 import { closeTooltip, makeTooltip, TooltipId } from '../menus/tooltip';
+import { safeJSONString } from '@midnight-ntwrk/pvp-api';
 
 const MELEE_ATTACK_TIME = 300;
 const BOW_ATTACK_TIME = 1000;

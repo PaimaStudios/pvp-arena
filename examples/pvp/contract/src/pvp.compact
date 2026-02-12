@@ -133,7 +133,7 @@ export ledger commit_nonce: Map<Field, Bytes<32>>;
 export ledger round: Map<Field, Uint<32>>;
 export ledger game_state: Map<Field, GAME_STATE>;
 export ledger p1_public_key: Map<Field, Field>;
-export ledger p2_public_key: Map<Field, Maybe<Field>>;
+export ledger p2_public_key: Map<Field, Field>;
 export ledger public: Map<Field, Boolean>;
 
 // while we could work around needing this by storing isPracticeMatch in localstorage
@@ -183,6 +183,13 @@ export circuit create_new_match(is_match_public: Boolean, is_match_practice: Boo
     is_practice.insert(match_id, disclose(is_match_practice));
 
     return match_id;
+}
+
+export circuit join_match(): [] {
+    const match_id = disclose(current_match_id());
+    assert(!p2_public_key.member(match_id), "Match not open");
+
+    p2_public_key.insert(match_id, derive_public_key(player_secret_key()));
 }
 
 export pure circuit calc_stats(hero: Hero): TotalStats {
@@ -338,7 +345,7 @@ export circuit p2_select_first_heroes(all_p2_heroes: Vector<2, HeroHack>): [] {
     const match_id = disclose(current_match_id());
 
     assert(game_state.lookup(match_id) == GAME_STATE.p2_selecting_first_heroes, "P2 must select first heroes right after match creation");
-    p2_public_key.insert(match_id, some<Field>(derive_public_key(player_secret_key())));
+    assert(p2_public_key.lookup(match_id) == derive_public_key(player_secret_key()), "Not authorized as P2");
     // TODO: can you map some here?
     p2_heroes.insert(match_id, [some<Hero>(hack_to_hero(disclose(all_p2_heroes[0]))), some<Hero>(hack_to_hero(disclose(all_p2_heroes[1]))), none<Hero>()]);
     p2_stats.insert(match_id, [calc_stats(p2_heroes.lookup(match_id)[0].value), calc_stats(p2_heroes.lookup(match_id)[1].value), p2_stats.lookup(match_id)[2]]);
@@ -374,7 +381,7 @@ export circuit p1_select_last_heroes(last_p1_heroes: Vector<2, HeroHack>): [] {
 export circuit p2_select_last_hero(last_hero: HeroHack): [] {
     const match_id = disclose(current_match_id());
     
-    assert(p2_public_key.lookup(match_id) == some<Field>(derive_public_key(player_secret_key())), "Not authorized as P2");
+    assert(p2_public_key.lookup(match_id) == derive_public_key(player_secret_key()), "Not authorized as P2");
     assert(game_state.lookup(match_id) == GAME_STATE.p2_selecting_last_hero, "P2 must select first heroes right after match creation");
     // TODO: can you map some here?
     p2_heroes.insert(match_id, [p2_heroes.lookup(match_id)[0], p2_heroes.lookup(match_id)[1], some<Hero>(hack_to_hero(disclose(last_hero)))]);
@@ -417,7 +424,7 @@ export circuit p1_commit_commands(nonce: Bytes<32>): [] {
 export circuit p2_commit_commands(): [] {
     const match_id = disclose(current_match_id());
 
-    assert(p2_public_key.lookup(match_id) == some<Field>(derive_public_key(player_secret_key())), "Not authorized as P2");
+    assert(p2_public_key.lookup(match_id) == derive_public_key(player_secret_key()), "Not authorized as P2");
     assert(game_state.lookup(match_id) == GAME_STATE.p2_commit_reveal, "P2 must commit after P1 commits");
     // check you're only targetting valid (alive) gladiators
     assert(!p2_alive_0.lookup(match_id) || (disclose(player_commands())[0] <= 2 && ((disclose(player_commands())[0] == 0 && p1_alive_0.lookup(match_id)) || (disclose(player_commands())[0] == 1 && p1_alive_1.lookup(match_id)) || (disclose(player_commands())[0] == 2 && p1_alive_2.lookup(match_id)))), "Invalid move [0]");
