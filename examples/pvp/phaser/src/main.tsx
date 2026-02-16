@@ -73,6 +73,8 @@ var createButton = function (scene: any, text: any) {
 export const GAME_WIDTH = 480;
 export const GAME_HEIGHT = 360;
 
+
+
 export function fontStyle(fontSize: number, extra?: Phaser.Types.GameObjects.Text.TextStyle): Phaser.Types.GameObjects.Text.TextStyle {
     // this font is really small for some reason, so double it
     return {
@@ -129,7 +131,6 @@ export function playSound(scene: Phaser.Scene, key: string) {
     }
 }
 
-s
 export function rootObject(obj: Phaser.GameObjects.GameObject & Phaser.GameObjects.Components.Transform): Phaser.GameObjects.Components.Transform {
     while (obj.parentContainer != undefined) {
         obj = obj.parentContainer;
@@ -142,6 +143,24 @@ export type ContractJoinInfo = {
     state: PVPArenaDerivedState;
 }
 
+// export async function joinContract(deployProvider: BrowserDeploymentManager, contractAddress: ContractAddress): Promise<ContractJoinInfo> {
+//     return deployProvider.join(contractAddress).then((api) => new Promise((resolve, reject) => {
+//         const subscription = api.state$.subscribe((state) => {
+//             subscription.unsubscribe();
+//             if (state.isP1 || state.isP2 || state.p2PubKey == undefined) {
+//                 resolve({
+//                     config: {
+//                         isP1: state.isP1,
+//                         api,
+//                     },
+//                     state,
+//                 });
+//             } else {
+//                 reject(new Error('User authentication failed - pub key does not match P1 or P2'));
+//             }
+//         });
+//     }));
+// }
 
 export enum MatchState {
     Initializing,

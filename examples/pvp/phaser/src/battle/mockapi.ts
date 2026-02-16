@@ -91,15 +91,14 @@ export class MockPVPArenaAPI implements DeployedPVPArenaAPI {
             throw new Error('Not P1 and p1_select_first_hero() called');
         }
         setTimeout(() => {
-            this.matches.set(this.currentMatchId!, {
+            this.updateMatch({
                 ...this.matches.get(this.currentMatchId!)!,
                 p1Heroes: [first_p1_hero],
                 state: GAME_STATE.p2_selecting_first_heroes,
             });
-            this.subscriber?.next(this.mockState);
             // mock p2 select first heroes
             setTimeout(() => {
-                this.matches.set(this.currentMatchId!, {
+                this.updateMatch({
                 ...this.matches.get(this.currentMatchId!)!,
                     p2Heroes: [
                         generateRandomHero(),
@@ -107,7 +106,6 @@ export class MockPVPArenaAPI implements DeployedPVPArenaAPI {
                     ],
                     state: GAME_STATE.p1_selecting_last_heroes,
                 });
-                this.subscriber?.next(this.mockState);
             }, MOCK_DELAY);
         }, MOCK_DELAY)
     }
@@ -117,20 +115,19 @@ export class MockPVPArenaAPI implements DeployedPVPArenaAPI {
             throw new Error('Not P2 and p2_select_first_heroes() called');
         }
         setTimeout(() => {
-            this.matches.set(this.currentMatchId!, {
+            this.updateMatch({
                 ...this.matches.get(this.currentMatchId!)!,
                 p2Heroes: heroes,
                 state: GAME_STATE.p1_selecting_last_heroes,
             });
-            this.subscriber?.next(this.mockState);
+
             // mock p1 selecting last heroes
             setTimeout(() => {
-                this.matches.set(this.currentMatchId!, {
+                this.updateMatch({
                 ...this.matches.get(this.currentMatchId!)!,
                     p1Heroes: [...this.mockState.currentMatch!.p1Heroes, generateRandomHero(), generateRandomHero()],
                     state: GAME_STATE.p2_selecting_last_hero,
                 });
-                this.subscriber?.next(this.mockState);
             });
         }, MOCK_DELAY)
     }
@@ -140,12 +137,11 @@ export class MockPVPArenaAPI implements DeployedPVPArenaAPI {
             throw new Error('Not P2 and p2_select_first_heroes() called');
         }
         setTimeout(() => {
-            this.matches.set(this.currentMatchId!, {
+            this.updateMatch({
                 ...this.matches.get(this.currentMatchId!)!,
                 p2Heroes: [...this.mockState.currentMatch!.p2Heroes, hero],
                 state: GAME_STATE.p1_commit,
             });
-            this.subscriber?.next(this.mockState);
             // also mock out p1 commit
             this.mockP1Commit();
         }, MOCK_DELAY)
@@ -156,20 +152,19 @@ export class MockPVPArenaAPI implements DeployedPVPArenaAPI {
             throw new Error('Not P1 and p1_select_last_heroes() called');
         }
         setTimeout(() => {
-            this.matches.set(this.currentMatchId!, {
+            this.updateMatch({
                 ...this.matches.get(this.currentMatchId!)!,
                 p1Heroes: [...this.mockState.currentMatch!.p1Heroes, ...last_p1_heroes],
                 state: GAME_STATE.p2_selecting_last_hero,
             });
-            this.subscriber?.next(this.mockState);
+
             // mock select last p2 hero
             setTimeout(() => {
-                this.matches.set(this.currentMatchId!, {
+                this.updateMatch({
                 ...this.matches.get(this.currentMatchId!)!,
                     p2Heroes: [...this.mockState.currentMatch!.p2Heroes, generateRandomHero()],
                     state: GAME_STATE.p1_commit,
                 });
-                this.subscriber?.next(this.mockState);
             }, MOCK_DELAY);
         }, MOCK_DELAY)
     }
@@ -180,13 +175,12 @@ export class MockPVPArenaAPI implements DeployedPVPArenaAPI {
         }
         console.log(`p1Commit(${safeJSONString(commands)}, ${JSON.stringify(stances)})`);
         setTimeout(() => {
-            this.matches.set(this.currentMatchId!, {
+            this.updateMatch({
                 ...this.matches.get(this.currentMatchId!)!,
                 p1Cmds: commands,
                 p1Stances: stances,
                 state: GAME_STATE.p2_commit_reveal,
             });
-            this.subscriber?.next(this.mockState);
             this.mockP2Commit();
         }, MOCK_DELAY);
     }
@@ -197,13 +191,12 @@ export class MockPVPArenaAPI implements DeployedPVPArenaAPI {
         }
         console.log(`p2Commit(${safeJSONString(commands)}, ${JSON.stringify(stances)})`);
         setTimeout(() => {
-            this.matches.set(this.currentMatchId!, {
+            this.updateMatch({
                 ...this.matches.get(this.currentMatchId!)!,
                 p2Cmds: commands,
                 p2Stances: stances,
                 state: GAME_STATE.p1_reveal,
             });
-            this.subscriber?.next(this.mockState);
             // mock p1 reveal
             this.p1Reveal(commands, stances);
         }, MOCK_DELAY);
@@ -238,7 +231,7 @@ export class MockPVPArenaAPI implements DeployedPVPArenaAPI {
             }
             const allP1Dead = p1Dmg.every((hp) => hp >= BigInt(MAX_HP));
             const allP2Dead = p2Dmg.every((hp) => hp >= BigInt(MAX_HP));
-            this.matches.set(this.currentMatchId!, {
+            this.updateMatch({
                 ...this.matches.get(this.currentMatchId!)!,
                 state: allP1Dead ? (allP2Dead ? GAME_STATE.tie : GAME_STATE.p2_win) : (allP2Dead ? GAME_STATE.p1_win : GAME_STATE.p1_commit),
                 round: this.mockState.currentMatch!.round + BigInt(1),
@@ -247,7 +240,7 @@ export class MockPVPArenaAPI implements DeployedPVPArenaAPI {
                 p1Alive,
                 p2Alive,
             });
-            this.subscriber?.next(this.mockState);
+
             // mock out p1 commit in case p1Reeal is called mocked out from p2's commands
             if (!this.isP1) {
                 this.mockP1Commit();
@@ -263,7 +256,7 @@ export class MockPVPArenaAPI implements DeployedPVPArenaAPI {
     private mockP1Commit() {
         setTimeout(() => {
             // just randomly attack/move
-            this.matches.set(this.currentMatchId!, {
+            this.updateMatch({
                 ...this.matches.get(this.currentMatchId!)!,
                 p1Cmds: this.mockState.currentMatch!.p1Cmds!.map((cmd, i) => {
                     if (this.mockState.currentMatch!.p1Dmg[i] < MAX_HP) {
@@ -290,14 +283,13 @@ export class MockPVPArenaAPI implements DeployedPVPArenaAPI {
                 }),
                 state: GAME_STATE.p2_commit_reveal,
             });
-            this.subscriber?.next(this.mockState);
         }, MOCK_DELAY);
     }
 
     private mockP2Commit() {
         setTimeout(() => {
             // just randomly attack/move
-            this.updateMatch(this.currentMatchId!, {
+            this.updateMatch({
                 ...this.matches.get(this.currentMatchId!)!,
                 p2Cmds: this.mockState.currentMatch!.p2Cmds!.map((cmd, i) => {
                     if (this.mockState.currentMatch!.p2Dmg[i] < MAX_HP) {
@@ -324,12 +316,13 @@ export class MockPVPArenaAPI implements DeployedPVPArenaAPI {
                 }),
                 state: GAME_STATE.p1_reveal,
             });
-            this.subscriber?.next(this.mockState);
         }, MOCK_DELAY);
     }
 
-    private updateMatch(matchId: bigint, newState: PVPArenaDerivedMatchState) {
-        this.matches.set(matchId, newState);
+    private updateMatch(newState: PVPArenaDerivedMatchState) {
+        this.matches.set(this.currentMatchId!, newState);
+        this.mockState.myMatches.set(this.currentMatchId!, newState);
+        this.mockState.currentMatch = newState;
         this.subscriber?.next(this.mockState);
     }
 }
