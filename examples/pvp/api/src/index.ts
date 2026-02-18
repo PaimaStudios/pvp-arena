@@ -6,15 +6,12 @@
 
 import { type ContractAddress } from '@midnight-ntwrk/compact-runtime';
 import { type Logger } from 'pino';
-import type { PVPArenaDerivedState, PVPArenaContract, PVPArenaProviders, DeployedPVPArenaContract, PrivateStates } from './common-types.js';
+import type { PVPArenaDerivedState, PVPArenaContract, PVPArenaProviders, DeployedPVPArenaContract, PVPArenaCompiledContract, PrivateStates } from './common-types.js';
 import {
   type PVPArenaPrivateState,
-  Contract,
   createPVPArenaPrivateState,
   ledger,
   pureCircuits,
-  witnesses,
-  RESULT,
   ITEM,
   ARMOR,
   Hero,
@@ -24,12 +21,9 @@ import {
  // Command,
 } from '@midnight-ntwrk/pvp-contract';
 import * as utils from './utils/index.js';
-import { deployContract, findDeployedContract, FoundContract } from '@midnight-ntwrk/midnight-js-contracts';
+import { deployContract, findDeployedContract, type DeployedContract } from '@midnight-ntwrk/midnight-js-contracts';
 import { combineLatest, map, tap, from, type Observable } from 'rxjs';
 import { PrivateStateProvider } from '@midnight-ntwrk/midnight-js-types';
-
-/** @internal */
-const pvpContractInstance: PVPArenaContract = new Contract(witnesses);
 
 function heroToHack(hero: Hero): HeroHack {
   return {
@@ -441,13 +435,14 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
    * @returns A `Promise` that resolves with a {@link PVPArenaAPI} instance that manages the newly deployed
    * {@link DeployedPVPArenaContract}; or rejects with a deployment error.
    */
-  static async deploy(providers: PVPArenaProviders, options: CreateMatchOptions, logger?: Logger): Promise<PVPArenaAPI> {
+  static async deploy(providers: PVPArenaProviders, compiledContract: PVPArenaCompiledContract, options: CreateMatchOptions, logger?: Logger): Promise<PVPArenaAPI> {
     logger?.info('deployContract');
 
-    const deployedPVPArenaContract: FoundContract<PVPArenaContract> = await deployContract(providers, {
+    const deployedPVPArenaContract: DeployedContract<PVPArenaContract> = await deployContract(providers, {
+      compiledContract,
       privateStateId: 'pvpPrivateState',
-      contract: pvpContractInstance,
-      initialPrivateState: await PVPArenaAPI.getPrivateState(providers.privateStateProvider),
+      // trying this since if I do the uncommented code the private state provider doesn't exist yet TODO: fix
+      initialPrivateState: createPVPArenaPrivateState(utils.randomBytes(32)),//await PVPArenaAPI.getPrivateState(providers.privateStateProvider),
       args: [options.isPublic],
     });
     logger?.trace({
@@ -468,7 +463,7 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
    * @returns A `Promise` that resolves with a {@link PVPArenaAPI} instance that manages the joined
    * {@link DeployedPVPArenaContract}; or rejects with an error.
    */
-  static async join(providers: PVPArenaProviders, contractAddress: ContractAddress, logger?: Logger): Promise<PVPArenaAPI> {
+  static async join(providers: PVPArenaProviders, compiledContract: PVPArenaCompiledContract, contractAddress: ContractAddress, logger?: Logger): Promise<PVPArenaAPI> {
     logger?.info({
       joinContract: {
         contractAddress,
@@ -476,8 +471,8 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
     });
 
     const deployedPVPArenaContract = await findDeployedContract(providers, {
+      compiledContract,
       contractAddress,
-      contract: pvpContractInstance,
       privateStateId: 'pvpPrivateState',
       initialPrivateState: await PVPArenaAPI.getPrivateState(providers.privateStateProvider),
     });

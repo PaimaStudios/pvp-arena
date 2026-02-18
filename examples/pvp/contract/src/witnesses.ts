@@ -20,7 +20,7 @@ export type PVPArenaPrivateState = {
   stances: STANCE[];
 };
 
-export const createPVPArenaPrivateState = (secretKey: Uint8Array) => ({
+export const createPVPArenaPrivateState: (secretKey: Uint8Array) => PVPArenaPrivateState = (secretKey: Uint8Array) => ({
   // EXERCISE 1b: INITIALIZE THE OBJECT OF TYPE PVPArenaPrivateState
   secretKey, // EXERCISE ANSWER
   commands: [],

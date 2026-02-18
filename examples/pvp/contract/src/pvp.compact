@@ -1,8 +1,6 @@
-pragma language_version >= 0.19;
+pragma language_version >= 0.20;
 
 import CompactStandardLibrary;
-
-export enum RESULT { p1_win, p2_win, tie, waiting, continue }
 
 export enum ITEM { nothing, axe, shield, bow, sword, spear }
 
@@ -134,7 +132,7 @@ export ledger round: Uint<32>;
 export ledger game_state: GAME_STATE;
 export ledger p1_public_key: Field;
 export ledger p2_public_key: Maybe<Field>;
-export ledger public: Boolean;
+export ledger is_public: Boolean;
 
 witness player_secret_key(): Bytes<32>;
 
@@ -162,7 +160,7 @@ constructor(is_match_public: Boolean) {
     p2_alive_0 = true;
     p2_alive_1 = true;
     p2_alive_2 = true;
-    public = disclose(is_match_public);
+    is_public = disclose(is_match_public);
 }
 
 export pure circuit calc_stats(hero: Hero): TotalStats {

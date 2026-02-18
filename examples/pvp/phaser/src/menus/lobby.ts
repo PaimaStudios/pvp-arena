@@ -73,6 +73,7 @@ async function getPlayerPublicKey(): Promise<string> {
 
     const privateStateProvider = levelPrivateStateProvider({
         privateStateStoreName: "pvp-private-state",
+        privateStoragePasswordProvider: () => "PAIMA_STORAGE_PASSWORD",
     });
 
     cachedPublicKey = (async () => {

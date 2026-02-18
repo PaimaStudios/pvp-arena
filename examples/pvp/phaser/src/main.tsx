@@ -1,10 +1,9 @@
 import { NetworkId, setNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 import '@midnight-ntwrk/dapp-connector-api';
-import { ITEM, RESULT, STANCE, Hero, ARMOR, pureCircuits, GAME_STATE } from '@midnight-ntwrk/pvp-contract';
+import { ITEM, STANCE, Hero, ARMOR, pureCircuits, GAME_STATE } from '@midnight-ntwrk/pvp-contract';
 import { type PVPArenaDerivedState, type DeployedPVPArenaAPI, PVPArenaAPI } from '@midnight-ntwrk/pvp-api';
 import './globals';
 import { type ContractAddress } from '@midnight-ntwrk/compact-runtime';
-import { LedgerState } from '@midnight-ntwrk/ledger-v6';
 import { BrowserDeploymentManager } from './wallet';
 import * as pino from 'pino';
 

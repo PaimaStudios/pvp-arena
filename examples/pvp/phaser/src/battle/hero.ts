@@ -1,4 +1,4 @@
-import { ITEM, RESULT, STANCE, Hero, ARMOR, pureCircuits, GAME_STATE } from '@midnight-ntwrk/pvp-contract';
+import { ITEM, STANCE, Hero, ARMOR, pureCircuits, GAME_STATE } from '@midnight-ntwrk/pvp-contract';
 import { safeJSONString, MatchState, fontStyle, GAME_WIDTH, rootObject, playSound } from '../main';
 import { Arena } from './arena';
 import { MAX_HP, Rank, BloodDrop, DamageText, SandKickup, hpDiv } from '.';

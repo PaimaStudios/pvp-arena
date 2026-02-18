@@ -1,5 +1,5 @@
 import '@midnight-ntwrk/dapp-connector-api';
-import { ITEM, RESULT, STANCE, Hero, ARMOR, pureCircuits, GAME_STATE } from '@midnight-ntwrk/pvp-contract';
+import { ITEM, STANCE, Hero, ARMOR, pureCircuits, GAME_STATE } from '@midnight-ntwrk/pvp-contract';
 import { type PVPArenaDerivedState, type DeployedPVPArenaAPI } from '@midnight-ntwrk/pvp-api';
 import 'phaser';
 import RexUIPlugin from 'phaser3-rex-plugins/templates/ui/ui-plugin'

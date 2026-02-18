@@ -1,44 +1,18 @@
-import { CreateMatchOptions, type DeployedPVPArenaAPI, PVPArenaAPI, type PVPArenaProviders } from '@midnight-ntwrk/pvp-api';
-import { CompactTypeBytes, transientCommit, type ContractAddress } from '@midnight-ntwrk/compact-runtime';
-import {
-  concatMap,
-  filter,
-  firstValueFrom,
-  interval,
-  map,
-  of,
-  take,
-  tap,
-  throwError,
-  timeout,
-  catchError,
-} from 'rxjs';
-import { pipe as fnPipe } from 'fp-ts/function';
+import { CreateMatchOptions, type DeployedPVPArenaAPI, PVPArenaAPI, type PVPArenaProviders, type PVPArenaCompiledContract } from '@midnight-ntwrk/pvp-api';
+import { type ContractAddress } from '@midnight-ntwrk/compact-runtime';
 import { type Logger } from 'pino';
-// import {
-//   type DAppConnectorAPI,
-//   type DAppConnectorWalletAPI,
-//   type ServiceUriConfig,
-// } from '@midnight-ntwrk/dapp-connector-api';
-import type { ConnectedAPI, InitialAPI } from "@midnight-ntwrk/dapp-connector-api";
+import type { ConnectedAPI } from "@midnight-ntwrk/dapp-connector-api";
+import { CompiledContract } from '@midnight-ntwrk/compact-js';
+import { Contract as PVPContract, witnesses } from '@midnight-ntwrk/pvp-contract';
 import { levelPrivateStateProvider } from '@midnight-ntwrk/midnight-js-level-private-state-provider';
 import { FetchZkConfigProvider } from '@midnight-ntwrk/midnight-js-fetch-zk-config-provider';
 import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider';
 import { indexerPublicDataProvider } from '@midnight-ntwrk/midnight-js-indexer-public-data-provider';
-import {
-  BalancedProvingRecipe,
-  TRANSACTION_TO_PROVE,
-  // type BalancedTransaction,
-  // type UnbalancedTransaction,
-  // createBalancedTx,
-} from '@midnight-ntwrk/midnight-js-types';
-import { CoinPublicKey, EncPublicKey, type ShieldedCoinInfo, Transaction, type TransactionId, UnprovenTransaction } from '@midnight-ntwrk/ledger-v6';
-import { Transaction as ZswapTransaction } from '@midnight-ntwrk/zswap';
+import type { UnboundTransaction } from '@midnight-ntwrk/midnight-js-types';
+import { CoinPublicKey, EncPublicKey, FinalizedTransaction, type TransactionId } from '@midnight-ntwrk/ledger-v7';
 import semver from 'semver';
 import { getNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
-//import { initializeProviders as initializeBatcherModeProviders } from './batcher-providers';
-import { NodeZkConfigProvider } from '@midnight-ntwrk/midnight-js-node-zk-config-provider';
-import * as ledgerv6 from '@midnight-ntwrk/ledger-v6';
+import * as ledger from '@midnight-ntwrk/ledger-v7';
 export class BrowserDeploymentManager {
   #initializedProviders: Promise<PVPArenaProviders> | undefined;
 
@@ -53,8 +27,9 @@ export class BrowserDeploymentManager {
   async create(options: CreateMatchOptions): Promise<PVPArenaAPI> {
     console.log('getting providers');
     const providers = await this.getProviders();
+    const compiledContract = createPVPCompiledContract();
     console.log('trying to create');
-    return PVPArenaAPI.deploy(providers, options, this.logger).then((api) => {
+    return PVPArenaAPI.deploy(providers, compiledContract, options, this.logger).then((api) => {
       console.log('got create api');
       return api;
     });
@@ -62,9 +37,10 @@ export class BrowserDeploymentManager {
   async join(contractAddress: ContractAddress): Promise<PVPArenaAPI> {
     console.log('getting providers');
     const providers = await this.getProviders();
+    const compiledContract = createPVPCompiledContract();
     console.log('trying to join');
     // TODO: do we need error handling?
-    return PVPArenaAPI.join(providers, contractAddress, this.logger)
+    return PVPArenaAPI.join(providers, compiledContract, contractAddress, this.logger)
       .then((api) => { console.log('got join api'); return api; });
   }
 
@@ -83,6 +59,12 @@ export class BrowserDeploymentManager {
     );
   }
 }
+
+const createPVPCompiledContract = (): PVPArenaCompiledContract =>
+  CompiledContract.make('pvp', PVPContract).pipe(
+    CompiledContract.withWitnesses(witnesses),
+    CompiledContract.withCompiledFileAssets(window.location.origin),
+  ) as PVPArenaCompiledContract;
 
 /** @internal */
 const toHex = (data: Uint8Array): string =>
@@ -103,58 +85,50 @@ const initializeProviders = async (logger: Logger): Promise<PVPArenaProviders> =
   const walletConfig = await wallet.getConfiguration();
 
   const walletProvider = {
-      getCoinPublicKey(): CoinPublicKey {
-        return shieldedCoinPublicKey;
-      },
-      getEncryptionPublicKey(): EncPublicKey {
-        return shieldedEncryptionPublicKey;
-      },
-      // balanceTx(tx: UnbalancedTransaction, newCoins: ShieldedCoinInfo[]): Promise<BalancedTransaction> {
-      //   return wallet
-      //     .balanceTransaction(
-      //       ZswapTransaction.deserialize(tx.serialize(getNetworkId()), getNetworkId()),
-      //       newCoins
-      //     )
-      //     .then((tx) => wallet.proveTransaction(tx))
-      //     .then((zswapTx) => Transaction.deserialize(zswapTx.serialize(getNetworkId()), getNetworkId()))
-      //     .then(createBalancedTx);
-      // },
-      async balanceTx(
-        tx: UnprovenTransaction,
-      ): Promise<BalancedProvingRecipe> {
-        return wallet
-          .balanceUnsealedTransaction(toHex(tx.serialize()))
-          .then(({ tx }: { tx: string }) => {
-            const balancedTx = ledgerv6.Transaction.deserialize(
-              'signature' as const,
-              'pre-proof' as const,
-              'pre-binding' as const,
-              fromHex(tx)
-            ) as UnprovenTransaction;
+    getCoinPublicKey(): CoinPublicKey {
+      return shieldedCoinPublicKey;
+    },
+    getEncryptionPublicKey(): EncPublicKey {
+      return shieldedEncryptionPublicKey;
+    },
+    async balanceTx(
+      tx: UnboundTransaction,
+    ): Promise<FinalizedTransaction> {
+      return wallet
+        .balanceUnsealedTransaction(toHex(tx.serialize()))
+        .then(({ tx }: { tx: string }) => {
+          return ledger.Transaction.deserialize(
+            'signature' as const,
+            'proof' as const,
+            'binding' as const,
+            fromHex(tx)
+          ) as FinalizedTransaction;
+      });
+    }
+  };
 
-            return {
-              type: TRANSACTION_TO_PROVE,
-              transaction: balancedTx,
-            };
-        });
-      }
-    };
+  const zkConfigPath = window.location.origin;
+  const zkConfigProvider = new FetchZkConfigProvider(
+    zkConfigPath,
+    fetch.bind(window),
+  );
 
   return {
-    // privateStateProvider: levelPrivateStateProvider({
-    //   privateStateStoreName: 'pvp-private-state',
-    // }),
     privateStateProvider: levelPrivateStateProvider<string>({
       privateStateStoreName: 'pvp-private-state',
-      walletProvider,
+      privateStoragePasswordProvider: () => 'PAIMA_STORAGE_PASSWORD'
+      //walletProvider,
     }),
     zkConfigProvider: new FetchZkConfigProvider(window.location.origin, fetch.bind(window)),
     //zkConfigProider: new NodeZkConfigProvider<'increment'>(contractConfig.zkConfigPath),
-    proofProvider: httpClientProofProvider(walletConfig.proverServerUri ?? 'TODO: what to put here? default proof server @ 6300 port?'),
+    proofProvider: httpClientProofProvider(
+      walletConfig.proverServerUri ?? 'http://localhost:6300',
+      zkConfigProvider
+    ),
     publicDataProvider: indexerPublicDataProvider(walletConfig.indexerUri, walletConfig.indexerWsUri),
     walletProvider,
     midnightProvider: {
-      async submitTx(tx: ledgerv6.FinalizedTransaction): Promise<TransactionId> {
+      async submitTx(tx: ledger.FinalizedTransaction): Promise<TransactionId> {
         logger.debug(" wallet.tx: submitTx called", { tx });
 
         try {
@@ -162,7 +136,7 @@ const initializeProviders = async (logger: Logger): Promise<PVPArenaProviders> =
           console.log(" wallet.ts: Submitting final balanced transaction to submitTransaction", { hexTx });
 
           // Compute transaction ID (hash) locally from the serialized transaction
-          const txId = ledgerv6.Transaction.deserialize(
+          const txId = ledger.Transaction.deserialize(
             'signature' as const,
             'proof' as const,
             'binding' as const,

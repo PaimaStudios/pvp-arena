@@ -6,7 +6,8 @@
 
 import { type MidnightProviders } from '@midnight-ntwrk/midnight-js-types';
 import { type FoundContract } from '@midnight-ntwrk/midnight-js-contracts';
-import type { Hero, RESULT, STANCE, GAME_STATE, PVPArenaPrivateState, Contract, Witnesses } from '@midnight-ntwrk/pvp-contract';
+import { CompiledContract } from '@midnight-ntwrk/compact-js';
+import type { Hero, STANCE, GAME_STATE, PVPArenaPrivateState, Contract, Witnesses } from '@midnight-ntwrk/pvp-contract';
 
 /**
  * The private states consumed throughout the application.
@@ -44,6 +45,13 @@ export type PVPArenaContract = Contract<PVPArenaPrivateState, Witnesses<PVPArena
  * @public
  */
 export type PVPArenaCircuitKeys = Exclude<keyof PVPArenaContract['impureCircuits'], number | symbol>;
+
+/**
+ * A compiled PVP arena contract binding ready for use with midnight-js.
+ *
+ * @public
+ */
+export type PVPArenaCompiledContract = CompiledContract.CompiledContract<PVPArenaContract, PVPArenaPrivateState>;
 
 /**
  * The providers required by {@link PVPArenaContract}.

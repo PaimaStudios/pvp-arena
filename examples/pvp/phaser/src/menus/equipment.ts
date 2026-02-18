@@ -1,4 +1,4 @@
-import { ITEM, RESULT, STANCE, Hero, ARMOR, pureCircuits, GAME_STATE, TotalStats } from '@midnight-ntwrk/pvp-contract';
+import { ITEM, STANCE, Hero, ARMOR, pureCircuits, GAME_STATE, TotalStats } from '@midnight-ntwrk/pvp-contract';
 import { Arena, BattleConfig } from '../battle/arena';
 import { GAME_WIDTH, GAME_HEIGHT, safeJSONString, gameStateStr, fontStyle, isMuted, makeCopyAddressButton, makeExitMatchButton, makeSoundToggleButton, playSound } from '../main';
 import { addHeroImages, createHeroAnims, generateRandomHero, HeroAnimationController } from '../battle/hero';

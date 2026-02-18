@@ -1,4 +1,4 @@
-import { ITEM, RESULT, STANCE, Hero, ARMOR, pureCircuits, GAME_STATE } from '@midnight-ntwrk/pvp-contract';
+import { ITEM, STANCE, Hero, ARMOR, pureCircuits, GAME_STATE } from '@midnight-ntwrk/pvp-contract';
 import { Arena } from './arena';
 import { fontStyle, GAME_WIDTH } from '../main';
 

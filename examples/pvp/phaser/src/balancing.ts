@@ -1,4 +1,4 @@
-import { ITEM, RESULT, STANCE, Hero, ARMOR, pureCircuits, GAME_STATE, TotalStats } from '@midnight-ntwrk/pvp-contract';
+import { ITEM, STANCE, Hero, ARMOR, pureCircuits, GAME_STATE, TotalStats } from '@midnight-ntwrk/pvp-contract';
 import { fontStyle, GAME_HEIGHT, GAME_WIDTH, safeJSONString } from './main';
 import { Button } from './menus/button';
 import { addHeroImages } from './battle/hero';
