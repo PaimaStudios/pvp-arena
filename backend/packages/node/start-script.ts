@@ -6,6 +6,7 @@ import { ComponentNames } from "@paimaexample/log";
 import { Value } from "@sinclair/typebox/value";
 import { launchMidnight } from "@paimaexample/orchestrator/start-midnight";
 
+
 const config = Value.Parse(OrchestratorConfig, {
   packageName: "@paimaexample",
   logs: "stdout",
@@ -19,7 +20,19 @@ const config = Value.Parse(OrchestratorConfig, {
 
   // Launch my processes
   processesToLaunch: [
-    ...launchMidnight("@pvp-arena-backend/midnight-contracts"),
+    ...launchMidnight("@pvp-arena-backend/midnight-contracts").map(p => {
+      p.logsStartDisabled = false;
+      return p;
+    }),
+    {
+      name: "batcher",
+      args: ["task", "-f", "@pvp-arena-backend/batcher", "start"],
+      waitToExit: false,
+      type: "system-dependency",
+      link: "http://localhost:3334",
+      stopProcessAtPort: [3334],
+      dependsOn: [ComponentNames.MIDNIGHT_CONTRACT],
+    },
   ],
   // Launch the Batcher with our PaimaL2 Contract
   // batcher: {

@@ -2,7 +2,7 @@ import { setNetworkId } from "@midnight-ntwrk/midnight-js-network-id";
 import { Buffer } from "node:buffer";
 import * as Rx from "rxjs";
 import { HDWallet, Roles } from "@midnight-ntwrk/wallet-sdk-hd";
-import { UnprovenTransactionRecipe, WalletFacade } from "@midnight-ntwrk/wallet-sdk-facade";
+import { type UnprovenTransactionRecipe, WalletFacade } from "@midnight-ntwrk/wallet-sdk-facade";
 import { ShieldedWallet } from "@midnight-ntwrk/wallet-sdk-shielded";
 import { DustWallet } from "@midnight-ntwrk/wallet-sdk-dust-wallet";
 import {
@@ -17,7 +17,7 @@ import {
   LedgerParameters,
   nativeToken,
   shieldedToken,
-  UnprovenTransaction,
+  type UnprovenTransaction,
   ZswapSecretKeys,
 } from "@midnight-ntwrk/ledger-v7";
 import { NetworkId } from "@midnight-ntwrk/wallet-sdk-abstractions";

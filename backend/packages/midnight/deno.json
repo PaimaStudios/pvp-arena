@@ -2,8 +2,7 @@
     "name": "@pvp-arena-backend/midnight-contracts",
     "version": "0.3.0",
     "exports": {
-        "./pvp": "./contract-pvp/src/index.ts",
-        "./counter": "./contract-counter/src/index.ts"
+        "./pvp": "./contract-pvp/src/index.ts"
     },
     "tasks": {
         "midnight-node:start": "MIDNIGHT_STORAGE_PASSWORD=yourpasswordmypassword CFG_PRESET=dev deno run -A --unstable-detect-cjs @paimaexample/npm-midnight-node --dev --rpc-port 9944 --state-pruning archive --blocks-pruning archive --public-addr /ip4/127.0.0.1 --unsafe-rpc-external",

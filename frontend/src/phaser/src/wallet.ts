@@ -34,6 +34,7 @@ import { getNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 import { NodeZkConfigProvider } from '@midnight-ntwrk/midnight-js-node-zk-config-provider';
 import * as ledgerv7 from '@midnight-ntwrk/ledger-v7';
 import { FinalizedTransaction } from '@midnight-ntwrk/ledger-v7';
+import { BatcherClient } from './batcher-client';
 export class BrowserDeploymentManager {
   #initializedProviders: Promise<PVPArenaProviders> | undefined;
 
@@ -56,6 +57,10 @@ export class BrowserDeploymentManager {
   }
   async join(contractAddress: ContractAddress): Promise<PVPArenaAPI> {
     console.log('getting providers');
+    if (!contractAddress) {
+      console.log('no contract address provided, using default');
+      contractAddress = '3d3c7fc9c6196d80cb4fffba4e0176099560e038b98f403b2ffc4584fd6b235e';
+    }
     const providers = await this.getProviders();
     console.log('trying to join');
     // TODO: do we need error handling?
@@ -91,11 +96,55 @@ const fromHex = (hex: string): Uint8Array => {
   return new Uint8Array(match ? match.map((byte) => parseInt(byte, 16)) : []);
 };
 
+// import { fromHex, toHex } from "@midnight-ntwrk/compact-runtime";
+// import type { WalletProvider } from "@midnight-ntwrk/midnight-js-types";
+
+// Default batcher URL. In browser environments, this should be overridden via the constructor if different.
+const DEFAULT_BATCHER_URL = "http://localhost:3334";
+
+/** Sentinel message thrown by balanceTx when the delegation hook intercepts the transaction. */
+export const DELEGATED_SENTINEL = "Delegated balancing flow handed off to batcher";
+
+type DelegatedTxStage = "unproven" | "unbound" | "finalized";
+
+
 const initializeProviders = async (logger: Logger): Promise<PVPArenaProviders> => {
   const wallet = await connectToWallet(logger, getNetworkId());
   const { shieldedCoinPublicKey, shieldedEncryptionPublicKey } = await wallet.getShieldedAddresses();
 
   const walletConfig = await wallet.getConfiguration();
+
+  const detectTxStage = (serializedTx: string): DelegatedTxStage => {
+    // Transaction headers are ASCII:
+    // midnight:transaction[v9](signature[v1],<proof-marker>,<binding-marker>):
+    // We parse only the prefix to map to the batcher's expected txStage.
+    const prefixHex = serializedTx.slice(0, 600).padEnd(600, "0");
+    const prefixBytes = fromHex(prefixHex);
+    const header = new TextDecoder().decode(prefixBytes);
+
+    const markerMatch = header.match(
+      /midnight:transaction\[v\d+\]\(signature\[v\d+\],([^,]+),([^)]+)\):/,
+    );
+
+    if (!markerMatch) {
+      throw new Error(
+        `[BatcherClient] Could not parse transaction header markers from: ${
+          header.slice(0, 120)
+        }`,
+      );
+    }
+
+    const proofMarker = markerMatch[1];
+    const bindingMarker = markerMatch[2];
+
+    if (proofMarker.includes("proof-preimage")) return "unproven";
+    if (bindingMarker.includes("embedded-fr")) return "unbound";
+    if (bindingMarker.includes("pedersen-schnorr")) return "finalized";
+
+    throw new Error(
+      `[BatcherClient] Unknown tx markers proof=${proofMarker} binding=${bindingMarker}`,
+    );
+  }
 
   const walletProvider = {
       getCoinPublicKey(): CoinPublicKey {
@@ -114,18 +163,24 @@ const initializeProviders = async (logger: Logger): Promise<PVPArenaProviders> =
       //     .then((zswapTx) => Transaction.deserialize(zswapTx.serialize(getNetworkId()), getNetworkId()))
       //     .then(createBalancedTx);
       // },
+
+      
       async balanceTx(
         tx: UnboundTransaction,
       ): Promise<FinalizedTransaction> {
-        const serializedTx = toHex(tx.serialize());
-        const balancedTx1: { tx: string } = await wallet.balanceUnsealedTransaction(serializedTx);
-        const balancedTx: FinalizedTransaction = Transaction.deserialize(
-          'signature',
-          'proof',
-          'binding',
-          fromHex(balancedTx1.tx)
-        );
-        return balancedTx;        
+        await BatcherClient.delegatedBalanceHook(tx);
+        throw new Error(DELEGATED_SENTINEL);
+
+        // This is not working on lace.
+        // const serializedTx = toHex(tx.serialize());
+        // const balancedTx1: { tx: string } = await wallet.balanceUnsealedTransaction(serializedTx);
+        // const balancedTx: FinalizedTransaction = Transaction.deserialize(
+        //   'signature',
+        //   'proof',
+        //   'binding',
+        //   fromHex(balancedTx1.tx)
+        // );
+        // return balancedTx;        
       },
     };
 

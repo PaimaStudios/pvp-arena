@@ -30,13 +30,15 @@ export class ContractLoader extends Phaser.Scene {
     create() {
         this.add.image(GAME_WIDTH, GAME_HEIGHT, 'arena_bg').setPosition(GAME_WIDTH / 2, GAME_HEIGHT / 2).setDepth(-3);
         this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.65, 'Connecting to contract...', fontStyle(18)).setOrigin(0.5, 0.65);
-        // this.deployProvider.join(import.meta.env.VITE_CONTRACT_ADDRESS).then((api) => {
-        //     this.api = api;
-        //     this.subscription = api.state$.subscribe((state) => this.onStateChange(state));
-        // });
-        const api = new MockPVPArenaAPI(true);
-        this.scene.add('MainMenu', new MainMenu(api, api.mockState));
-        this.scene.start('MainMenu');
+        const contractAddress = import.meta.env.VITE_CONTRACT_ADDRESS;
+        logger.info(`Joining contract at address: ${contractAddress}`);
+        this.deployProvider.join(contractAddress).then((api) => {
+            logger.info(`Successfully joined contract at address: ${contractAddress}`);
+            this.api = api;
+            this.subscription = api.state$.subscribe((state) => this.onStateChange(state));
+        }).catch((err) => {
+            logger.error(`Failed to join contract at address: ${contractAddress} — ${err}`);
+        });
     }
 
     preload() {

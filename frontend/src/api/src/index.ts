@@ -226,7 +226,7 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
 
         const matchStates = new Map(ledgerState.game_state);
 
-        const currentMatch = privateState.currentMatchId == null ? parseMatchState(privateState.currentMatchId!) : null;
+        const currentMatch = privateState.currentMatchId !== null ? parseMatchState(privateState.currentMatchId!) : null;
 
         // in practice mode we locally run everything in the mockapi but ran on-chain
         if (currentMatch?.isPractice === true) {
@@ -524,9 +524,8 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
 
     console.log('pvpCompiledContract', pvpCompiledContract);
     console.log('contractAddress', contractAddress);
-    const aaa = '1201afabea1f7bf16282bb5a0a3f54acb3c93695368d527106cbc55e363c0cf3';
     const deployedPVPArenaContract = await findDeployedContract(providers, {
-      contractAddress: aaa,
+      contractAddress,
       compiledContract: pvpCompiledContract,
       privateStateId: 'pvpPrivateState',
       initialPrivateState: await PVPArenaAPI.getPrivateState(providers.privateStateProvider),

@@ -10,6 +10,7 @@ import { BalancingTest, heroBalancing } from '../balancing';
 import { MainMenu } from './main';
 import { StatusUI } from '.';
 import { DeployedPVPArenaAPI, PVPArenaDerivedState } from '@midnight-ntwrk/pvp-api';
+import { BatcherClient } from '../batcher-client';
 
 
 export class CreateMenu extends Phaser.Scene {
@@ -31,6 +32,7 @@ export class CreateMenu extends Phaser.Scene {
         this.status = new StatusUI(this, [
             new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.3, 128, 32, 'Public Match', 12, () => {
                 this.status!.setText('Creating public match, please wait...');
+                BatcherClient.setCircuitName('create_new_match');
                 this
                     .api
                     .create_new_match(true, false).then((matchId) => {
@@ -46,6 +48,7 @@ export class CreateMenu extends Phaser.Scene {
             }, 'Host a public match'),
             new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.5, 128, 32, 'Private Match', 12, () => {
                 this.status!.setText('Creating private match, please wait...');
+                BatcherClient.setCircuitName('create_new_match');
                 this.api
                     .create_new_match(false, false)
                     .then((matchId) => {

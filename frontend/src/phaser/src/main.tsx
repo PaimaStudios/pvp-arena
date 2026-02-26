@@ -25,7 +25,8 @@ function getNetworkId(): NetworkId {
     //         console.error(`Unknown Vite MODE ${import.meta.env.MODE}, defaulting to undeployed`);
     //         return NetworkId.Undeployed;
     // }
-    return import.meta.env.MODE;
+    return "undeployed";
+    // return import.meta.env.MODE;
 }
 // Ensure that the network IDs are set within the Midnight libraries.
 setNetworkId(networkId);

@@ -15,7 +15,7 @@ export default defineConfig({
     target: "esnext",
     minify: false,
   },
-  plugins: [wasm(), react(), viteCommonjs(), nodePolyfills({ include: ['crypto'] })],
+  plugins: [wasm(), react(), viteCommonjs(), nodePolyfills({})],
   optimizeDeps: {
     esbuildOptions: {
       target: "esnext",

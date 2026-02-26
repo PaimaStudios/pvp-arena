@@ -10,6 +10,7 @@ import { BalancingTest, heroBalancing } from '../balancing';
 import { MainMenu } from './main';
 import { StatusUI } from '.';
 import { DeployedPVPArenaAPI, PVPArenaDerivedState } from '@midnight-ntwrk/pvp-api';
+import { BatcherClient } from '../batcher-client';
 
 
 export class PracticeMenu extends Phaser.Scene {
@@ -32,7 +33,9 @@ export class PracticeMenu extends Phaser.Scene {
         this.status = new StatusUI(this, [
             new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.3, 128, 32, 'On-chain Practice', 10, () => {
                 this.status?.setText('Creating match, please wait...');
+                BatcherClient.setCircuitName('create_new_match');
                 this.api.create_new_match(false, true).then((matchId) => {
+                    BatcherClient.setCircuitName('');
                     this.api.setCurrentMatch(matchId).then(() => {
                         this.scene.remove('EquipmentMenu');
                         const equipMenu = new EquipmentMenu({ api: this.api, isP1: true });

@@ -12,6 +12,7 @@ import { Arena } from "../battle/arena";
 import { StatusUI } from ".";
 import { init } from "fp-ts/lib/ReadonlyNonEmptyArray";
 import { Subscription } from "rxjs/internal/Subscription";
+import { BatcherClient } from "../batcher-client";
 
 type OpenMatchInfo = {
     matchId: bigint;
@@ -411,6 +412,7 @@ export class LobbyMenu extends Phaser.Scene {
 
     join(matchId: bigint) {
         this.status!.setText("Joining match, please wait...");
+        BatcherClient.setCircuitName('set_current_match');
         this
             .api
             .setCurrentMatch(matchId)
