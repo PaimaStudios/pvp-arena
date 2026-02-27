@@ -22,6 +22,8 @@ const config = Value.Parse(OrchestratorConfig, {
   processesToLaunch: [
     ...launchMidnight("@pvp-arena-backend/midnight-contracts").map(p => {
       p.logsStartDisabled = false;
+      p.disableStderr = false;
+      p.logs = 'raw';
       return p;
     }),
     {

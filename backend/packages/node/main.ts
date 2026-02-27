@@ -25,18 +25,27 @@ import {
 import { PrimitiveTypeMidnightGeneric, PrimitiveTypeUtxorpcGeneric } from "@paimaexample/sm/builtin";
 import * as PVPContract from "@pvp-arena-backend/midnight-contracts/pvp";
 import { readMidnightContract } from "@paimaexample/midnight-contracts/read-contract";
+import * as path from "@std/path";
+import { builtinGrammars } from "@paimaexample/sm/grammar";
 
 const grammar = {
-  my_action_name: [
-    ["input", Type.String()],
-  ],
+  midnightContractState: builtinGrammars.midnightGeneric,
 } as const satisfies GrammarDefinition;
 
 
 const counterAddress = readMidnightContract(
-  "contract-counter",
-  { networkId: midnightNetworkConfig.id },
+  "contract-pvp",
+  { 
+    baseDir: path.resolve(import.meta.dirname!, "..", "midnight"),
+    networkId: midnightNetworkConfig.id,
+  },
 ).contractAddress;
+
+if (!counterAddress) {
+  throw new Error("Counter address not found");
+} else {
+  console.log("Counter address found:", counterAddress);
+}
 
 export const localhostConfig = new ConfigBuilder()
   .setNamespace(
@@ -100,7 +109,7 @@ export const localhostConfig = new ConfigBuilder()
   .build();
 
 const stm = new PaimaSTM<typeof grammar, {}>(grammar);
-stm.addStateTransition("my_action_name", function* (data) {
+stm.addStateTransition("midnightContractState", function* (data) {
   console.log("--------------------------------");
   console.log("State Transition Function");
   console.log("Input Data:", data.parsedInput);
