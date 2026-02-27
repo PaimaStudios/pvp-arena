@@ -18,7 +18,10 @@ let midnightContractData: ReturnType<typeof readMidnightContract> | null = null;
 try {
   midnightContractData = readMidnightContract(
     "contract-pvp",
-    { networkId: midnightNetworkConfig.id },
+    { 
+      baseDir: path.resolve(import.meta.dirname!, "..", "midnight"),
+      networkId: midnightNetworkConfig.id,
+    },
   );
 } catch (e) {
   console.warn(
@@ -40,26 +43,26 @@ const zkConfigPath = midnightContractData?.zkConfigPath ??
     "..", "midnight","contract-pvp", "src", "managed"
   );
 
-const midnightAdapter = new MidnightAdapter(
-    midnightContractData.contractAddress,
-    midnightNetworkConfig.walletSeed!,
-    {
-      indexer: midnightNetworkConfig.indexer,
-      indexerWS: midnightNetworkConfig.indexerWS,
-      node: midnightNetworkConfig.node,
-      proofServer: midnightNetworkConfig.proofServer,
-      zkConfigPath: midnightContractData.zkConfigPath,
-      privateStateStoreName: "counter-private-state",
-      privateStateId: "counterPrivateState",
-      contractJoinTimeoutSeconds: 300,
-      walletFundingTimeoutSeconds: 300,
-      walletNetworkId: midnightNetworkConfig.id,
-    },
-    new Contract(witnesses),
-    witnesses,
-    midnightContractData.contractInfo,
-    "parallelMidnight",
-  );
+// const midnightAdapter = new MidnightAdapter(
+//     midnightContractData.contractAddress,
+//     midnightNetworkConfig.walletSeed!,
+//     {
+//       indexer: midnightNetworkConfig.indexer,
+//       indexerWS: midnightNetworkConfig.indexerWS,
+//       node: midnightNetworkConfig.node,
+//       proofServer: midnightNetworkConfig.proofServer,
+//       zkConfigPath: midnightContractData.zkConfigPath,
+//       privateStateStoreName: "pvp-private-state",
+//       privateStateId: "pvpPrivateState",
+//       contractJoinTimeoutSeconds: 300,
+//       walletFundingTimeoutSeconds: 300,
+//       walletNetworkId: midnightNetworkConfig.id,
+//     },
+//     new Contract(witnesses),
+//     witnesses,
+//     midnightContractData.contractInfo,
+//     "parallelMidnight",
+//   );
 
 // The balancing adapter handles delegated transactions from BatcherClient.
 const midnightBalancingAdapter = new WerewolfBalancingAdapter(
@@ -77,26 +80,14 @@ const midnightBalancingAdapter = new WerewolfBalancingAdapter(
 export const config: BatcherConfig = {
   pollingIntervalMs: batchIntervalMs,
   adapters: {
-    // paimaL2,
-    ...(midnightAdapter ? { midnight: midnightAdapter } : {}),
-    ...(midnightBalancingAdapter
-      ? { midnight_balancing: midnightBalancingAdapter }
-      : {}),
+    // ...({ midnight: midnightAdapter }),
+    ...({ midnight_balancing: midnightBalancingAdapter }),
   },
-  defaultTarget: midnightAdapter ? "midnight" : "midnight_balancing",
+  defaultTarget: "midnight_balancing",
   namespace: "",
   batchingCriteria: {
-    ...(midnightAdapter
-      ? { midnight: { criteriaType: "time", timeWindowMs: batchIntervalMs } }
-      : {}),
-    ...(midnightBalancingAdapter
-      ? {
-        midnight_balancing: {
-          criteriaType: "time",
-          timeWindowMs: batchIntervalMs,
-        },
-      }
-      : {}),
+    // ...({ midnight: { criteriaType: "time", timeWindowMs: batchIntervalMs } }),
+    ...({ midnight_balancing: { criteriaType: "time", timeWindowMs: batchIntervalMs } }),
   },
   confirmationLevel: "wait-effectstream-processed", // Connector expectation
   enableHttpServer: true,
