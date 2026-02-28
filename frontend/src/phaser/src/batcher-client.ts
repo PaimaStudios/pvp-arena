@@ -27,14 +27,6 @@ type DelegatedTxStage = "unproven" | "unbound" | "finalized";
 export class BatcherClient {
 
   /**
-   * @param contract - The Lace-joined Werewolf contract instance (with callTx methods)
-   * @param provider - The wallet+midnight provider object returned by createWalletAndMidnightProvider.
-   *                   This must be the SAME object reference used by the contract's providers,
-   *                   as we set __delegatedBalanceHook on it to intercept balanceTx.
-   * @param batcherUrl - URL of the batcher's /send-input endpoint (default: http://localhost:3334)
-   */
-
-  /**
    * Returns true if the error originated from our delegation hook sentinel.
    */
   private isDelegationError(error: unknown): boolean {
@@ -92,36 +84,36 @@ export class BatcherClient {
     tx: UnboundTransaction,
     // _newCoins?: any,
     // _ttl?: Date,
-  ): Promise<void> {
+  ): Promise<string | null> {
     let serializedTx = toHex(tx.serialize());
+
+    // Post to batcher immediately
+    if (!this.circuitName) {
+      console.trace();
+      console.warn("[BatcherClient] Circuit name not set — using 'unknown' as fallback circuitId");
+    }
 
     // Attempt to bind the transaction if the method exists
     if (typeof tx.bind === "function") {
       try {
         serializedTx = toHex(tx.bind().serialize());
       } catch (e) {
-        // console.warn(`[BatcherClient] Failed to bind ${circuitName} tx`, e);
+        console.warn(`[BatcherClient] Failed to bind ${this.circuitName} tx`, e);
       }
     }
 
     const txStage = this.detectTxStage(serializedTx);
-
-    // Post to batcher immediately
-    if (!this.circuitName) {
-      console.error("Circuit name not set");
-    }
-    await this.postToBatcher(serializedTx, this.circuitName, txStage);
+    const circuitId = this.circuitName || 'unknown';
+    // reset the circuit name
     BatcherClient.setCircuitName('');
-
-    // Throw sentinel to safely abort the rest of the Midnight SDK pipeline
-    throw new Error(DELEGATED_SENTINEL);
+    return await this.postToBatcher(serializedTx, circuitId, txStage);
   };
 
   private static async postToBatcher(
     serializedTx: string,
     circuitId: string,
     txStage: DelegatedTxStage = "finalized",
-  ): Promise<void> {
+  ): Promise<string | null> {
     console.log(
       `🔍 [BatcherClient] Posting to Batcher at ${DEFAULT_BATCHER_URL}/send-input...`,
     );
@@ -137,6 +129,7 @@ export class BatcherClient {
         }),
         timestamp: Date.now(),
       },
+      // confirmationLevel: "wait-effectstream-processed",
       confirmationLevel: "wait-receipt",
     };
 
@@ -161,10 +154,13 @@ export class BatcherClient {
         console.error(`❌ [BatcherClient] Batcher failed:`, result.message);
         throw new Error(`Batcher failed: ${result.message}`);
       }
+      console.log('>>>', result);
 
+      const txHash: string | null = result.transactionHash ?? null;
       console.log(
-        `✅ [BatcherClient] ${circuitId} submitted successfully via batcher!`,
+        `✅ [BatcherClient] ${circuitId} submitted successfully via batcher! txHash=${txHash}`,
       );
+      return txHash;
     } catch (e) {
       console.error(`❌ [BatcherClient] Network error calling batcher:`, e);
       throw e;

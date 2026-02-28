@@ -158,6 +158,8 @@ export circuit create_new_match(is_match_public: Boolean, is_match_practice: Boo
 
     p1_heroes.insert(match_id, [none<Hero>(), none<Hero>(), none<Hero>()]);
     p2_heroes.insert(match_id, [none<Hero>(), none<Hero>(), none<Hero>()]);
+    p1_stats.insert(match_id, [TotalStats { 0, 0, 0, 0, 0, 0 }, TotalStats { 0, 0, 0, 0, 0, 0 }, TotalStats { 0, 0, 0, 0, 0, 0 }]);
+    p2_stats.insert(match_id, [TotalStats { 0, 0, 0, 0, 0, 0 }, TotalStats { 0, 0, 0, 0, 0, 0 }, TotalStats { 0, 0, 0, 0, 0, 0 }]);
     //p1_dmg = [0, 0, 0];
     //p2_dmg = [0, 0, 0];
     p1_stances.insert(match_id, [STANCE.neutral, STANCE.neutral, STANCE.neutral]);
@@ -169,6 +171,8 @@ export circuit create_new_match(is_match_public: Boolean, is_match_practice: Boo
     p2_dmg_1.insert(match_id, 0);
     p2_dmg_2.insert(match_id, 0);
     p1_public_key.insert(match_id, derive_public_key(player_secret_key()));
+    // TODO ??
+    p2_public_key.insert(match_id, derive_public_key(player_secret_key()));
     round.insert(match_id, 0);
     game_state.insert(match_id, GAME_STATE.p1_selecting_first_hero);
     // p1_alive = [true, true, true];
@@ -336,8 +340,19 @@ export circuit p1_select_first_hero(first_p1_hero: HeroHack): [] {
 
     assert(p1_public_key.lookup(match_id) == derive_public_key(player_secret_key()), "Not authorized as P1");
     assert(game_state.lookup(match_id) == GAME_STATE.p1_selecting_first_hero, "P1 must select first hero right after contract creation");
-    p1_heroes.insert(match_id, [some<Hero>(hack_to_hero(disclose(first_p1_hero))), none<Hero>(), none<Hero>()]);
-    p1_stats.insert(match_id, [calc_stats(p1_heroes.lookup(match_id)[0].value), p1_stats.lookup(match_id)[1], p1_stats.lookup(match_id)[2]]);
+    
+    const p1h = [some<Hero>(hack_to_hero(disclose(first_p1_hero))), none<Hero>(), none<Hero>()];
+    p1_heroes.insert(match_id, p1h);
+
+    const p1h0 = p1_heroes.lookup(match_id)[0].value;
+    const p1s0 = calc_stats(p1h0);
+    // const p1h1 = p1_heroes.lookup(match_id)[1];
+    // const p1h2 = p1_heroes.lookup(match_id)[2];
+    const p1s1 = p1_stats.lookup(match_id)[1];
+    const p1s2 = p1_stats.lookup(match_id)[2];
+    const p1s = [p1s0, p1s1, p1s2];
+    p1_stats.insert(match_id, p1s);
+ 
     game_state.insert(match_id, GAME_STATE.p2_selecting_first_heroes);
 }
 
@@ -347,8 +362,14 @@ export circuit p2_select_first_heroes(all_p2_heroes: Vector<2, HeroHack>): [] {
     assert(game_state.lookup(match_id) == GAME_STATE.p2_selecting_first_heroes, "P2 must select first heroes right after match creation");
     assert(p2_public_key.lookup(match_id) == derive_public_key(player_secret_key()), "Not authorized as P2");
     // TODO: can you map some here?
-    p2_heroes.insert(match_id, [some<Hero>(hack_to_hero(disclose(all_p2_heroes[0]))), some<Hero>(hack_to_hero(disclose(all_p2_heroes[1]))), none<Hero>()]);
-    p2_stats.insert(match_id, [calc_stats(p2_heroes.lookup(match_id)[0].value), calc_stats(p2_heroes.lookup(match_id)[1].value), p2_stats.lookup(match_id)[2]]);
+    const p2arg0 = some<Hero>(hack_to_hero(disclose(all_p2_heroes[0])));
+    const p2arg1 = some<Hero>(hack_to_hero(disclose(all_p2_heroes[1])));
+    const p2h = [p2arg0, p2arg1, none<Hero>()];
+    p2_heroes.insert(match_id, p2h);
+    const p2s0 = calc_stats(p2h[0].value);
+    const p2s1 = calc_stats(p2h[1].value);
+    const p2s = [p2s0, p2s1, p2_stats.lookup(match_id)[2]];
+    p2_stats.insert(match_id, p2s);
     game_state.insert(match_id, GAME_STATE.p1_selecting_last_heroes);
 
     base_damage_cache_p1_0_0.insert(match_id, ((100 - p2_stats.lookup(match_id)[0].crush_def) * p1_stats.lookup(match_id)[0].crush_dmg + (100 - p2_stats.lookup(match_id)[0].pierce_def) * p1_stats.lookup(match_id)[0].pierce_dmg + (50 +p2_stats.lookup(match_id)[0].weight - p1_stats.lookup(match_id)[0].weight) * p1_stats.lookup(match_id)[0].dex_bonus) as Uint<32>);

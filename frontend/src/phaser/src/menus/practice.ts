@@ -49,11 +49,16 @@ export class PracticeMenu extends Phaser.Scene {
             }, 'Practice on-chain against the AI'),
             new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.55, 128, 32, 'Offline Practice', 10, () => {
                 this.status?.setText('Entering offline practice arena...');
-                setTimeout(() => {
+                const mockApi = new MockPVPArenaAPI(true);
+                mockApi.create_new_match(false, true).then((matchId) => {
+                    return mockApi.setCurrentMatch(matchId);
+                }).then(() => {
                     this.scene.remove('EquipmentMenu');
-                    this.scene.add('EquipmentMenu', new EquipmentMenu({ api: new MockPVPArenaAPI(true), isP1: true }));
+                    this.scene.add('EquipmentMenu', new EquipmentMenu({ api: mockApi, isP1: true }));
                     this.scene.start('EquipmentMenu');
-                }, 500);
+                }).catch((e) => {
+                    this.status?.setError(e);
+                });
             }, 'Practice off-chain against the AI'),
             new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.8, 128, 32, 'Back', 12, () => {
                 this.scene.remove('MainMenu');

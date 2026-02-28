@@ -10,6 +10,7 @@ import { Button } from '../menus/button';
 import { init } from 'fp-ts/lib/ReadonlyNonEmptyArray';
 import { closeTooltip, makeTooltip, TooltipId } from '../menus/tooltip';
 import { OFFLINE_PRACTICE_CONTRACT_ADDR } from './mockapi';
+import { BatcherClient } from '../batcher-client';
 import { Subscription } from 'rxjs';
 import { StatusUI } from '../menus';
 
@@ -201,6 +202,7 @@ export class Arena extends Phaser.Scene
                 if (this.config.isP1) {
                     console.log('revealing move (as p1)');
                     this.setMatchState(MatchState.RevealingMove);
+                    BatcherClient.setCircuitName('p1_reveal_commands');
                     this.config.api.p1Reveal(this.movesForContract(), this.stancesForContract())
                         .catch((e) => {
                             // just re-try
@@ -467,10 +469,12 @@ export class Arena extends Phaser.Scene
                     // still must send moves for dead units to make sure indexing works, so pad with 0's
                     if (this.config.isP1) {
                         console.log('submitting move (as p1)');
+                        BatcherClient.setCircuitName('p1_commit_commands');
                         this.config.api.p1Commit(this.movesForContract(), this.stancesForContract())
                             .catch((e) => this.recoverFromSubmitError(MatchState.WaitingOnPlayer, e));
                     } else {
                         console.log('submitting move (as p2)');
+                        BatcherClient.setCircuitName('p2_commit_commands');
                         this.config.api.p2Commit(this.movesForContract(), this.stancesForContract())
                            .catch((e) => this.recoverFromSubmitError(MatchState.WaitingOnPlayer, e));
                     }
@@ -491,10 +495,12 @@ export class Arena extends Phaser.Scene
             // still must send moves for dead units to make sure indexing works, so pad with 0's
             if (this.config.isP1) {
                 console.log('submitting move (as p1)');
+                BatcherClient.setCircuitName('p1_commit_commands');
                 this.config.api.p1Commit(this.movesForContract(), this.stancesForContract())
                     .catch((e) => this.recoverFromSubmitError(MatchState.WaitingOnPlayer, e));
             } else {
                 console.log('submitting move (as p2)');
+                BatcherClient.setCircuitName('p2_commit_commands');
                 this.config.api.p2Commit(this.movesForContract(), this.stancesForContract())
                     .catch((e) => this.recoverFromSubmitError(MatchState.WaitingOnPlayer, e));
             }

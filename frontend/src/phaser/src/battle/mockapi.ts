@@ -35,7 +35,7 @@ export class MockPVPArenaAPI implements DeployedPVPArenaAPI {
         this.nextMatch = BigInt(0);
     }
 
-    async create_new_match(is_match_public: boolean): Promise<bigint> {
+    async create_new_match(is_match_public: boolean, _is_match_practice?: boolean): Promise<bigint> {
         console.log(`running mockapi: create_new_match`);
         return new Promise((resolve) => {
             setTimeout(() => {

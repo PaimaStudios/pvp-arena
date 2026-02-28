@@ -5,6 +5,7 @@ import { addHeroImages, createHeroAnims, generateRandomHero, HeroAnimationContro
 import { type HeroIndex, Rank, type Team } from '../battle';
 import { Button } from './button';
 import { OFFLINE_PRACTICE_CONTRACT_ADDR } from '../battle/mockapi';
+import { BatcherClient } from '../batcher-client';
 import { PVPArenaDerivedState, safeJSONString } from '@midnight-ntwrk/pvp-api';
 import { Subscription } from 'rxjs';
 import { StatusUI } from '.';
@@ -399,8 +400,9 @@ export class EquipmentMenu extends Phaser.Scene {
     }
 
     onStateChange(state: PVPArenaDerivedState) {
+        if (!state.currentMatch) return;
         console.log(`new state: ${safeJSONString(state)}`);
-        console.log(`NOW: ${gameStateStr(state.currentMatch!.state)}`);
+        console.log(`NOW: ${gameStateStr(state.currentMatch.state)}`);
 
         // when joining this.selecting could be out of date
         switch (state.currentMatch!.state) {
@@ -544,6 +546,7 @@ export class EquipmentMenu extends Phaser.Scene {
             switch (this.selecting) {
                 case 0:
                     this.setSetupState(SetupState.Submitting);
+                    BatcherClient.setCircuitName('p1_select_first_hero');
                     this.config.api.p1_select_first_hero(this.heroes[0][0].hero)
                         .catch((e) => this.recoverFromSubmitError(e));
                     break;
@@ -552,6 +555,7 @@ export class EquipmentMenu extends Phaser.Scene {
                     break;
                 case 2:
                     this.setSetupState(SetupState.Submitting);
+                    BatcherClient.setCircuitName('p1_select_last_heroes');
                     this.config.api.p1_select_last_heroes([this.heroes[0][1].hero, this.heroes[0][2].hero])
                     .catch((e) => this.recoverFromSubmitError(e));
                     break;
@@ -563,11 +567,13 @@ export class EquipmentMenu extends Phaser.Scene {
                     break;
                 case 1:
                     this.setSetupState(SetupState.Submitting);
+                    BatcherClient.setCircuitName('p2_select_first_heroes');
                     this.config.api.p2_select_first_heroes([this.heroes[1][0].hero, this.heroes[1][1].hero])
                     .catch((e) => this.recoverFromSubmitError(e));
                     break;
                 case 2:
                     this.setSetupState(SetupState.Submitting);
+                    BatcherClient.setCircuitName('p2_select_last_hero');
                     this.config.api.p2_select_last_hero(this.heroes[1][2].hero)
                     .catch((e) => this.recoverFromSubmitError(e));
                     break;

@@ -25,7 +25,7 @@ import { levelPrivateStateProvider } from '@midnight-ntwrk/midnight-js-level-pri
 import { FetchZkConfigProvider } from '@midnight-ntwrk/midnight-js-fetch-zk-config-provider';
 import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider';
 import { indexerPublicDataProvider } from '@midnight-ntwrk/midnight-js-indexer-public-data-provider';
-import { UnboundTransaction, ZKConfigProvider } from '@midnight-ntwrk/midnight-js-types';
+import { type FinalizedTxData, SucceedEntirely, UnboundTransaction, ZKConfigProvider } from '@midnight-ntwrk/midnight-js-types';
 import { CoinPublicKey, EncPublicKey, type ShieldedCoinInfo, Transaction, type TransactionId, UnprovenTransaction } from '@midnight-ntwrk/ledger-v7';
 import { Transaction as ZswapTransaction } from '@midnight-ntwrk/zswap';
 import semver from 'semver';
@@ -35,6 +35,7 @@ import { NodeZkConfigProvider } from '@midnight-ntwrk/midnight-js-node-zk-config
 import * as ledgerv7 from '@midnight-ntwrk/ledger-v7';
 import { FinalizedTransaction } from '@midnight-ntwrk/ledger-v7';
 import { BatcherClient } from './batcher-client';
+// import { createUnprovenCallTx } from '@midnight-ntwrk/midnight-js-contracts';
 export class BrowserDeploymentManager {
   #initializedProviders: Promise<PVPArenaProviders> | undefined;
 
@@ -59,7 +60,7 @@ export class BrowserDeploymentManager {
     console.log('getting providers');
     if (!contractAddress) {
       console.log('no contract address provided, using default');
-      contractAddress = '3d3c7fc9c6196d80cb4fffba4e0176099560e038b98f403b2ffc4584fd6b235e';
+      contractAddress = 'c5f0dae486e9b5d15646f83f723a18920d08b18533a54a7570f0635965aec1f9';
     }
     const providers = await this.getProviders();
     console.log('trying to join');
@@ -105,6 +106,14 @@ const DEFAULT_BATCHER_URL = "http://localhost:3334";
 /** Sentinel message thrown by balanceTx when the delegation hook intercepts the transaction. */
 export const DELEGATED_SENTINEL = "Delegated balancing flow handed off to batcher";
 
+/**
+ * Sentinel txId returned by the mock submitTx in delegated mode.
+ * publicDataProvider.watchForTxData intercepts this and returns a mock
+ * FinalizedTxData immediately, allowing callTx to resolve and expose
+ * txData.private.result (the circuit return value) without blocking.
+ */
+const DELEGATED_TX_SENTINEL = 'delegated-to-batcher';
+
 type DelegatedTxStage = "unproven" | "unbound" | "finalized";
 
 
@@ -113,6 +122,65 @@ const initializeProviders = async (logger: Logger): Promise<PVPArenaProviders> =
   const { shieldedCoinPublicKey, shieldedEncryptionPublicKey } = await wallet.getShieldedAddresses();
 
   const walletConfig = await wallet.getConfiguration();
+  console.log(`[wallet] wallet indexerUri=${walletConfig.indexerUri} indexerWsUri=${walletConfig.indexerWsUri}`);
+
+  // The Lace wallet's configured indexer may point to testnet/preview rather than the
+  // local chain.  When VITE_BATCHER_MODE_INDEXER_HTTP_URL is set (i.e. in the
+  // undeployed / local-dev build), use those URLs so that the circuit simulation
+  // queries the SAME chain the batcher submits to.
+  const indexerUri: string =
+    (import.meta.env.VITE_BATCHER_MODE_INDEXER_HTTP_URL as string) || walletConfig.indexerUri;
+  const indexerWsUri: string =
+    (import.meta.env.VITE_BATCHER_MODE_INDEXER_WS_URL as string) || walletConfig.indexerWsUri;
+  console.log(`[wallet] Using indexer: ${indexerUri} (${indexerUri === walletConfig.indexerUri ? 'from wallet' : 'from env override'})`);
+  console.log(`[wallet] Using indexer WS: ${indexerWsUri}`);
+
+  // Stores the tx hash returned by the batcher for the most recently submitted tx.
+  // balanceTx sets this; watchForTxData reads and clears it to resolve the real
+  // indexer confirmation, guaranteeing the contract state is updated before the
+  // next circuit simulation runs.
+  let pendingTxHash: string | null = null;
+
+  /**
+   * Queries the Midnight v3 indexer for a transaction by its hash and returns
+   * the first ZK identifier (spend commitment). This identifier is the correct
+   * argument for publicDataProvider.watchForTxData(), which uses
+   * { identifier } rather than { hash } in its GraphQL query.
+   */
+  const getTxIdentifierByHash = async (txHash: string): Promise<string | null> => {
+    const query = `
+      query GetTxByHash($hash: String!) {
+        transactions(offset: { hash: $hash }) {
+          ... on RegularTransaction {
+            identifiers
+          }
+        }
+      }
+    `;
+    // The batcher already confirmed the tx is in the indexer (wait-receipt), so
+    // it should be found on the first or second attempt.
+    for (let attempt = 0; attempt < 10; attempt++) {
+      try {
+        const response = await fetch(indexerUri, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query, variables: { hash: txHash } }),
+        });
+        const body = await response.json();
+        const txs: any[] = body?.data?.transactions ?? [];
+        if (txs.length > 0 && Array.isArray(txs[0].identifiers) && txs[0].identifiers.length > 0) {
+          const id = txs[0].identifiers[0] as string;
+          console.log(`[wallet:getTxIdentifierByHash] txHash=${txHash} → identifier=${id} (attempt ${attempt})`);
+          return id;
+        }
+      } catch (e) {
+        console.warn(`[wallet:getTxIdentifierByHash] attempt ${attempt} error:`, e);
+      }
+      await new Promise(r => setTimeout(r, 1000));
+    }
+    console.warn(`[wallet:getTxIdentifierByHash] Could not resolve identifier for txHash=${txHash} after 10 attempts`);
+    return null;
+  };
 
   const detectTxStage = (serializedTx: string): DelegatedTxStage => {
     // Transaction headers are ASCII:
@@ -146,6 +214,7 @@ const initializeProviders = async (logger: Logger): Promise<PVPArenaProviders> =
     );
   }
 
+
   const walletProvider = {
       getCoinPublicKey(): CoinPublicKey {
         return shieldedCoinPublicKey;
@@ -168,68 +237,138 @@ const initializeProviders = async (logger: Logger): Promise<PVPArenaProviders> =
       async balanceTx(
         tx: UnboundTransaction,
       ): Promise<FinalizedTransaction> {
-        await BatcherClient.delegatedBalanceHook(tx);
-        throw new Error(DELEGATED_SENTINEL);
-
-        // This is not working on lace.
-        // const serializedTx = toHex(tx.serialize());
-        // const balancedTx1: { tx: string } = await wallet.balanceUnsealedTransaction(serializedTx);
-        // const balancedTx: FinalizedTransaction = Transaction.deserialize(
-        //   'signature',
-        //   'proof',
-        //   'binding',
-        //   fromHex(balancedTx1.tx)
-        // );
-        // return balancedTx;        
+        const txHash = await BatcherClient.delegatedBalanceHook(tx);
+        // Store the batcher-confirmed tx hash so watchForTxData can resolve the
+        // real indexer identifier and wait for genuine chain confirmation.
+        pendingTxHash = txHash;
+        console.log(`[wallet:balanceTx] batcher confirmed txHash=${txHash}`);
+        // tx is already proven (UnboundTransaction — result of proofProvider.proveTx).
+        // The batcher handles real balancing + submission. Our submitTx mock ignores
+        // this return value entirely, so just cast through to satisfy the type.
+        return tx as unknown as FinalizedTransaction;
       },
     };
 
 
   const zkConfigProvider: ZKConfigProvider<PVPArenaCircuitKeys> = new FetchZkConfigProvider(window.location.origin, fetch.bind(window));
   const BASE_URL_PROOF_SERVER = `http://127.0.0.1:6300`;
-  
+
+  // Build the real indexer provider and wrap watchForTxData so that the
+  // delegated-batcher sentinel resolves immediately with a mock FinalizedTxData.
+  // This lets callTx complete and expose txData.private.result (the circuit
+  // return value computed locally) without waiting for the batcher's on-chain tx.
+  const basePublicDataProvider = indexerPublicDataProvider(indexerUri, indexerWsUri);
+  const publicDataProvider = {
+    ...basePublicDataProvider,
+    queryZSwapAndContractState: async (contractAddress: any, config?: any) => {
+      console.log(`[wallet:queryZSwapAndContractState] contractAddress=${contractAddress}`);
+
+      // When no config is provided, the base implementation sets offset=null which the
+      // indexer interprets as the deploy/initial state rather than the latest state.
+      // Query the latest block height first (contractAction without offset = latest),
+      // then pass it explicitly so the circuit simulation always sees the current state.
+      let resolvedConfig = config;
+      if (!resolvedConfig) {
+        try {
+          const heightQuery = `
+            query GetLatestBlockHeight($address: HexEncoded!) {
+              contractAction(address: $address) {
+                transaction {
+                  block {
+                    height
+                  }
+                }
+              }
+            }
+          `;
+          const response = await fetch(indexerUri, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query: heightQuery, variables: { address: contractAddress } }),
+          });
+          const body = await response.json();
+          const height = body?.data?.contractAction?.transaction?.block?.height;
+          if (height != null) {
+            console.log(`[wallet:queryZSwapAndContractState] Resolved latest blockHeight=${height}`);
+            resolvedConfig = { type: 'blockHeight', blockHeight: height };
+          } else {
+            console.warn(`[wallet:queryZSwapAndContractState] Could not resolve latest block height — falling back to null offset`);
+          }
+        } catch (e) {
+          console.warn(`[wallet:queryZSwapAndContractState] Failed to fetch latest block height:`, e);
+        }
+      }
+
+      const result = await basePublicDataProvider.queryZSwapAndContractState(contractAddress, resolvedConfig);
+      if (!result) {
+        console.error(`[wallet:queryZSwapAndContractState] RETURNED NULL for contractAddress=${contractAddress}`);
+      } else {
+        const [, contractState] = result;
+        const stateKeys = contractState ? Object.keys(contractState).join(', ') : 'null';
+        console.log(`[wallet:queryZSwapAndContractState] OK — contractState keys: ${stateKeys}`);
+      }
+      return result;
+    },
+    watchForTxData: async (txId: TransactionId): Promise<FinalizedTxData> => {
+      if ((txId as unknown as string) !== DELEGATED_TX_SENTINEL) {
+        return basePublicDataProvider.watchForTxData(txId);
+      }
+
+      // Intercepted sentinel: use the stored tx hash to get the real indexer
+      // identifier, then call the real watchForTxData. This guarantees that
+      // callTx only resolves AFTER the tx is confirmed in the indexer AND the
+      // contract state is updated — preventing the "expected a cell, received null"
+      // race condition in the next circuit simulation call.
+      const txHash = pendingTxHash;
+      pendingTxHash = null;
+
+      if (txHash) {
+        console.log(`[wallet] watchForTxData: intercepted sentinel, resolving identifier for txHash=${txHash}...`);
+        const identifier = await getTxIdentifierByHash(txHash);
+        if (identifier) {
+          console.log(`[wallet] watchForTxData: waiting for real indexer confirmation via identifier=${identifier}`);
+          return basePublicDataProvider.watchForTxData(identifier as unknown as TransactionId);
+        }
+        console.warn('[wallet] watchForTxData: could not resolve identifier, falling back to mock');
+      } else {
+        console.warn('[wallet] watchForTxData: no pendingTxHash — returning mock FinalizedTxData immediately');
+      }
+
+      // Fallback: return mock immediately (should only happen if batcher returned no hash)
+      return Promise.resolve({
+        tx: null as any,
+        status: SucceedEntirely,
+        txId,
+        identifiers: [],
+        txHash: DELEGATED_TX_SENTINEL as any,
+        blockHash: DELEGATED_TX_SENTINEL,
+        blockHeight: 0,
+        blockTimestamp: Date.now(),
+        blockAuthor: null,
+        indexerId: 0,
+        protocolVersion: 0,
+        fees: { paidFees: '0', estimatedFees: '0' },
+        segmentStatusMap: undefined,
+        unshielded: { created: [], spent: [] },
+      } as FinalizedTxData);
+    },
+  };
+
   return {
-    // privateStateProvider: levelPrivateStateProvider({
-    //   privateStateStoreName: 'pvp-private-state',
-    // }),
     privateStateProvider: levelPrivateStateProvider<string>({
       privateStateStoreName: 'pvp-private-state',
       walletProvider,
     }),
     zkConfigProvider,
-    //zkConfigProider: new NodeZkConfigProvider<'increment'>(contractConfig.zkConfigPath),
     proofProvider: httpClientProofProvider(BASE_URL_PROOF_SERVER, zkConfigProvider),
-    publicDataProvider: indexerPublicDataProvider(walletConfig.indexerUri, walletConfig.indexerWsUri),
+    publicDataProvider,
     walletProvider,
     midnightProvider: {
-      async submitTx(tx: ledgerv7.FinalizedTransaction): Promise<TransactionId> {
-        logger.debug(" wallet.tx: submitTx called", { tx });
-
-        try {
-          const hexTx = toHex(tx.serialize());
-          console.log(" wallet.ts: Submitting final balanced transaction to submitTransaction", { hexTx });
-
-          // Compute transaction ID (hash) locally from the serialized transaction
-          const txId = ledgerv7.Transaction.deserialize(
-            'signature' as const,
-            'proof' as const,
-            'binding' as const,
-            fromHex(hexTx)
-          ).transactionHash();
-
-          console.log(" wallet.ts: Computed transaction ID:", txId);
-
-          await wallet.submitTransaction(hexTx);
-          console.log(" wallet.ts: transaction submitted successfully");
-
-          return txId as unknown as TransactionId;
-        } catch (error) {
-          console.error(" wallet.ts: submitTransaction failed", error);
-          if (error instanceof Error) {
-            console.error(" wallet.ts: error message", error.message);
-          }
-          throw error;
-        }
+      // Return the sentinel so watchForTxData can intercept it and resolve
+      // immediately, giving callTx access to txData.private.result.
+      // The actual transaction is submitted asynchronously by the batcher.
+      async submitTx(_tx: ledgerv7.FinalizedTransaction): Promise<TransactionId> {
+        return DELEGATED_TX_SENTINEL as unknown as TransactionId;
       },
     },
   };

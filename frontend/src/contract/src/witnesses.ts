@@ -31,51 +31,86 @@ export const createPVPArenaPrivateState = (secretKey: Uint8Array) => ({
   stances: []
 });
 
+// ── Normalization helpers ──────────────────────────────────────────────────
+// IndexedDB/levelDB serialization can round-trip Uint8Array as a plain
+// numeric-keyed object {0:95, 1:222, ...} or as a plain array [95,222,...].
+// BigInt can come back as a string if an older serializer was used.
+
+const normalizeUint8Array = (raw: unknown, fieldName: string): Uint8Array | null => {
+  if (raw instanceof Uint8Array) {
+    console.log(`[witness:normalize] ${fieldName}: already Uint8Array length=${raw.length}`);
+    return raw;
+  }
+  if (raw == null) {
+    console.error(`[witness:normalize] ${fieldName}: IS NULL — circuit will throw`);
+    return null;
+  }
+  const vals: number[] = Array.isArray(raw)
+    ? (raw as number[])
+    : Object.values(raw as Record<string, number>);
+  const normalized = new Uint8Array(vals);
+  console.log(`[witness:normalize] ${fieldName}: converted ${Array.isArray(raw) ? 'array' : 'plain-object'}[${vals.length}] → Uint8Array[${normalized.length}]`);
+  return normalized;
+};
+
+const normalizeBigInt = (raw: unknown, fieldName: string): bigint | null => {
+  if (raw === null || raw === undefined) {
+    console.error(`[witness:normalize] ${fieldName}: IS NULL — circuit will throw "expected a cell, received null"`);
+    return null;
+  }
+  if (typeof raw === 'bigint') {
+    console.log(`[witness:normalize] ${fieldName}: already bigint=${raw}`);
+    return raw;
+  }
+  const normalized = BigInt(raw as any);
+  console.log(`[witness:normalize] ${fieldName}: converted ${typeof raw}(${raw}) → bigint=${normalized}`);
+  return normalized;
+};
+
 /* **********************************************************************
- * The witnesses object for the bulletin board contract is an object
- * with a field for each witness function, mapping the name of the function
- * to its implementation.
- *
- * The implementation of each function always takes as its first argument
- * a value of type WitnessContext<L, PS>, where L is the ledger object type
- * that corresponds to the ledger declaration in the Compact code, and PS
- *  is the private state type, like PVPArenaPrivateState defined above.
- *
- * A WitnessContext has three
- * fields:
- *  - ledger: T
- *  - privateState: PS
- *  - contractAddress: string
- *
- * The other arguments (after the first) to each witness function
- * correspond to the ones declared in Compact for the witness function.
- * The function's return value is a tuple of the new private state and
- * the declared return value.  In this case, that's a PVPArenaPrivateState
- * and a Uint8Array (because the contract declared a return value of Bytes[32],
- * and that's a Uint8Array in TypeScript).
- *
- * The player_sk witness does not need the ledger or contractAddress
- * from the WitnessContext, so it uses the parameter notation that puts
- * only the binding for the privateState in scope.
+ * Witnesses
  */
 export const witnesses = {
-  player_secret_key: ({ privateState }: WitnessContext<Ledger, PVPArenaPrivateState>): [PVPArenaPrivateState, Uint8Array] => [
-    privateState,
-    privateState.secretKey,
-  ],
+  player_secret_key: ({ privateState }: WitnessContext<Ledger, PVPArenaPrivateState>): [PVPArenaPrivateState, Uint8Array] => {
+    const raw = privateState.secretKey as unknown;
+    console.log(`[witness:player_secret_key] raw: type=${typeof raw} instanceof=${raw instanceof Uint8Array} null=${raw == null}`);
+    const sk = normalizeUint8Array(raw, 'secretKey');
+    if (sk == null || sk.length !== 32) {
+      console.error(`[witness:player_secret_key] CRITICAL: sk=${sk == null ? 'null' : `length ${sk.length} (need 32)`}`);
+    }
+    return [privateState, sk as Uint8Array];
+  },
 
-  current_match_id: ({ privateState }: WitnessContext<Ledger, PVPArenaPrivateState>): [PVPArenaPrivateState, bigint] => [
-    privateState,
-    privateState.currentMatchId!,
-  ],
+  current_match_id: ({ privateState }: WitnessContext<Ledger, PVPArenaPrivateState>): [PVPArenaPrivateState, bigint] => {
+    const raw = privateState.currentMatchId as unknown;
+    console.log(`[witness:current_match_id] raw: type=${typeof raw} value=${raw}`);
+    const matchId = normalizeBigInt(raw, 'currentMatchId');
+    if (matchId === null) {
+      console.error(`[witness:current_match_id] CRITICAL: null matchId → "expected a cell, received null"`);
+    }
+    return [privateState, matchId as bigint];
+  },
 
-  player_commands: ({ privateState }: WitnessContext<Ledger, PVPArenaPrivateState>): [PVPArenaPrivateState, bigint[]] => [
-    privateState,
-    privateState.commands,
-  ],
+  player_commands: ({ privateState }: WitnessContext<Ledger, PVPArenaPrivateState>): [PVPArenaPrivateState, bigint[]] => {
+    const raw = privateState.commands as unknown;
+    console.log(`[witness:player_commands] raw: isArray=${Array.isArray(raw)} length=${(raw as any)?.length}`);
+    const commands: bigint[] = Array.isArray(raw)
+      ? (raw as any[]).map((c: any, i: number) => {
+          if (typeof c === 'bigint') return c;
+          const n = BigInt(c);
+          console.log(`[witness:player_commands] cmd[${i}]: ${typeof c}(${c}) → bigint=${n}`);
+          return n;
+        })
+      : (() => { console.error(`[witness:player_commands] CRITICAL: not an array: ${typeof raw}`); return []; })();
+    return [privateState, commands];
+  },
 
-  player_stances: ({ privateState }: WitnessContext<Ledger, PVPArenaPrivateState>): [PVPArenaPrivateState, STANCE[]] => [
-    privateState,
-    privateState.stances,
-  ],
+  player_stances: ({ privateState }: WitnessContext<Ledger, PVPArenaPrivateState>): [PVPArenaPrivateState, STANCE[]] => {
+    const raw = privateState.stances as unknown;
+    console.log(`[witness:player_stances] raw: isArray=${Array.isArray(raw)} length=${(raw as any)?.length}`);
+    const stances: STANCE[] = Array.isArray(raw)
+      ? (raw as any[]).map((s: any) => Number(s) as STANCE)
+      : (() => { console.error(`[witness:player_stances] CRITICAL: not an array: ${typeof raw}`); return []; })();
+    return [privateState, stances];
+  },
 };
