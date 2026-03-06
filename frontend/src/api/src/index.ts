@@ -363,7 +363,7 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
                 }
                 return stance;
               });
-              runAi('p2_commit_reveal', () => this.p2Commit(commands, stances));
+              runAi('p2_commit_commands', () => this.p2Commit(commands, stances));
               break;
             }
           }

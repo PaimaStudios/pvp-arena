@@ -1,4 +1,5 @@
 import { CreateMatchOptions, type DeployedPVPArenaAPI, PVPArenaAPI, PVPArenaCircuitKeys, type PVPArenaProviders } from '@midnight-ntwrk/pvp-api';
+import { UNDEPLOYED_CONTRACT_ADDRESS } from './contract-addresses';
 import { CompactTypeBytes, transientCommit, type ContractAddress } from '@midnight-ntwrk/compact-runtime';
 import {
   concatMap,
@@ -60,7 +61,7 @@ export class BrowserDeploymentManager {
     console.log('getting providers');
     if (!contractAddress) {
       console.log('no contract address provided, using default');
-      contractAddress = 'c5f0dae486e9b5d15646f83f723a18920d08b18533a54a7570f0635965aec1f9';
+      contractAddress = UNDEPLOYED_CONTRACT_ADDRESS;
     }
     const providers = await this.getProviders();
     console.log('trying to join');
