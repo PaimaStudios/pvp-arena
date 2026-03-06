@@ -355,6 +355,24 @@ export class Arena extends Phaser.Scene
         makeExitMatchButton(this, GAME_WIDTH - 48, 16);
         makeSoundToggleButton(this, GAME_WIDTH - 16, 16);
 
+        const localKey = this.initialState.localPublicKey;
+        const keyStr = localKey != null ? `0x${localKey.toString(16).padStart(16, '0').slice(0, 8)}…` : '?';
+        this.add.text(8, 4, keyStr, fontStyle(7, { color: '#999988' })).setOrigin(0, 0);
+        const matchId = this.initialState.currentMatchId;
+        if (matchId != null) {
+            const match = this.initialState.currentMatch;
+            let matchSuffix = '';
+            if (match?.isPractice) {
+                matchSuffix = ' - Practice';
+            } else if (match != null) {
+                const opponentKey = this.config.isP1 ? match.p2PubKey : match.p1PubKey;
+                if (opponentKey != null) {
+                    matchSuffix = ` - VS #${opponentKey.toString(16).padStart(16, '0').slice(0, 8)}…`;
+                }
+            }
+            this.add.text(8, 20, `Match #${matchId}${matchSuffix}`, fontStyle(7, { color: '#999988' })).setOrigin(0, 0);
+        }
+
         // should we get rid of these?
         this.input?.keyboard?.on('keydown-ONE', () => {
             if (this.matchState == MatchState.WaitingOnPlayer) {

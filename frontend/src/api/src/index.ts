@@ -143,6 +143,7 @@ export interface DeployedPVPArenaAPI {
   p1Commit: (commands: bigint[], stances: STANCE[]) => Promise<void>;
   p2Commit: (commands: bigint[], stances: STANCE[]) => Promise<void>;
   p1Reveal: (commands: bigint[], stances: STANCE[]) => Promise<void>;
+  joinMatch: (matchId: bigint) => Promise<void>;
   setCurrentMatch: (matchId: bigint) => Promise<void>;
 }
 
@@ -306,6 +307,14 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
         const matchStates = new Map(ledgerState.game_state);
 
         console.log(`[state$] matchStates keys=[${[...matchStates.keys()].join(',')}] currentMatchId=${privateState.currentMatchId} type=${typeof privateState.currentMatchId}`);
+        console.log(`[state$] localPublicKey=${localPublicKey}`);
+        for (const id of matchStates.keys()) {
+          const p1Key = ledgerState.p1_public_key.lookup(id);
+          const p2Member = ledgerState.p2_public_key.member(id);
+          const p2Key = p2Member ? ledgerState.p2_public_key.lookup(id) : 'N/A';
+          const pub = (() => { try { return ledgerState.public_.lookup(id); } catch { return '?'; } })();
+          console.log(`[state$]   match id=${id} p1Key=${p1Key} p2Member=${p2Member} p2Key=${p2Key} isPublic=${pub} isMyP1=${p1Key === localPublicKey} isMyP2=${p2Member && p2Key === localPublicKey}`);
+        }
 
         // Guard: currentMatchId may be stale (e.g. local chain restarted, contract
         // redeployed, or this is a first-time boot with no matches yet). Calling
@@ -372,7 +381,9 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
         return {
           currentMatch,
           myMatches: new Map(matchStates.keys().filter((id) => ledgerState.p1_public_key.lookup(id) == localPublicKey || (ledgerState.p2_public_key.member(id) && ledgerState.p2_public_key.lookup(id) == localPublicKey)).map((id) => [id, parseMatchState(id)])),
-          openMatches: new Map(matchStates.keys().filter((id) => ledgerState.p1_public_key.lookup(id) != localPublicKey && !ledgerState.p2_public_key.member(id)).map((id) => [id, parseMatchState(id)])),
+          openMatches: new Map(matchStates.keys().filter((id) => ledgerState.p1_public_key.lookup(id) != localPublicKey && (!ledgerState.p2_public_key.member(id) || ledgerState.p2_public_key.lookup(id) === ledgerState.p1_public_key.lookup(id))).map((id) => [id, parseMatchState(id)])),
+          currentMatchId: hasCurrentMatch ? privateState.currentMatchId! : null,
+          localPublicKey,
         };
           }) // map(privateState)
         )   // from(...).pipe(...)
@@ -625,6 +636,13 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
         blockHeight: txData.public.blockHeight,
       },
     });
+  }
+
+  async joinMatch(matchId: bigint): Promise<void> {
+    console.log(`[api:joinMatch] called with matchId=${matchId}`);
+    await this.setCurrentMatch(matchId);
+    await this.deployedContract.callTx.join_match();
+    console.log(`[api:joinMatch] done`);
   }
 
   async setCurrentMatch(matchId: bigint): Promise<void> {

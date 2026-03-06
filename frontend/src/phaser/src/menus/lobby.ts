@@ -12,10 +12,12 @@ import { Arena } from "../battle/arena";
 import { StatusUI } from ".";
 import { init } from "fp-ts/lib/ReadonlyNonEmptyArray";
 import { Subscription } from "rxjs/internal/Subscription";
+import { firstValueFrom, filter } from "rxjs";
 import { BatcherClient } from "../batcher-client";
 
 type OpenMatchInfo = {
     matchId: bigint;
+    label: string;
 };
 
 const WON = "[color=green]Won[/color]";
@@ -32,6 +34,7 @@ type PlayerMatchStatus =
 type PlayerMatchInfo = {
     matchId: bigint;
     status: PlayerMatchStatus;
+    label: string;
 };
 
 function getPlayerMatches(state: PVPArenaDerivedState): PlayerMatchInfo[] {
@@ -81,12 +84,20 @@ function getPlayerMatches(state: PVPArenaDerivedState): PlayerMatchInfo[] {
             return OPPONENT_TURN;
         }
     };
-    return state.myMatches.entries().map(([id, state]) => {
+    const matchLabel = (m: PVPArenaDerivedMatchState): string => {
+        if (m.isPractice) return 'Practice';
+        const opponentKey = m.isP1 ? m.p2PubKey : m.p1PubKey;
+        if (opponentKey == null) return 'Waiting for Opponent';
+        return `VS #${opponentKey.toString(16).padStart(16, '0').slice(0, 8)}…`;
+    };
+
+    return state.myMatches.entries().map(([id, m]) => {
         return {
             matchId: id,
-            status: matchStatus(state),
+            status: matchStatus(m),
+            label: matchLabel(m),
         };
-    }).toArray();
+    }).toArray().sort((a, b) => (a.matchId > b.matchId ? -1 : 1));
 }
 
 type RefreshingGrapihcs = {
@@ -225,10 +236,10 @@ class JoinGamesUI<
         this.matchButtons = this.matches
             .slice(this.matchIndex, this.matchIndex + this.maxMatchesShown)
             .map((match, i) => {
-                let buttonText = match.matchId.toString();
+                let buttonText = `#${match.matchId} - ${match.label}`;
 
                 if ("status" in match) {
-                    buttonText = `${buttonText}\nstatus: ${match.status}`;
+                    buttonText = `${buttonText}\n${match.status}`;
                 }
 
                 const button = new Button(
@@ -336,7 +347,10 @@ export class LobbyMenu extends Phaser.Scene {
             GAME_HEIGHT / 2,
             "Public Matches",
             true,
-            () => this.state.openMatches.entries().filter(([_, state]) => state.isPublic).map(([id, _]) => { return { matchId: id }; }).toArray(),
+            () => this.state.openMatches.entries().filter(([_, m]) => m.isPublic).map(([id, m]) => {
+                const label = m.isPractice ? 'Practice' : `VS #${m.p1PubKey.toString(16).padStart(16, '0').slice(0, 8)}…`;
+                return { matchId: id, label };
+            }).toArray().sort((a, b) => (a.matchId > b.matchId ? -1 : 1)),
             5
         );
         this.rejoin = new JoinGamesUI(
@@ -365,18 +379,16 @@ export class LobbyMenu extends Phaser.Scene {
             "Direct Join",
             10,
             () => {
-                const matchId = window.prompt(
-                    "Copy contract address to join directly"
-                );
-                if (matchId != undefined) {
+                const input = window.prompt("Enter match ID to join directly");
+                if (input != undefined) {
                     try {
-                        this.join(BigInt(matchId));
+                        this.join(BigInt(input.trim()));
                     } catch {
-                        alert("Invalid match id");
+                        alert("Invalid match ID — enter a number");
                     }
                 }
             },
-            "Join a match by pasting the contract address"
+            "Join a match by entering the match ID"
         );
         this.back = new Button(
             this,
@@ -406,21 +418,35 @@ export class LobbyMenu extends Phaser.Scene {
         this.subscription = this.api.state$.subscribe((state) => this.onStateChange(state));
     }
 
+    preDestroy() {
+        this.subscription?.unsubscribe();
+    }
+
     onStateChange(state: PVPArenaDerivedState) {
         this.state = state;
+        this.joinPublc?.refreshGames();
+        this.rejoin?.refreshGames();
     }
 
     join(matchId: bigint) {
         this.status!.setText("Joining match, please wait...");
-        BatcherClient.setCircuitName('set_current_match');
-        this
-            .api
-            .setCurrentMatch(matchId)
-            .then(() => {
+        const isMyMatch = this.state.myMatches.has(matchId);
+        const joinPromise = isMyMatch
+            ? (BatcherClient.setCircuitName('set_current_match'), this.api.setCurrentMatch(matchId))
+            : (BatcherClient.setCircuitName('join_match'), this.api.joinMatch(matchId));
+        joinPromise
+            .then(async () => {
+                // state$ may not have updated yet — wait for an emission that includes this match
+                let state = this.state;
+                if (!state.myMatches.has(matchId) && !state.openMatches.has(matchId)) {
+                    state = await firstValueFrom(
+                        this.api.state$.pipe(filter(s => s.myMatches.has(matchId) || s.openMatches.has(matchId)))
+                    );
+                }
                 let isP1 = false;
-                let matchState = this.state.openMatches.get(matchId);
+                let matchState = state.openMatches.get(matchId);
                 if (matchState == undefined) {
-                    matchState = this.state.myMatches.get(matchId);
+                    matchState = state.myMatches.get(matchId);
                     if (matchState == undefined) {
                         throw new Error(`could not find match with id: ${matchId}`);
                     }
@@ -442,7 +468,7 @@ export class LobbyMenu extends Phaser.Scene {
                     case GAME_STATE.p2_win:
                     case GAME_STATE.tie:
                         this.scene.remove("Arena");
-                        this.scene.add("Arena", new Arena({ api: this.api, isP1 }, this.state));
+                        this.scene.add("Arena", new Arena({ api: this.api, isP1 }, state));
                         this.scene.start("Arena");
                         break;
                 }

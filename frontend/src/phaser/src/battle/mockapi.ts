@@ -30,6 +30,8 @@ export class MockPVPArenaAPI implements DeployedPVPArenaAPI {
             currentMatch: null,
             myMatches: new Map(),
             openMatches: new Map(),
+            currentMatchId: null,
+            localPublicKey: null,
         };
         this.isP1 = isP1;
         this.nextMatch = BigInt(0);
@@ -66,6 +68,7 @@ export class MockPVPArenaAPI implements DeployedPVPArenaAPI {
 
                 this.mockState.myMatches.set(matchId, this.matches.get(matchId)!);
                 this.mockState.currentMatch = this.matches.get(matchId)!;
+                this.mockState.currentMatchId = matchId;
 
                 setTimeout(() => {
                     this.subscriber?.next(this.mockState);
@@ -248,9 +251,14 @@ export class MockPVPArenaAPI implements DeployedPVPArenaAPI {
         }, MOCK_DELAY);
     }
 
+    async joinMatch(matchId: bigint): Promise<void> {
+        return this.setCurrentMatch(matchId);
+    }
+
     async setCurrentMatch(matchId: bigint): Promise<void> {
         this.currentMatchId = matchId;
         this.mockState.currentMatch = this.matches.get(matchId)!;
+        this.mockState.currentMatchId = matchId;
     }
     
     private mockP1Commit() {

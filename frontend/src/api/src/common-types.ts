@@ -92,4 +92,6 @@ export type PVPArenaDerivedState = {
   currentMatch: PVPArenaDerivedMatchState | null;
   myMatches: Map<bigint, PVPArenaDerivedMatchState>;
   openMatches: Map<bigint, PVPArenaDerivedMatchState>;
+  currentMatchId: bigint | null;
+  localPublicKey: bigint | null;
 };

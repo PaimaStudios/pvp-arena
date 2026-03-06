@@ -35,13 +35,15 @@ export class PracticeMenu extends Phaser.Scene {
                 this.status?.setText('Creating match, please wait...');
                 BatcherClient.setCircuitName('create_new_match');
                 this.api.create_new_match(false, true).then((matchId) => {
+                    BatcherClient.setCircuitName('join_match');
+                    // Register P1 as P2 so the AI can call p2_* circuits on their behalf
+                    return this.api.joinMatch(matchId);
+                }).then(() => {
                     BatcherClient.setCircuitName('');
-                    this.api.setCurrentMatch(matchId).then(() => {
-                        this.scene.remove('EquipmentMenu');
-                        const equipMenu = new EquipmentMenu({ api: this.api, isP1: true });
-                        this.scene.add('EquipmentMenu', equipMenu);
-                        this.scene.start('EquipmentMenu');
-                    });
+                    this.scene.remove('EquipmentMenu');
+                    const equipMenu = new EquipmentMenu({ api: this.api, isP1: true });
+                    this.scene.add('EquipmentMenu', equipMenu);
+                    this.scene.start('EquipmentMenu');
                 })
                 .catch((e) => {
                     this.status!.setError(e);

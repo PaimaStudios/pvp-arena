@@ -171,8 +171,6 @@ export circuit create_new_match(is_match_public: Boolean, is_match_practice: Boo
     p2_dmg_1.insert(match_id, 0);
     p2_dmg_2.insert(match_id, 0);
     p1_public_key.insert(match_id, derive_public_key(player_secret_key()));
-    // TODO ??
-    p2_public_key.insert(match_id, derive_public_key(player_secret_key()));
     round.insert(match_id, 0);
     game_state.insert(match_id, GAME_STATE.p1_selecting_first_hero);
     // p1_alive = [true, true, true];
@@ -191,7 +189,7 @@ export circuit create_new_match(is_match_public: Boolean, is_match_practice: Boo
 
 export circuit join_match(): [] {
     const match_id = disclose(current_match_id());
-    assert(!p2_public_key.member(match_id), "Match not open");
+    assert(!p2_public_key.member(match_id), "Match already has a P2");
 
     p2_public_key.insert(match_id, derive_public_key(player_secret_key()));
 }
