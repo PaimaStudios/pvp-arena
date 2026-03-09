@@ -91,7 +91,7 @@ import type {
     private publicDataProvider: PublicDataProvider | null = null;
     private zkConfigProvider: ZKConfigProvider<string> | null = null;
     private proofProvider: ProofProvider | null = null;
-    private currentCircuitId: string | null = null;
+    protected currentCircuitId: string | null = null;
     private syncProtocolName: string;
   
     private async logDustState(context: string): Promise<void> {

@@ -64,6 +64,7 @@ export class MockPVPArenaAPI implements DeployedPVPArenaAPI {
                     secretKey: new Uint8Array(),
                     isPublic: is_match_public,
                     isPractice: true,
+                    lastMoveAt: BigInt(0),
                 });
 
                 this.mockState.myMatches.set(matchId, this.matches.get(matchId)!);
@@ -259,6 +260,39 @@ export class MockPVPArenaAPI implements DeployedPVPArenaAPI {
         this.currentMatchId = matchId;
         this.mockState.currentMatch = this.matches.get(matchId)!;
         this.mockState.currentMatchId = matchId;
+    }
+
+    async claimTimeoutWin(): Promise<void> {
+        // Not applicable in offline mode
+    }
+
+    async surrender(): Promise<void> {
+        const matchId = this.currentMatchId!;
+        this.updateMatch({
+            ...this.matches.get(matchId)!,
+            state: this.isP1 ? GAME_STATE.p2_win : GAME_STATE.p1_win,
+        });
+    }
+
+    async closeMatch(): Promise<void> {
+        const matchId = this.currentMatchId!;
+        this.updateMatch({
+            ...this.matches.get(matchId)!,
+            state: GAME_STATE.tie,
+        });
+    }
+
+    async cleanupMatch(): Promise<void> {
+        const matchId = this.currentMatchId!;
+        this.matches.delete(matchId);
+        this.currentMatchId = undefined;
+        this.mockState = {
+            ...this.mockState,
+            currentMatch: null,
+            currentMatchId: null,
+            myMatches: new Map([...this.mockState.myMatches].filter(([id]) => id !== matchId)),
+        };
+        this.subscriber?.next(this.mockState);
     }
     
     private mockP1Commit() {

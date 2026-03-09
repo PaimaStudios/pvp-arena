@@ -35,6 +35,7 @@ type PlayerMatchInfo = {
     matchId: bigint;
     status: PlayerMatchStatus;
     label: string;
+    closeable: boolean;
 };
 
 function getPlayerMatches(state: PVPArenaDerivedState): PlayerMatchInfo[] {
@@ -88,14 +89,17 @@ function getPlayerMatches(state: PVPArenaDerivedState): PlayerMatchInfo[] {
         if (m.isPractice) return 'Practice';
         const opponentKey = m.isP1 ? m.p2PubKey : m.p1PubKey;
         if (opponentKey == null) return 'Waiting for Opponent';
-        return `VS #${opponentKey.toString(16).padStart(16, '0').slice(0, 8)}…`;
+        return `VS ${opponentKey.toString(16).padStart(16, '0').slice(0, 8)}…`;
     };
 
     return state.myMatches.entries().map(([id, m]) => {
+        const hasP2 = m.p2PubKey != null;
+        const closeable = m.isPractice || !hasP2;
         return {
             matchId: id,
             status: matchStatus(m),
             label: matchLabel(m),
+            closeable,
         };
     }).toArray().sort((a, b) => (a.matchId > b.matchId ? -1 : 1));
 }
@@ -120,6 +124,7 @@ class JoinGamesUI<
     suggestPractice: boolean;
     getMatches: () => MatchInfo[];
     maxMatchesShown: number;
+    onClose: ((matchId: bigint) => void) | undefined;
 
     constructor(
         lobby: LobbyMenu,
@@ -129,6 +134,7 @@ class JoinGamesUI<
         suggestPractice: boolean,
         getMatches: () => MatchInfo[],
         maxMatchesShown: number,
+        onClose?: (matchId: bigint) => void,
     ) {
         super(lobby, x, y);
         this.lobby = lobby;
@@ -138,6 +144,7 @@ class JoinGamesUI<
         this.suggestPractice = suggestPractice;
         this.getMatches = getMatches;
         this.maxMatchesShown = maxMatchesShown;
+        this.onClose = onClose;
         const REFRESH_WIDTH = 32;
         this.add(
             lobby.add.nineslice(
@@ -231,35 +238,57 @@ class JoinGamesUI<
         const MATCH_HEIGHT = 32;
         const MATCH_GAP = 8;
         const SCROLL_WIDTH = 32;
+        const CLOSE_WIDTH = 22;
 
         this.matchButtons.forEach((b) => b.destroy());
         this.matchButtons = this.matches
             .slice(this.matchIndex, this.matchIndex + this.maxMatchesShown)
-            .map((match, i) => {
-                let buttonText = `#${match.matchId} - ${match.label}`;
+            .flatMap((match, i) => {
+                const matchIdShort = match.matchId.toString().slice(0, 6);
+                let buttonText = `#${matchIdShort}… - ${match.label}`;
 
                 if ("status" in match) {
                     buttonText = `${buttonText}\n${match.status}`;
                 }
 
+                const hasClose = this.onClose != null && "closeable" in match && match.closeable;
+                const matchBtnWidth = hasClose
+                    ? JOIN_WIDTH - 2 * JOIN_BORDER - SCROLL_WIDTH - CLOSE_WIDTH - 2
+                    : JOIN_WIDTH - 2 * JOIN_BORDER - SCROLL_WIDTH;
+                const rowHeight = MATCH_HEIGHT + ("status" in match ? 16 : 0);
+                const rowY = -(JOIN_HEIGHT - JOIN_TITLE_HEIGHT) / 2 +
+                    JOIN_TITLE_HEIGHT +
+                    JOIN_BORDER +
+                    i * (rowHeight + MATCH_GAP);
+
                 const button = new Button(
                     this.lobby,
-                    -SCROLL_WIDTH / 2,
-                    -(JOIN_HEIGHT - JOIN_TITLE_HEIGHT) / 2 +
-                        JOIN_TITLE_HEIGHT +
-                        JOIN_BORDER +
-                        i *
-                            (MATCH_HEIGHT +
-                                MATCH_GAP +
-                                ("status" in match ? 12 : 0)),
-                    JOIN_WIDTH - 2 * JOIN_BORDER - SCROLL_WIDTH,
-                    MATCH_HEIGHT + ("status" in match ? 16 : 0),
+                    hasClose ? -SCROLL_WIDTH / 2 - CLOSE_WIDTH / 2 - 1 : -SCROLL_WIDTH / 2,
+                    rowY,
+                    matchBtnWidth,
+                    rowHeight,
                     buttonText,
                     7,
                     () => this.lobby.join(match.matchId)
                 );
                 this.add(button);
-                return button;
+
+                if (hasClose) {
+                    const closeBtn = new Button(
+                        this.lobby,
+                        -SCROLL_WIDTH / 2 + matchBtnWidth / 2 + CLOSE_WIDTH / 2 + 2,
+                        rowY,
+                        CLOSE_WIDTH,
+                        rowHeight,
+                        '✕',
+                        9,
+                        () => this.onClose!(match.matchId),
+                        'Close this match'
+                    );
+                    this.add(closeBtn);
+                    return [button, closeBtn];
+                }
+                return [button];
             });
         if (this.matchIndex > 0) {
             const scrollUp = new Button(
@@ -348,7 +377,9 @@ export class LobbyMenu extends Phaser.Scene {
             "Public Matches",
             true,
             () => this.state.openMatches.entries().filter(([_, m]) => m.isPublic).map(([id, m]) => {
-                const label = m.isPractice ? 'Practice' : `VS #${m.p1PubKey.toString(16).padStart(16, '0').slice(0, 8)}…`;
+                const label = m.isPractice
+                    ? 'Practice - Waiting'
+                    : `${m.p1PubKey.toString(16).padStart(16, '0').slice(0, 8)}… - Waiting`;
                 return { matchId: id, label };
             }).toArray().sort((a, b) => (a.matchId > b.matchId ? -1 : 1)),
             5
@@ -360,7 +391,8 @@ export class LobbyMenu extends Phaser.Scene {
             "Your Matches",
             false,
             () => getPlayerMatches(this.state),
-            4
+            4,
+            (matchId) => this.closeMatch(matchId)
         );
         this.add
             .image(GAME_WIDTH, GAME_HEIGHT, "arena_bg")
@@ -416,6 +448,8 @@ export class LobbyMenu extends Phaser.Scene {
         makeSoundToggleButton(this, GAME_WIDTH - 16, 16);
 
         this.subscription = this.api.state$.subscribe((state) => this.onStateChange(state));
+        // Unsubscribe on shutdown (fires when scene.start() navigates away) as well as destroy.
+        this.events.once('shutdown', () => this.subscription?.unsubscribe());
     }
 
     preDestroy() {
@@ -436,29 +470,20 @@ export class LobbyMenu extends Phaser.Scene {
             : (BatcherClient.setCircuitName('join_match'), this.api.joinMatch(matchId));
         joinPromise
             .then(async () => {
-                // state$ may not have updated yet — wait for an emission that includes this match
-                let state = this.state;
-                if (!state.myMatches.has(matchId) && !state.openMatches.has(matchId)) {
-                    state = await firstValueFrom(
-                        this.api.state$.pipe(filter(s => s.myMatches.has(matchId) || s.openMatches.has(matchId)))
-                    );
-                }
-                let isP1 = false;
-                let matchState = state.openMatches.get(matchId);
-                if (matchState == undefined) {
-                    matchState = state.myMatches.get(matchId);
-                    if (matchState == undefined) {
-                        throw new Error(`could not find match with id: ${matchId}`);
-                    }
-                    isP1 = matchState.isP1;
-                }
+                // Wait for state$ to emit with currentMatch set for this match
+                // (setCurrentMatch writes to private DB but shareReplay caches pre-write state)
+                const state = await firstValueFrom(
+                    this.api.state$.pipe(filter(s => s.currentMatchId === matchId && s.currentMatch !== null))
+                );
+                const isP1 = state.currentMatch!.isP1;
+                const matchState = state.currentMatch!;
                 switch (matchState.state) {
                     case GAME_STATE.p1_selecting_first_hero:
                     case GAME_STATE.p1_selecting_last_heroes:
                     case GAME_STATE.p2_selecting_last_hero:
                     case GAME_STATE.p2_selecting_first_heroes:
                         this.scene.remove("EquipmentMenu");
-                        this.scene.add("EquipmentMenu", new EquipmentMenu({ api: this.api, isP1 }));
+                        this.scene.add("EquipmentMenu", new EquipmentMenu({ api: this.api, isP1 }, state));
                         this.scene.start("EquipmentMenu");
                         break;
                     case GAME_STATE.p1_commit:
@@ -476,6 +501,19 @@ export class LobbyMenu extends Phaser.Scene {
             .catch((e) => {
                 this.status!.setError(e);
             });
+    }
+
+    closeMatch(matchId: bigint) {
+        this.status!.setText('Closing match...');
+        this.api.setCurrentMatch(matchId).then(() => {
+            BatcherClient.setCircuitName('close_match');
+            return this.api.closeMatch();
+        }).then(() => {
+            this.status!.clearStatusText();
+            this.rejoin?.refreshGames();
+        }).catch((e) => {
+            this.status!.setError(e);
+        });
     }
 
     joinPractice() {

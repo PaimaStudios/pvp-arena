@@ -5,6 +5,7 @@ export class StatusUI {
     uiElements: Phaser.GameObjects.Components.Visible[];
     scene: Phaser.Scene;
     text: Phaser.GameObjects.Text;
+    private progressTimers: Phaser.Time.TimerEvent[] = [];
 
     constructor(scene: Phaser.Scene, uiElements: Phaser.GameObjects.Components.Visible[]) {
         this.uiElements = uiElements;
@@ -46,7 +47,27 @@ export class StatusUI {
         );
     }
 
+    /**
+     * Show the first stage immediately, then cycle through subsequent stages
+     * at the specified delays (in ms, measured from when this is called).
+     * Each stage replaces the previous message so the player sees progress.
+     */
+    public setProgressText(stages: Array<{ text: string; delay: number }>) {
+        this.clearProgressTimers();
+        if (stages.length === 0) return;
+        this.setText(stages[0].text);
+        for (let i = 1; i < stages.length; i++) {
+            const { text, delay } = stages[i];
+            this.progressTimers.push(
+                this.scene.time.delayedCall(delay, () => {
+                    if (this.text.visible) this.text.setText(text);
+                })
+            );
+        }
+    }
+
     public setText(text: string) {
+        this.clearProgressTimers();
         this.uiElements.forEach((e) => e.setVisible(false));
         this.text!.visible = true;
         this.text?.setText(text);
@@ -54,7 +75,13 @@ export class StatusUI {
     }
 
     public clearStatusText() {
+        this.clearProgressTimers();
         this.uiElements.forEach((e) => e.setVisible(true));
         this.text!.visible = false;
+    }
+
+    private clearProgressTimers() {
+        this.progressTimers.forEach((t) => t.remove());
+        this.progressTimers = [];
     }
 }

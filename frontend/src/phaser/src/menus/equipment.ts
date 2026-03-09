@@ -380,16 +380,19 @@ enum SetupState {
 
 export class EquipmentMenu extends Phaser.Scene {
     config: BattleConfig;
+    initialState: PVPArenaDerivedState | undefined;
     heroes: SelectHeroActor[][];
     setupState: SetupState;
     selecting: number;
     selector: EquipmentSelector | undefined;
     status: StatusUI | undefined;
     subscription: Subscription | undefined;
+    lastGameState: number = -1;
 
-    constructor(config: BattleConfig) {
+    constructor(config: BattleConfig, initialState?: PVPArenaDerivedState) {
         super('EquipmentMenu');
         this.config = config;
+        this.initialState = initialState;
         this.heroes = [];
         this.selecting = 0;
         this.setupState = config.isP1 ? SetupState.SelectingPlayerHeroes : SetupState.WaitingOnOpponent;
@@ -404,20 +407,32 @@ export class EquipmentMenu extends Phaser.Scene {
         console.log(`new state: ${safeJSONString(state)}`);
         console.log(`NOW: ${gameStateStr(state.currentMatch.state)}`);
 
-        // when joining this.selecting could be out of date
-        switch (state.currentMatch!.state) {
-            case GAME_STATE.p1_selecting_first_hero:
-                this.selecting = 0;
-                break;
-            case GAME_STATE.p1_selecting_last_heroes:
-                this.selecting = this.config.isP1 ? 1 : 2;
-                break;
-            case GAME_STATE.p2_selecting_first_heroes:
-                this.selecting = this.config.isP1 ? 1 : 0;
-                break;
-            case GAME_STATE.p2_selecting_last_hero:
-                this.selecting = 2;
-                break;
+        // Only sync this.selecting when the game state actually changes.
+        // Repeated emissions of the same state must not reset selecting back
+        // to its initial value — that would undo progress the player has already
+        // made within a multi-step selection phase (e.g. hero 1 → hero 2).
+        const gameState = state.currentMatch!.state;
+        if (gameState !== this.lastGameState) {
+            this.lastGameState = gameState;
+            // Game state advanced on-chain — a prior Submitting tx landed, so
+            // clear the guard so runStateChange can handle the new state.
+            if (this.setupState === SetupState.Submitting) {
+                this.setupState = SetupState.WaitingOnOpponent;
+            }
+            switch (gameState) {
+                case GAME_STATE.p1_selecting_first_hero:
+                    this.selecting = 0;
+                    break;
+                case GAME_STATE.p1_selecting_last_heroes:
+                    this.selecting = this.config.isP1 ? 1 : 2;
+                    break;
+                case GAME_STATE.p2_selecting_first_heroes:
+                    this.selecting = this.config.isP1 ? 1 : 0;
+                    break;
+                case GAME_STATE.p2_selecting_last_hero:
+                    this.selecting = 2;
+                    break;
+            }
         }
 
         // update heroes
@@ -448,6 +463,8 @@ export class EquipmentMenu extends Phaser.Scene {
 
     runStateChange(state: PVPArenaDerivedState) {
         console.log(`running state change: ${state.currentMatch!.state}`);
+        // Don't override a Submitting state — a tx is already in flight.
+        if (this.setupState === SetupState.Submitting) return;
         switch (state.currentMatch!.state) {
             case GAME_STATE.p1_selecting_first_hero:
             case GAME_STATE.p1_selecting_last_heroes:
@@ -528,10 +545,15 @@ export class EquipmentMenu extends Phaser.Scene {
         this.status = new StatusUI(this, []);
 
         this.subscription = this.config.api.state$.subscribe((state) => this.onStateChange(state));
+
+        if (this.initialState) {
+            this.onStateChange(this.initialState);
+        }
     }
 
     // advances to next step
     next() {
+        if (this.setupState === SetupState.Submitting) return;
         this.tweens.add({
             targets: this.heroes[this.config.isP1 ? 0 : 1][this.selecting].select_circle,
             alpha: 0,

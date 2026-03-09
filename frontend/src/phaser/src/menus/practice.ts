@@ -11,6 +11,7 @@ import { MainMenu } from './main';
 import { StatusUI } from '.';
 import { DeployedPVPArenaAPI, PVPArenaDerivedState } from '@midnight-ntwrk/pvp-api';
 import { BatcherClient } from '../batcher-client';
+import { firstValueFrom, filter } from 'rxjs';
 
 
 export class PracticeMenu extends Phaser.Scene {
@@ -37,11 +38,17 @@ export class PracticeMenu extends Phaser.Scene {
                 this.api.create_new_match(false, true).then((matchId) => {
                     BatcherClient.setCircuitName('join_match');
                     // Register P1 as P2 so the AI can call p2_* circuits on their behalf
-                    return this.api.joinMatch(matchId);
-                }).then(() => {
+                    return this.api.joinMatch(matchId).then(() => matchId);
+                }).then((matchId) => {
                     BatcherClient.setCircuitName('');
+                    // Wait for state$ to emit a state where currentMatch is set for this match
+                    // (joinMatch writes to private DB but shareReplay caches pre-write state)
+                    return firstValueFrom(
+                        this.api.state$.pipe(filter(s => s.currentMatchId === matchId && s.currentMatch !== null))
+                    );
+                }).then((initialState) => {
                     this.scene.remove('EquipmentMenu');
-                    const equipMenu = new EquipmentMenu({ api: this.api, isP1: true });
+                    const equipMenu = new EquipmentMenu({ api: this.api, isP1: true }, initialState);
                     this.scene.add('EquipmentMenu', equipMenu);
                     this.scene.start('EquipmentMenu');
                 })

@@ -2,6 +2,11 @@ pragma language_version >= 0.19;
 
 import CompactStandardLibrary;
 
+// 5 minutes in seconds — each player must act within this time
+ledger TURN_TIMEOUT: Uint<64> ;
+// 1 block grace to allow for timestamp drift between prover and chain
+ledger BLOCK_TIME: Uint<64>;
+
 export enum RESULT { p1_win, p2_win, tie, waiting, continue_ }
 
 export enum ITEM { nothing, axe, shield, bow, sword, spear }
@@ -141,20 +146,25 @@ export ledger public_: Map<Field, Boolean>;
 // this could be useful information to use to see how many non-practice matches players play
 export ledger is_practice: Map<Field, Boolean>;
 
-// TODO: this won't work if two users create a new match at the same time.
-// alternatives would be to index by user id + this?
-ledger next_match_id: Field;
+// unix timestamp (seconds) of the last move — used for turn timeout enforcement
+export ledger last_move_at: Map<Field, Uint<64>>;
+
 
 witness player_secret_key(): Bytes<32>;
 
 witness current_match_id(): Field;
 
 constructor() {
+    // Timestamps are in milliseconds (local chain GraphQL returns ms).
+    // BLOCK_TIME: 2 Midnight Blocks
+    // TURN_TIMEOUT: 5-minute per-turn timeout.
+    TURN_TIMEOUT = 5 * 60 * 1000;
+    BLOCK_TIME = 2 * 6 * 1000;
 }
 
-export circuit create_new_match(is_match_public: Boolean, is_match_practice: Boolean): Field {
-    const match_id = next_match_id;
-    next_match_id = next_match_id + 1;
+export circuit create_new_match(match_nonce: Bytes<32>, is_match_public: Boolean, is_match_practice: Boolean): Field {
+    const match_id = transientHash<MatchIdHasher>(MatchIdHasher { derive_public_key(player_secret_key()), disclose(match_nonce) });
+    assert(!game_state.member(match_id), "Match ID already taken");
 
     p1_heroes.insert(match_id, [none<Hero>(), none<Hero>(), none<Hero>()]);
     p2_heroes.insert(match_id, [none<Hero>(), none<Hero>(), none<Hero>()]);
@@ -183,6 +193,7 @@ export circuit create_new_match(is_match_public: Boolean, is_match_practice: Boo
     p2_alive_2.insert(match_id, true);
     public_.insert(match_id, disclose(is_match_public));
     is_practice.insert(match_id, disclose(is_match_practice));
+    last_move_at.insert(match_id, 0);
 
     return match_id;
 }
@@ -216,6 +227,11 @@ struct MoveHasher {
     sk: Bytes<32>,
     cmds: Vector<3, Uint<32>>,
     stances: Vector<3, STANCE>,
+    nonce: Bytes<32>,
+}
+
+struct MatchIdHasher {
+    player_key: Field,
     nonce: Bytes<32>,
 }
 
@@ -423,11 +439,12 @@ export circuit p2_select_last_hero(last_hero: HeroHack): [] {
 witness player_commands(): Vector<3, Uint<32>>;
 witness player_stances(): Vector<3, STANCE>;
 
-export circuit p1_commit_commands(nonce: Bytes<32>): [] {
+export circuit p1_commit_commands(nonce: Bytes<32>, now: Uint<64>): [] {
     const match_id = disclose(current_match_id());
 
     assert(p1_public_key.lookup(match_id) == derive_public_key(player_secret_key()), "Not authorized as P1");
     assert(game_state.lookup(match_id) == GAME_STATE.p1_commit, "P1 must commit at start of round");
+    assert(blockTimeLt(disclose(now - BLOCK_TIME)), "Claimed timestamp is in the future");
     // check you're only targetting valid (alive) gladiators
     assert(!p1_alive_0.lookup(match_id) || (disclose(player_commands())[0] <= 2 && ((disclose(player_commands())[0] == 0 && p2_alive_0.lookup(match_id)) || (disclose(player_commands())[0] == 1 && p2_alive_1.lookup(match_id)) || (disclose(player_commands())[0] == 2 && p2_alive_2.lookup(match_id)))), "Invalid move [0]");
     assert(!p1_alive_1.lookup(match_id) || (disclose(player_commands())[1] <= 2 && ((disclose(player_commands())[1] == 0 && p2_alive_0.lookup(match_id)) || (disclose(player_commands())[1] == 1 && p2_alive_1.lookup(match_id)) || (disclose(player_commands())[1] == 2 && p2_alive_2.lookup(match_id)))), "Invalid move [1]");
@@ -435,16 +452,18 @@ export circuit p1_commit_commands(nonce: Bytes<32>): [] {
     p1_commit.insert(match_id, transientHash<MoveHasher>(MoveHasher { disclose(player_secret_key()), disclose(player_commands()), disclose(player_stances()), disclose(nonce) }));
 
     commit_nonce.insert(match_id, disclose(nonce));
+    last_move_at.insert(match_id, disclose(now));
 
     game_state.insert(match_id, GAME_STATE.p2_commit_reveal);
 }
 
 // p2 just publicly commits as there's no need to since p1 already committed
-export circuit p2_commit_commands(): [] {
+export circuit p2_commit_commands(now: Uint<64>): [] {
     const match_id = disclose(current_match_id());
 
     assert(p2_public_key.lookup(match_id) == derive_public_key(player_secret_key()), "Not authorized as P2");
     assert(game_state.lookup(match_id) == GAME_STATE.p2_commit_reveal, "P2 must commit after P1 commits");
+    assert(blockTimeLt(disclose(now - BLOCK_TIME)), "Claimed timestamp is in the future");
     // check you're only targetting valid (alive) gladiators
     assert(!p2_alive_0.lookup(match_id) || (disclose(player_commands())[0] <= 2 && ((disclose(player_commands())[0] == 0 && p1_alive_0.lookup(match_id)) || (disclose(player_commands())[0] == 1 && p1_alive_1.lookup(match_id)) || (disclose(player_commands())[0] == 2 && p1_alive_2.lookup(match_id)))), "Invalid move [0]");
     assert(!p2_alive_1.lookup(match_id) || (disclose(player_commands())[1] <= 2 && ((disclose(player_commands())[1] == 0 && p1_alive_0.lookup(match_id)) || (disclose(player_commands())[1] == 1 && p1_alive_1.lookup(match_id)) || (disclose(player_commands())[1] == 2 && p1_alive_2.lookup(match_id)))), "Invalid move [1]");
@@ -452,20 +471,23 @@ export circuit p2_commit_commands(): [] {
 
     p2_cmds.insert(match_id, some<Vector<3, Uint<32>>>(disclose(player_commands())));
     p2_stances.insert(match_id, disclose(player_stances()));
+    last_move_at.insert(match_id, disclose(now));
 
     game_state.insert(match_id, GAME_STATE.p1_reveal);
 }
 
-export circuit p1_reveal_commands(): [] {
+export circuit p1_reveal_commands(now: Uint<64>): [] {
     const DEAD = 100000;
     const match_id = disclose(current_match_id());
 
     // no need to auth P1 as the commit hash check won't match otherwise
     assert(game_state.lookup(match_id) == GAME_STATE.p1_reveal, "P1 must reveal after P2 commits");
+    assert(blockTimeLt(disclose(now - BLOCK_TIME)), "Claimed timestamp is in the future");
     assert(transientHash<MoveHasher>(MoveHasher { disclose(player_secret_key()), disclose(player_commands()), disclose(player_stances()), commit_nonce.lookup(match_id) }) == p1_commit.lookup(match_id), "Commit doesn't match");
 
     p1_cmds.insert(match_id, some<Vector<3, Uint<32>>>(disclose(player_commands())));
     p1_stances.insert(match_id, disclose(player_stances()));
+    last_move_at.insert(match_id, disclose(now));
 
     p1_dmg_0.insert(match_id, (p1_dmg_0.lookup(match_id) + ((p2_alive_0.lookup(match_id) as Uint<1>) * ((p2_cmds.lookup(match_id).value[0] == 0) as Uint<1>) * base_damage_cache_p2_0_0.lookup(match_id) * (stance_damage_modifier(p2_stances.lookup(match_id)[0]) + stance_damage_modifier(p1_stances.lookup(match_id)[0])))) as Uint<32>);
     p1_dmg_1.insert(match_id, (p1_dmg_1.lookup(match_id) + ((p2_alive_0.lookup(match_id) as Uint<1>) * ((p2_cmds.lookup(match_id).value[0] == 1) as Uint<1>) * base_damage_cache_p2_0_1.lookup(match_id) * (stance_damage_modifier(p2_stances.lookup(match_id)[0]) + stance_damage_modifier(p1_stances.lookup(match_id)[1])))) as Uint<32>);
@@ -509,4 +531,113 @@ export circuit p1_reveal_commands(): [] {
     } else {
         game_state.insert(match_id, GAME_STATE.p1_commit);
     }
+}
+
+// Claim a win if the opponent has not acted within TURN_TIMEOUT seconds.
+// Valid during p1_commit (p2 claims), p2_commit_reveal (p1 claims), p1_reveal (p2 claims).
+export circuit claim_timeout_win(): [] {
+    const match_id = disclose(current_match_id());
+    const myKey = derive_public_key(player_secret_key());
+    const state = game_state.lookup(match_id);
+    const last_move_at_timestamp = last_move_at.lookup(match_id) as Uint<64>;
+    assert(last_move_at_timestamp > 0, "Game has not started yet");
+    assert(blockTimeGte(disclose((last_move_at_timestamp + TURN_TIMEOUT) as Uint<64> )), "Opponent has not timed out yet");
+    assert(state == GAME_STATE.p1_commit || state == GAME_STATE.p2_commit_reveal || state == GAME_STATE.p1_reveal, "Game is not in an active turn state");
+    if (state == GAME_STATE.p2_commit_reveal) {
+        // P1 committed, P2 is late — P1 wins
+        assert(p1_public_key.lookup(match_id) == myKey, "Not authorized");
+        game_state.insert(match_id, GAME_STATE.p1_win);
+    } else {
+        // p1_commit or p1_reveal — P2 is waiting, P2 wins
+        assert(p2_public_key.member(match_id) && p2_public_key.lookup(match_id) == myKey, "Not authorized");
+        game_state.insert(match_id, GAME_STATE.p2_win);
+    }
+}
+
+// Voluntarily surrender — opponent wins immediately.
+export circuit surrender(): [] {
+    const match_id = disclose(current_match_id());
+    const myKey = derive_public_key(player_secret_key());
+    const state = game_state.lookup(match_id);
+    assert(state == GAME_STATE.p1_commit || state == GAME_STATE.p2_commit_reveal || state == GAME_STATE.p1_reveal, "Game is not in progress");
+    if (p1_public_key.lookup(match_id) == myKey) {
+        game_state.insert(match_id, GAME_STATE.p2_win);
+    } else {
+        assert(p2_public_key.member(match_id) && p2_public_key.lookup(match_id) == myKey, "Not a participant");
+        game_state.insert(match_id, GAME_STATE.p1_win);
+    }
+}
+
+// Remove all ledger entries for a finished match, freeing on-chain storage.
+// Can be called by either participant once the game is in a terminal state.
+export circuit cleanup_match(): [] {
+    const match_id = disclose(current_match_id());
+    const myKey = derive_public_key(player_secret_key());
+    const state = game_state.lookup(match_id);
+    assert(state == GAME_STATE.p1_win || state == GAME_STATE.p2_win || state == GAME_STATE.tie, "Match is not finished");
+    assert(p1_public_key.lookup(match_id) == myKey || (p2_public_key.member(match_id) && p2_public_key.lookup(match_id) == myKey), "Not a participant");
+
+    game_state.remove(match_id);
+    p1_public_key.remove(match_id);
+    if (p2_public_key.member(match_id)) {
+        p2_public_key.remove(match_id);
+    }
+    public_.remove(match_id);
+    is_practice.remove(match_id);
+    round.remove(match_id);
+    last_move_at.remove(match_id);
+    commit_nonce.remove(match_id);
+
+    p1_heroes.remove(match_id);
+    p1_stats.remove(match_id);
+    p1_cmds.remove(match_id);
+    p1_stances.remove(match_id);
+    p1_commit.remove(match_id);
+    p1_dmg_0.remove(match_id);
+    p1_dmg_1.remove(match_id);
+    p1_dmg_2.remove(match_id);
+    p1_alive_0.remove(match_id);
+    p1_alive_1.remove(match_id);
+    p1_alive_2.remove(match_id);
+
+    p2_heroes.remove(match_id);
+    p2_stats.remove(match_id);
+    p2_cmds.remove(match_id);
+    p2_stances.remove(match_id);
+    p2_dmg_0.remove(match_id);
+    p2_dmg_1.remove(match_id);
+    p2_dmg_2.remove(match_id);
+    p2_alive_0.remove(match_id);
+    p2_alive_1.remove(match_id);
+    p2_alive_2.remove(match_id);
+
+    base_damage_cache_p1_0_0.remove(match_id);
+    base_damage_cache_p1_0_1.remove(match_id);
+    base_damage_cache_p1_0_2.remove(match_id);
+    base_damage_cache_p1_1_0.remove(match_id);
+    base_damage_cache_p1_1_1.remove(match_id);
+    base_damage_cache_p1_1_2.remove(match_id);
+    base_damage_cache_p1_2_0.remove(match_id);
+    base_damage_cache_p1_2_1.remove(match_id);
+    base_damage_cache_p1_2_2.remove(match_id);
+    base_damage_cache_p2_0_0.remove(match_id);
+    base_damage_cache_p2_0_1.remove(match_id);
+    base_damage_cache_p2_0_2.remove(match_id);
+    base_damage_cache_p2_1_0.remove(match_id);
+    base_damage_cache_p2_1_1.remove(match_id);
+    base_damage_cache_p2_1_2.remove(match_id);
+    base_damage_cache_p2_2_0.remove(match_id);
+    base_damage_cache_p2_2_1.remove(match_id);
+    base_damage_cache_p2_2_2.remove(match_id);
+}
+
+// Close a match before it starts (practice or unjoined lobby created by this player).
+export circuit close_match(): [] {
+    const match_id = disclose(current_match_id());
+    const myKey = derive_public_key(player_secret_key());
+    const hasP2 = p2_public_key.member(match_id);
+    const isP1 = p1_public_key.lookup(match_id) == myKey;
+    const isP2 = hasP2 && (p2_public_key.lookup(match_id) == myKey);
+    assert((isP1 && !hasP2) || ((isP1 || isP2) && is_practice.lookup(match_id)), "Not authorized to close this match");
+    game_state.insert(match_id, GAME_STATE.tie);
 }

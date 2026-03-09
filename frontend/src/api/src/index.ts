@@ -25,7 +25,7 @@ import {
 } from '@midnight-ntwrk/pvp-contract';
 import * as utils from './utils/index.js';
 import { deployContract, findDeployedContract, FoundContract } from '@midnight-ntwrk/midnight-js-contracts';
-import { map, tap, from, switchMap, type Observable } from 'rxjs';
+import { map, tap, from, switchMap, shareReplay, type Observable } from 'rxjs';
 import { PrivateStateProvider } from '@midnight-ntwrk/midnight-js-types';
 import { CompiledContract } from '@midnight-ntwrk/compact-js';
 
@@ -135,7 +135,7 @@ export interface DeployedPVPArenaAPI {
   /** Optional hook called before each AI-driven circuit invocation with the circuit name. */
   beforeCircuitCall?: (circuitName: string) => void;
 
-  create_new_match: (is_match_public: boolean, is_match_practice: boolean) => Promise<bigint>;
+  create_new_match: (is_match_public: boolean, is_match_practice?: boolean) => Promise<bigint>;
   p1_select_first_hero: (first_hero: Hero) => Promise<void>;
   p2_select_first_heroes: (first_heroes: Hero[]) => Promise<void>;
   p1_select_last_heroes: (last_heroes: Hero[]) => Promise<void>;
@@ -145,6 +145,10 @@ export interface DeployedPVPArenaAPI {
   p1Reveal: (commands: bigint[], stances: STANCE[]) => Promise<void>;
   joinMatch: (matchId: bigint) => Promise<void>;
   setCurrentMatch: (matchId: bigint) => Promise<void>;
+  claimTimeoutWin: () => Promise<void>;
+  surrender: () => Promise<void>;
+  closeMatch: () => Promise<void>;
+  cleanupMatch: () => Promise<void>;
 }
 
 /**
@@ -169,8 +173,11 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
    *  Set this from the phaser layer: `api.beforeCircuitCall = (name) => BatcherClient.setCircuitName(name)` */
   beforeCircuitCall?: (circuitName: string) => void;
 
-  /** Guard: prevents a second AI circuit call from starting while one is already in flight. */
-  private isAiCallInProgress = false;
+  /** Guard: tracks which (round, state) the AI last submitted a circuit call for.
+   *  Prevents re-firing for the same game state on repeated state$ emissions
+   *  (e.g. while watchForTxData is still waiting for chain confirmation).
+   *  Key is "${round}:${state}" — resets across rounds automatically. */
+  private lastAiCalledForKey: string = '';
 
   /** @internal */
   private constructor(
@@ -181,14 +188,8 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
     this.deployedContractAddress = deployedContract.deployTxData.public.contractAddress;
     this.state$ = providers.publicDataProvider.contractStateObservable(this.deployedContractAddress, { type: 'latest' }).pipe(
       // Combine public (ledger) state with...
-      tap((contractState) => {
-        console.log('[state$ src1] contractStateObservable emitted — data?.state type:', typeof contractState?.data?.state, contractState?.data?.state == null ? 'NULL/UNDEF' : 'ok');
-      }),
       map((contractState) => {
-        console.log('[state$ src1] calling ledger()...');
-        const result = ledger(contractState.data.state);
-        console.log('[state$ src1] ledger() succeeded');
-        return result;
+        return ledger(contractState.data.state);
       }),
       tap((ledgerState) =>
         logger?.trace({
@@ -205,11 +206,7 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
         from(
           providers.privateStateProvider.get('pvpPrivateState').then(
             (ps) => {
-              console.log('[state$ src2] privateStateProvider resolved — value type:', typeof ps, ps == null ? 'NULL/UNDEF' : 'ok');
-              if (ps != null) {
-                const sk = (ps as any).secretKey;
-                console.log('[state$ src2] secretKey:', sk == null ? 'NULL/UNDEF' : `${sk.constructor?.name}(${sk.length ?? Object.keys(sk).length})`);
-              }
+              if (ps == null) console.warn('[state$] privateStateProvider returned null');
               return ps;
             },
             (err) => {
@@ -220,16 +217,6 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
         ).pipe(
           // ...and combine them to produce the required derived state.
           map((privateState) => {
-        // Log raw private state to diagnose deserialization issues on reload.
-        // On first load the levelPrivateStateProvider returns the in-memory object,
-        // but on reload it reads from IndexedDB where Uint8Array round-trips as a
-        // plain Array/Object, causing derive_public_key to throw "expected a cell".
-        console.log('[state$] privateState type:', typeof privateState, privateState === null ? 'NULL' : 'ok');
-        if (privateState != null) {
-          const sk = (privateState as any).secretKey;
-          console.log('[state$] secretKey:', sk, 'instanceof Uint8Array:', sk instanceof Uint8Array, 'constructor:', sk?.constructor?.name);
-        }
-
         // Normalize secretKey back to Uint8Array in case IndexedDB deserialized it
         // as a plain Array or numeric-keyed Object.
         const rawSk = (privateState as any)?.secretKey;
@@ -252,7 +239,6 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
         };
 
         const parseMatchState = (matchId: bigint): PVPArenaDerivedMatchState => {
-          console.log(`[parseMatchState] matchId=${matchId}`);
           const isP1 = ledgerState.p1_public_key.lookup(matchId) === localPublicKey;
           const isP2 = ledgerState.p2_public_key.member(matchId) && (ledgerState.p2_public_key.lookup(matchId) === localPublicKey);
 
@@ -292,29 +278,20 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
           const isPractice = safeLookup('is_practice', () => ledgerState.is_practice.lookup(matchId), false);
           const p1PubKey  = safeLookup('p1_public_key', () => ledgerState.p1_public_key.lookup(matchId), 0n);
           const p2PubKey  = ledgerState.p2_public_key.member(matchId) ? ledgerState.p2_public_key.lookup(matchId) : undefined;
+          const lastMoveAt = safeLookup('last_move_at', () => ledgerState.last_move_at.lookup(matchId), 0n);
 
-          console.log(`[parseMatchState] matchId=${matchId} state=${state} isP1=${isP1} isP2=${isP2} isPractice=${isPractice}`);
 
           return {
             round, state, p1Heroes, p2Heroes, p1Stances, p2Stances,
             p1Dmg, p2Dmg, p1Alive, p2Alive,
             p1Cmds, p2Cmds, nonce, commit,
             isPublic, isPractice, isP1, isP2, p1PubKey, p2PubKey,
+            lastMoveAt,
             secretKey: privateState.secretKey,
           };
         };
 
         const matchStates = new Map(ledgerState.game_state);
-
-        console.log(`[state$] matchStates keys=[${[...matchStates.keys()].join(',')}] currentMatchId=${privateState.currentMatchId} type=${typeof privateState.currentMatchId}`);
-        console.log(`[state$] localPublicKey=${localPublicKey}`);
-        for (const id of matchStates.keys()) {
-          const p1Key = ledgerState.p1_public_key.lookup(id);
-          const p2Member = ledgerState.p2_public_key.member(id);
-          const p2Key = p2Member ? ledgerState.p2_public_key.lookup(id) : 'N/A';
-          const pub = (() => { try { return ledgerState.public_.lookup(id); } catch { return '?'; } })();
-          console.log(`[state$]   match id=${id} p1Key=${p1Key} p2Member=${p2Member} p2Key=${p2Key} isPublic=${pub} isMyP1=${p1Key === localPublicKey} isMyP2=${p2Member && p2Key === localPublicKey}`);
-        }
 
         // Guard: currentMatchId may be stale (e.g. local chain restarted, contract
         // redeployed, or this is a first-time boot with no matches yet). Calling
@@ -322,21 +299,34 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
         // return undefined/null, which then throws when chained with .filter()/.map(),
         // silently erroring state$ and leaving the boot screen stuck forever.
         const hasCurrentMatch = privateState.currentMatchId !== null && matchStates.has(privateState.currentMatchId);
-        console.log(`[state$] hasCurrentMatch=${hasCurrentMatch}`);
         const currentMatch = hasCurrentMatch
           ? parseMatchState(privateState.currentMatchId!)
           : null;
 
         // in practice mode we locally run everything in the mockapi but ran on-chain
-        if (currentMatch?.isPractice === true && !this.isAiCallInProgress) {
-          // Guard: only one AI circuit call in flight at a time.
-          // Without this, rapid state$ emissions (e.g. the WebSocket fires while watchForTxData
-          // is still polling) can start two concurrent circuit simulations which trample each
-          // other's shared static BatcherClient.circuitName, causing "circuit name not set".
+        const aiKey = currentMatch ? `${currentMatch.round}:${currentMatch.state}` : '';
+        if (currentMatch?.isPractice === true && aiKey !== this.lastAiCalledForKey) {
+          // Guard: only fire the AI circuit once per (round, state) pair.
+          // Uses round+state so that the same state number in round 2 correctly
+          // fires again (lastAiCalledForKey from round 1 won't match round 2's key).
           const runAi = (circuitName: string, call: () => Promise<unknown>) => {
-            this.isAiCallInProgress = true;
+            this.lastAiCalledForKey = aiKey;
+            console.log(`[AI] round=${currentMatch.round} state=${currentMatch.state} → calling ${circuitName}`);
             this.beforeCircuitCall?.(circuitName);
-            call().finally(() => { this.isAiCallInProgress = false; });
+            call().catch((e) => {
+              // Delegation sentinel errors are expected (batcher took over the tx).
+              // For real failures (circuit assertion, stale indexer state, etc.) reset
+              // the key so the AI retries on the next state$ emission.
+              const isDelegationSentinel = (err: unknown): boolean => {
+                if (!(err instanceof Error)) return false;
+                if (err.message.includes('Delegated balancing flow handed off to batcher')) return true;
+                return err.cause instanceof Error ? isDelegationSentinel(err.cause) : false;
+              };
+              if (!isDelegationSentinel(e)) {
+                console.warn(`[AI] ${circuitName} failed, resetting key for retry:`, e);
+                this.lastAiCalledForKey = '';
+              }
+            });
           };
 
           switch (currentMatch.state) {
@@ -387,7 +377,8 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
         };
           }) // map(privateState)
         )   // from(...).pipe(...)
-      )     // switchMap
+      ),    // switchMap
+      shareReplay(1)  // replay last state to new subscribers (e.g. EquipmentMenu subscribing after state was already set)
     );      // contractStateObservable.pipe(...)
   }
 
@@ -436,9 +427,10 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
    *
    * @param is_match_public If the match should be tracked in the public lobby system
    */
-  async create_new_match(is_match_public: boolean, is_match_practice: boolean): Promise<bigint> {
+  async create_new_match(is_match_public: boolean, is_match_practice: boolean = false): Promise<bigint> {
+    const match_nonce = utils.randomBytes(32);
     console.log(`[api:create_new_match] calling circuit (public=${is_match_public}, practice=${is_match_practice})`);
-    const txData = await this.deployedContract.callTx.create_new_match(is_match_public, is_match_practice);
+    const txData = await this.deployedContract.callTx.create_new_match(match_nonce, is_match_public, is_match_practice);
 
     this.logger?.trace({
       transactionAdded: {
@@ -561,7 +553,7 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
 
     //console.log(`commands: ${commands.map((c) => c.attack.toString()).join(',')}`);
     //const txData = await this.deployedContract.callTx.p1_command([commands[0].attack, commands[1].attack, commands[2].attack]);
-    console.log('before[1]');
+    console.log('[p1Commit] submitting circuit call');
     var txData;
     try {
       const state = await PVPArenaAPI.getPrivateState(this.providers.privateStateProvider);
@@ -569,13 +561,16 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
       state!.stances = stances;
       await this.providers.privateStateProvider.set('pvpPrivateState', state);
       const nonce = utils.randomBytes(32);
-      //await sleep(1000);
-      txData = await this.deployedContract.callTx.p1_commit_commands(nonce);
+      const wallClockSec = BigInt(Math.floor(Date.now() / 1000));
+      const chainTimestamp = this.providers.getChainTimestamp ? await this.providers.getChainTimestamp() : null;
+      const now = chainTimestamp ?? wallClockSec;
+      console.log(`[p1Commit] wallClockSec=${wallClockSec} chainTimestamp=${chainTimestamp} using now=${now}`);
+      txData = await this.deployedContract.callTx.p1_commit_commands(nonce, now);
     } catch (err) {
-      console.log(`p1Cmd failed: ${JSON.stringify(err)}`);
+      console.warn(`[p1Commit] failed: ${err instanceof Error ? err.message : JSON.stringify(err)}`);
       throw err;
     }
-    console.log('after[1]');
+    console.log('[p1Commit] done');
     this.logger?.trace({
       transactionAdded: {
         circuit: 'p1_commit',
@@ -588,20 +583,23 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
   async p2Commit(commands: bigint[], stances: STANCE[]): Promise<void> {
     this.logger?.info(`api.p2Commit(${safeJSONString(commands)}, ${safeJSONString(stances)})`);
 
-    console.log('before[2]');
+    console.log('[p2Commit] submitting circuit call');
     var txData;
     try {
       const state = await PVPArenaAPI.getPrivateState(this.providers.privateStateProvider);
       state!.commands = commands;
       state!.stances = stances;
       await this.providers.privateStateProvider.set('pvpPrivateState', state);
-      //await sleep(1000);
-      txData = await this.deployedContract.callTx.p2_commit_commands();
+      const wallClockSec = BigInt(Math.floor(Date.now() / 1000));
+      const chainTimestamp = this.providers.getChainTimestamp ? await this.providers.getChainTimestamp() : null;
+      const now = chainTimestamp ?? wallClockSec;
+      console.log(`[p2Commit] wallClockSec=${wallClockSec} chainTimestamp=${chainTimestamp} using now=${now}`);
+      txData = await this.deployedContract.callTx.p2_commit_commands(now);
     } catch (err) {
-      console.log(`p2Cmd failed: ${JSON.stringify(err)}`);
+      console.warn(`[p2Commit] failed: ${err instanceof Error ? err.message : JSON.stringify(err)}`);
       throw err;
     }
-    console.log('after[2]');
+    console.log('[p2Commit] done');
     //const txData = await this.deployedContract.callTx.p2_command([commands[0].attack, commands[1].attack, commands[2].attack]);
 
     this.logger?.trace({
@@ -623,9 +621,13 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
       state!.stances = stances;
       await this.providers.privateStateProvider.set('pvpPrivateState', state);
       //await sleep(1000);
-      txData = await this.deployedContract.callTx.p1_reveal_commands();
+      const wallClockSec = BigInt(Math.floor(Date.now() / 1000));
+      const chainTimestamp = this.providers.getChainTimestamp ? await this.providers.getChainTimestamp() : null;
+      const now = chainTimestamp ?? wallClockSec;
+      console.log(`[p1Reveal] wallClockSec=${wallClockSec} chainTimestamp=${chainTimestamp} using now=${now}`);
+      txData = await this.deployedContract.callTx.p1_reveal_commands(now);
     } catch (err) {
-      console.log(`p1Reveal failed: ${JSON.stringify(err)}`);
+      console.warn(`[p1Reveal] failed: ${err instanceof Error ? err.message : JSON.stringify(err)}`);
       throw err;
     }
 
@@ -654,6 +656,30 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
       // verify the write round-trips correctly
       const verify = await this.providers.privateStateProvider.get('pvpPrivateState') as any;
       console.log(`[setCurrentMatch] verify after set: currentMatchId=${verify?.currentMatchId} type=${typeof verify?.currentMatchId} | secretKey instanceof=${verify?.secretKey instanceof Uint8Array}`);
+  }
+
+  async claimTimeoutWin(): Promise<void> {
+    console.log('[api:claimTimeoutWin] submitting circuit call');
+    await this.deployedContract.callTx.claim_timeout_win();
+    console.log('[api:claimTimeoutWin] done');
+  }
+
+  async surrender(): Promise<void> {
+    console.log('[api:surrender] submitting circuit call');
+    await this.deployedContract.callTx.surrender();
+    console.log('[api:surrender] done');
+  }
+
+  async closeMatch(): Promise<void> {
+    console.log('[api:closeMatch] submitting circuit call');
+    await this.deployedContract.callTx.close_match();
+    console.log('[api:closeMatch] done');
+  }
+
+  async cleanupMatch(): Promise<void> {
+    console.log('[api:cleanupMatch] submitting circuit call');
+    await this.deployedContract.callTx.cleanup_match();
+    console.log('[api:cleanupMatch] done');
   }
 
   /**

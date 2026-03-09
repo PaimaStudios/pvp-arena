@@ -19,6 +19,8 @@ export type BattleConfig = {
     api: DeployedPVPArenaAPI,
 };
 
+const TURN_TIMEOUT_SECS = 300;
+
 export class Arena extends Phaser.Scene
 {
     heroes: HeroActor[][];
@@ -33,7 +35,15 @@ export class Arena extends Phaser.Scene
     status: StatusUI | undefined;
     round: number;
     submitButton: Button | undefined;
+    surrenderButton: Button | undefined;
+    claimWinButton: Button | undefined;
+    timerText: Phaser.GameObjects.Text | undefined;
+    lastMoveAt: bigint = 0n;
+    isPractice: boolean = false;
     subscription: Subscription | undefined;
+    // Saved at p1Commit time so p1Reveal uses the exact same values regardless of UI state changes.
+    committedMoves: bigint[] | null = null;
+    committedStances: STANCE[] | null = null;
 
     constructor(config: BattleConfig, initialState: PVPArenaDerivedState) {
         super('Arena');
@@ -74,10 +84,20 @@ export class Arena extends Phaser.Scene
                 makeTooltip(this, firstHero.x, firstHero.y - 96, TooltipId.SelectHero, { clickHighlights: [new Phaser.Math.Vector2(firstHero.x, firstHero.y)] });
                 break;
             case MatchState.WaitingOnOpponent:
-                this.status?.setText('Waiting on opponent (submit)...');
+                this.status?.setProgressText([
+                    { text: 'Waiting for opponent to submit...', delay: 0 },
+                    { text: 'Your opponent is choosing their move...', delay: 20_000 },
+                    { text: 'Still waiting for your opponent...', delay: 45_000 },
+                    { text: 'Your opponent might be away. Hang tight!', delay: 80_000 },
+                ]);
                 break;
             case MatchState.SubmittingMove:
-                this.status?.setText('Submitting move...');
+                this.status?.setProgressText([
+                    { text: 'Submitting move to the blockchain...', delay: 0 },
+                    { text: 'Generating zero-knowledge proof...', delay: 10_000 },
+                    { text: 'Waiting for transaction confirmation...', delay: 25_000 },
+                    { text: 'Almost there (this can take up to a minute)...', delay: 45_000 },
+                ]);
                 this.selected?.deselect();
                 this.selected = undefined;
                 for (const hero of this.getAliveHeroes(this.playerTeam())) {
@@ -85,10 +105,20 @@ export class Arena extends Phaser.Scene
                 }
                 break;
             case MatchState.RevealingMove:
-                this.status?.setText('Revealing move...');
+                this.status?.setProgressText([
+                    { text: 'Revealing your move...', delay: 0 },
+                    { text: 'Generating zero-knowledge proof...', delay: 10_000 },
+                    { text: 'Waiting for transaction confirmation...', delay: 25_000 },
+                    { text: 'Almost there (this can take up to a minute)...', delay: 45_000 },
+                ]);
                 break;
             case MatchState.WaitingOtherPlayerReveal:
-                this.status?.setText('Waiting on opponent (reveal)...');
+                this.status?.setProgressText([
+                    { text: 'Waiting for opponent to reveal their move...', delay: 0 },
+                    { text: 'Opponent is generating their proof...', delay: 15_000 },
+                    { text: 'Still waiting for reveal...', delay: 40_000 },
+                    { text: 'Your opponent might be away. Hang tight!', delay: 80_000 },
+                ]);
                 break;
             case MatchState.CombatResolving:
                 this.status?.setText('Battle!');
@@ -143,8 +173,7 @@ export class Arena extends Phaser.Scene
     }
 
     onStateChange(state: PVPArenaDerivedState) {
-        console.log(`new state: ${safeJSONString(state)}`);
-        console.log(`NOW: ${gameStateStr(state.currentMatch!.state)}`);
+        console.log(`[arena] onStateChange: round=${state.currentMatch!.round} state=${gameStateStr(state.currentMatch!.state)}`);
 
         if (state.currentMatch!.state == GAME_STATE.p1_selecting_first_hero || state.currentMatch!.state == GAME_STATE.p2_selecting_first_heroes || state.currentMatch!.state == GAME_STATE.p1_selecting_last_heroes || state.currentMatch!.state == GAME_STATE.p2_selecting_last_hero) {
             // for some reason we're getting updates here using old state that we can ignore
@@ -156,7 +185,7 @@ export class Arena extends Phaser.Scene
 
         // update commands/stances/damages
         if (state.currentMatch!.p1Cmds != undefined && state.currentMatch!.p2Cmds != undefined/* && (state.currentMatch!.state == GAME_STATE.p1_commit)*/) {
-            console.log(`***** UPDATING CMDS ****`);
+            console.log(`[arena] updating cmds/targets for round=${state.currentMatch!.round}`);
             const newTargets = [
                 state.currentMatch!.p1Cmds.map(Number),
                 state.currentMatch!.p2Cmds.map(Number)
@@ -181,6 +210,8 @@ export class Arena extends Phaser.Scene
         // TODO: it's weird we have both this and the combat animations to control MatchState
         // we should consolidate this
         this.onChainState = state.currentMatch!.state;
+        this.lastMoveAt = state.currentMatch!.lastMoveAt;
+        this.isPractice = state.currentMatch!.isPractice;
 
         if (this.round < state.currentMatch!.round) {
             this.runCombatAnims();
@@ -191,6 +222,7 @@ export class Arena extends Phaser.Scene
     }
 
     runStateChange() {
+        console.log(`[arena] runStateChange: round=${this.round} onChainState=${this.onChainState} matchState=${this.matchState}`);
         switch (this.onChainState) {
             case GAME_STATE.p1_commit:
                 this.setMatchState(this.config.isP1 ? MatchState.WaitingOnPlayer : MatchState.WaitingOnOpponent);
@@ -200,12 +232,22 @@ export class Arena extends Phaser.Scene
                 break;
             case GAME_STATE.p1_reveal:
                 if (this.config.isP1) {
+                    if (this.matchState === MatchState.RevealingMove) break; // already in flight
                     console.log('revealing move (as p1)');
                     this.setMatchState(MatchState.RevealingMove);
                     BatcherClient.setCircuitName('p1_reveal_commands');
-                    this.config.api.p1Reveal(this.movesForContract(), this.stancesForContract())
+                    // Use saved committed values; fall back to current UI state if somehow missing.
+                    const revealMoves = this.committedMoves ?? this.movesForContract();
+                    const revealStances = this.committedStances ?? this.stancesForContract();
+                    console.log(`[arena] p1Reveal moves=${JSON.stringify(revealMoves.map(Number))} stances=${JSON.stringify(revealStances)}`);
+                    this.config.api.p1Reveal(revealMoves, revealStances)
+                        .then(() => {
+                            this.committedMoves = null;
+                            this.committedStances = null;
+                        })
                         .catch((e) => {
-                            // just re-try
+                            // Reset matchState so the RevealingMove guard doesn't block retry.
+                            this.matchState = MatchState.WaitingOtherPlayerReveal;
                             this.status!.setError(e, () => this.runStateChange(), 'Retry');
                         });
                 } else {
@@ -367,10 +409,23 @@ export class Arena extends Phaser.Scene
             } else if (match != null) {
                 const opponentKey = this.config.isP1 ? match.p2PubKey : match.p1PubKey;
                 if (opponentKey != null) {
-                    matchSuffix = ` - VS #${opponentKey.toString(16).padStart(16, '0').slice(0, 8)}…`;
+                    matchSuffix = ` - VS ${opponentKey.toString(16).padStart(16, '0').slice(0, 8)}…`;
                 }
             }
-            this.add.text(8, 20, `Match #${matchId}${matchSuffix}`, fontStyle(7, { color: '#999988' })).setOrigin(0, 0);
+            const matchIdStr = matchId.toString();
+            const matchIdShort = matchIdStr.slice(0, 6);
+            const matchLabel = this.add.text(8, 20, `Match #${matchIdShort}…${matchSuffix}`, fontStyle(7, { color: '#aabbaa' }))
+                .setOrigin(0, 0)
+                .setInteractive({ useHandCursor: true });
+            matchLabel.on('pointerover', () => matchLabel.setStyle({ color: '#ddeedd' }));
+            matchLabel.on('pointerout', () => matchLabel.setStyle({ color: '#aabbaa' }));
+            matchLabel.on('pointerdown', () => {
+                navigator.clipboard.writeText(matchIdStr).then(() => {
+                    const prev = matchLabel.text;
+                    matchLabel.setText('Copied!');
+                    this.time.delayedCall(1200, () => matchLabel.setText(prev));
+                });
+            });
         }
 
         // should we get rid of these?
@@ -488,7 +543,12 @@ export class Arena extends Phaser.Scene
                     if (this.config.isP1) {
                         console.log('submitting move (as p1)');
                         BatcherClient.setCircuitName('p1_commit_commands');
-                        this.config.api.p1Commit(this.movesForContract(), this.stancesForContract())
+                        const moves = this.movesForContract();
+                        const stances = this.stancesForContract();
+                        this.committedMoves = moves;
+                        this.committedStances = stances;
+                        console.log(`[arena] p1Commit moves=${JSON.stringify(moves.map(Number))} stances=${JSON.stringify(stances)}`);
+                        this.config.api.p1Commit(moves, stances)
                             .catch((e) => this.recoverFromSubmitError(MatchState.WaitingOnPlayer, e));
                     } else {
                         console.log('submitting move (as p2)');
@@ -508,13 +568,36 @@ export class Arena extends Phaser.Scene
             }
         });
 
+        this.surrenderButton = new Button(this, 48, GAME_HEIGHT - 20, 80, 22, 'Surrender', 9, () => {
+            if (window.confirm('Are you sure you want to surrender?')) {
+                BatcherClient.setCircuitName('surrender');
+                this.config.api.surrender()
+                    .catch((e) => this.status!.setError(e));
+            }
+        }, 'Give up and let your opponent win');
+        this.surrenderButton.setVisible(false);
+
+        this.claimWinButton = new Button(this, GAME_WIDTH - 56, GAME_HEIGHT - 20, 96, 22, 'Claim Win', 9, () => {
+            BatcherClient.setCircuitName('claim_timeout_win');
+            this.config.api.claimTimeoutWin()
+                .catch((e) => this.status!.setError(e));
+        }, 'Opponent has timed out — claim victory');
+        this.claimWinButton.setVisible(false);
+
+        this.timerText = this.add.text(GAME_WIDTH - 56, GAME_HEIGHT - 34, '', fontStyle(8, { color: '#ffaa44', align: 'center' })).setOrigin(0.5, 0.5).setVisible(false);
+
         this.submitButton = new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.9, 64, 24, 'Submit', 12, () => {
             this.setMatchState(MatchState.SubmittingMove);
             // still must send moves for dead units to make sure indexing works, so pad with 0's
             if (this.config.isP1) {
                 console.log('submitting move (as p1)');
                 BatcherClient.setCircuitName('p1_commit_commands');
-                this.config.api.p1Commit(this.movesForContract(), this.stancesForContract())
+                const moves = this.movesForContract();
+                const stances = this.stancesForContract();
+                this.committedMoves = moves;
+                this.committedStances = stances;
+                console.log(`[arena] p1Commit moves=${JSON.stringify(moves.map(Number))} stances=${JSON.stringify(stances)}`);
+                this.config.api.p1Commit(moves, stances)
                     .catch((e) => this.recoverFromSubmitError(MatchState.WaitingOnPlayer, e));
             } else {
                 console.log('submitting move (as p2)');
@@ -530,6 +613,11 @@ export class Arena extends Phaser.Scene
         ]);
         this.submitButton!.visible = false;
         this.add.existing(this.submitButton);
+
+        // Seed timer fields from the initial state immediately so update() has
+        // correct values before the first state$ emission arrives.
+        this.lastMoveAt = this.initialState.currentMatch?.lastMoveAt ?? 0n;
+        this.isPractice = this.initialState.currentMatch?.isPractice ?? false;
 
         this.setMatchState(MatchState.Initializing);
 
@@ -610,6 +698,40 @@ export class Arena extends Phaser.Scene
     }
 
     update() {
+        const activeStates = [GAME_STATE.p1_commit, GAME_STATE.p2_commit_reveal, GAME_STATE.p1_reveal];
+        const isActive = activeStates.includes(this.onChainState);
+
+        // Surrender: available during active non-practice games
+        this.surrenderButton?.setVisible(isActive && !this.isPractice);
+
+        if (isActive && !this.isPractice && this.lastMoveAt > 0n) {
+            const nowSec = Math.floor(Date.now() / 1000);
+            const elapsed = nowSec - Number(this.lastMoveAt);
+            const remaining = TURN_TIMEOUT_SECS - elapsed;
+
+            // Check if it's the opponent's turn (i.e., opponent might time out)
+            const isOpponentTurn =
+                (this.onChainState === GAME_STATE.p2_commit_reveal && this.config.isP1) ||
+                ((this.onChainState === GAME_STATE.p1_commit || this.onChainState === GAME_STATE.p1_reveal) && !this.config.isP1);
+
+            if (isOpponentTurn) {
+                if (remaining > 0) {
+                    const mins = Math.floor(remaining / 60);
+                    const secs = remaining % 60;
+                    this.timerText?.setText(`⏱ ${mins}:${secs.toString().padStart(2, '0')}`).setVisible(true);
+                    this.claimWinButton?.setVisible(false);
+                } else {
+                    this.timerText?.setVisible(false);
+                    this.claimWinButton?.setVisible(true);
+                }
+            } else {
+                this.timerText?.setVisible(false);
+                this.claimWinButton?.setVisible(false);
+            }
+        } else {
+            this.timerText?.setVisible(false);
+            this.claimWinButton?.setVisible(false);
+        }
     }
 
     getHero(rank: Rank): HeroActor {

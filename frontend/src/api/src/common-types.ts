@@ -50,7 +50,10 @@ export type PVPArenaCircuitKeys = Exclude<keyof PVPArenaContract['impureCircuits
  *
  * @public
  */
-export type PVPArenaProviders = MidnightProviders<PVPArenaCircuitKeys, 'pvpPrivateState', PVPArenaPrivateState>;
+export type PVPArenaProviders = MidnightProviders<PVPArenaCircuitKeys, 'pvpPrivateState', PVPArenaPrivateState> & {
+  /** Returns the latest block timestamp in the same units the on-chain circuit uses for block_time. */
+  getChainTimestamp?: () => Promise<bigint>;
+};
 
 /**
  * A {@link PVPArenaContract} that has been deployed to the network.
@@ -83,6 +86,7 @@ export type PVPArenaDerivedMatchState = {
   // extra meta information
   readonly isPublic: boolean;
   readonly isPractice: boolean;
+  readonly lastMoveAt: bigint;
 };
 
 /**

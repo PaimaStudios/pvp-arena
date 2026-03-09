@@ -266,13 +266,16 @@ const initializeProviders = async (logger: Logger): Promise<PVPArenaProviders> =
 
       // When no config is provided, the base implementation sets offset=null which the
       // indexer interprets as the deploy/initial state rather than the latest state.
-      // Query the latest block height first (contractAction without offset = latest),
-      // then pass it explicitly so the circuit simulation always sees the current state.
+      // When no config is provided, the base implementation sets offset=null which the
+      // indexer interprets as the deploy/initial state rather than the latest state.
+      // We must use contractAction(address) to get the block of the most recent contract
+      // state change — the indexer only stores contract snapshots at modification blocks,
+      // so querying at the chain tip would return "No public state found".
       let resolvedConfig = config;
       if (!resolvedConfig) {
         try {
           const heightQuery = `
-            query GetLatestBlockHeight($address: HexEncoded!) {
+            query GetLatestContractBlock($address: HexEncoded!) {
               contractAction(address: $address) {
                 transaction {
                   block {
@@ -290,13 +293,13 @@ const initializeProviders = async (logger: Logger): Promise<PVPArenaProviders> =
           const body = await response.json();
           const height = body?.data?.contractAction?.transaction?.block?.height;
           if (height != null) {
-            console.log(`[wallet:queryZSwapAndContractState] Resolved latest blockHeight=${height}`);
+            console.log(`[wallet:queryZSwapAndContractState] Resolved latest contract blockHeight=${height}`);
             resolvedConfig = { type: 'blockHeight', blockHeight: height };
           } else {
-            console.warn(`[wallet:queryZSwapAndContractState] Could not resolve latest block height — falling back to null offset`);
+            console.warn(`[wallet:queryZSwapAndContractState] Could not resolve contract block height — falling back to null offset`);
           }
         } catch (e) {
-          console.warn(`[wallet:queryZSwapAndContractState] Failed to fetch latest block height:`, e);
+          console.warn(`[wallet:queryZSwapAndContractState] Failed to fetch contract block height:`, e);
         }
       }
 
@@ -355,6 +358,37 @@ const initializeProviders = async (logger: Logger): Promise<PVPArenaProviders> =
     },
   };
 
+  /**
+   * Fetch the current chain block height from the indexer.
+   * Midnight circuits use block HEIGHT (not Unix timestamp) as block_time.
+   * BLOCK_TIME=120 and TURN_TIMEOUT=300 are in blocks (≈seconds at 1 block/s).
+   * Logs height and raw timestamp for comparison/debugging.
+   */
+  const getChainTimestamp = async (): Promise<bigint> => {
+    const query = `{ block { timestamp height } }`;
+    const response = await fetch(indexerUri, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query }),
+    });
+    const body = await response.json();
+    const block = body?.data?.block;
+    const rawTimestamp: number = block?.timestamp ?? 0;
+    const blockHeight: number = block?.height ?? 0;
+    // The local chain's GraphQL returns timestamps in milliseconds (e.g. 1773016578005).
+    // Compact's block_time in simulation also uses these raw ms values.
+    // BLOCK_TIME and TURN_TIMEOUT in the contract must therefore be in ms units
+    // (e.g. BLOCK_TIME=120000 for 2 min, TURN_TIMEOUT=300000 for 5 min).
+    const wallClockMs = Date.now();
+    console.log(
+      `[wallet:getChainTimestamp] block.height=${blockHeight}` +
+      ` block.timestamp(ms)=${rawTimestamp}` +
+      ` wallClock(ms)=${wallClockMs}` +
+      ` diff(wallClock-chainMs)=${wallClockMs - rawTimestamp}`
+    );
+    return BigInt(rawTimestamp);
+  };
+
   return {
     privateStateProvider: levelPrivateStateProvider<string>({
       privateStateStoreName: 'pvp-private-state',
@@ -372,6 +406,7 @@ const initializeProviders = async (logger: Logger): Promise<PVPArenaProviders> =
         return DELEGATED_TX_SENTINEL as unknown as TransactionId;
       },
     },
+    getChainTimestamp,
   };
 };
 
