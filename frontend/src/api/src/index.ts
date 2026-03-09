@@ -25,7 +25,7 @@ import {
 } from '@midnight-ntwrk/pvp-contract';
 import * as utils from './utils/index.js';
 import { deployContract, findDeployedContract, FoundContract } from '@midnight-ntwrk/midnight-js-contracts';
-import { map, tap, from, switchMap, shareReplay, type Observable } from 'rxjs';
+import { map, tap, from, switchMap, shareReplay, merge, Subject, type Observable } from 'rxjs';
 import { PrivateStateProvider } from '@midnight-ntwrk/midnight-js-types';
 import { CompiledContract } from '@midnight-ntwrk/compact-js';
 
@@ -149,6 +149,8 @@ export interface DeployedPVPArenaAPI {
   surrender: () => Promise<void>;
   closeMatch: () => Promise<void>;
   cleanupMatch: () => Promise<void>;
+  clearCurrentMatch: () => Promise<void>;
+  forceStateRefresh: () => void;
 }
 
 /**
@@ -179,6 +181,11 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
    *  Key is "${round}:${state}" — resets across rounds automatically. */
   private lastAiCalledForKey: string = '';
 
+  /** Cached last ledger state — used by forceStateRefresh to re-derive state$ without waiting for the next block. */
+  private lastLedgerState: ReturnType<typeof ledger> | null = null;
+  /** Emitting here re-triggers the state$ switchMap with the cached ledger state. */
+  private readonly refreshSubject = new Subject<ReturnType<typeof ledger>>();
+
   /** @internal */
   private constructor(
     public readonly deployedContract: DeployedPVPArenaContract,
@@ -186,20 +193,14 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
     private readonly logger?: Logger,
   ) {
     this.deployedContractAddress = deployedContract.deployTxData.public.contractAddress;
-    this.state$ = providers.publicDataProvider.contractStateObservable(this.deployedContractAddress, { type: 'latest' }).pipe(
-      // Combine public (ledger) state with...
-      map((contractState) => {
-        return ledger(contractState.data.state);
+    const contractStatePipe = providers.publicDataProvider.contractStateObservable(this.deployedContractAddress, { type: 'latest' }).pipe(
+      map((contractState) => ledger(contractState.data.state)),
+      tap((ledgerState) => {
+        this.lastLedgerState = ledgerState;
+        logger?.trace({ ledgerStateChanged: { ledgerState: { ...ledgerState } } });
       }),
-      tap((ledgerState) =>
-        logger?.trace({
-          ledgerStateChanged: {
-            ledgerState: {
-              ...ledgerState,
-            },
-          },
-        }),
-      ),
+    );
+    this.state$ = merge(contractStatePipe, this.refreshSubject).pipe(
       // Re-read private state on every ledger emission so that setCurrentMatch()
       // and other private state writes are reflected immediately in state$.
       switchMap((ledgerState) =>
@@ -656,6 +657,7 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
       // verify the write round-trips correctly
       const verify = await this.providers.privateStateProvider.get('pvpPrivateState') as any;
       console.log(`[setCurrentMatch] verify after set: currentMatchId=${verify?.currentMatchId} type=${typeof verify?.currentMatchId} | secretKey instanceof=${verify?.secretKey instanceof Uint8Array}`);
+      this.forceStateRefresh();
   }
 
   async claimTimeoutWin(): Promise<void> {
@@ -680,6 +682,25 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
     console.log('[api:cleanupMatch] submitting circuit call');
     await this.deployedContract.callTx.cleanup_match();
     console.log('[api:cleanupMatch] done');
+  }
+
+  async clearCurrentMatch(): Promise<void> {
+    const state = await PVPArenaAPI.getPrivateState(this.providers.privateStateProvider);
+    if (state) {
+      state.currentMatchId = null;
+      await this.providers.privateStateProvider.set('pvpPrivateState', state);
+      console.log('[api:clearCurrentMatch] currentMatchId cleared');
+      this.forceStateRefresh();
+    }
+  }
+
+  forceStateRefresh(): void {
+    if (this.lastLedgerState !== null) {
+      console.log('[api:forceStateRefresh] re-deriving state$ with cached ledger state');
+      this.refreshSubject.next(this.lastLedgerState);
+    } else {
+      console.warn('[api:forceStateRefresh] no cached ledger state yet, skipping');
+    }
   }
 
   /**

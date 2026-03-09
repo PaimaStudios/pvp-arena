@@ -11,6 +11,7 @@ import { MainMenu } from './main';
 import { StatusUI } from '.';
 import { DeployedPVPArenaAPI, PVPArenaDerivedState } from '@midnight-ntwrk/pvp-api';
 import { BatcherClient } from '../batcher-client';
+import { firstValueFrom, filter } from 'rxjs';
 
 
 export class CreateMenu extends Phaser.Scene {
@@ -27,40 +28,40 @@ export class CreateMenu extends Phaser.Scene {
     preload() {
     }
 
+    private createMatch(isPublic: boolean) {
+        this.status!.setText(`Creating ${isPublic ? 'public' : 'private'} match, please wait...`);
+        BatcherClient.setCircuitName('create_new_match');
+        this.api
+            .create_new_match(isPublic, false)
+            .then((matchId) => {
+                console.log(`[CreateMenu] match created: ${matchId}`);
+                BatcherClient.setCircuitName('set_current_match');
+                return this.api.setCurrentMatch(matchId).then(() => matchId);
+            })
+            .then((matchId) => {
+                BatcherClient.setCircuitName('');
+                return firstValueFrom(
+                    this.api.state$.pipe(filter(s => s.currentMatchId === matchId && s.currentMatch !== null))
+                );
+            })
+            .then((initialState) => {
+                this.scene.remove('EquipmentMenu');
+                this.scene.add('EquipmentMenu', new EquipmentMenu({ api: this.api, isP1: true }, initialState));
+                this.scene.start('EquipmentMenu');
+            })
+            .catch((e) => {
+                this.status!.setError(e);
+            });
+    }
+
     create() {
         this.add.image(GAME_WIDTH, GAME_HEIGHT, 'arena_bg').setPosition(GAME_WIDTH / 2, GAME_HEIGHT / 2).setDepth(-3);
         this.status = new StatusUI(this, [
             new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.3, 128, 32, 'Public Match', 12, () => {
-                this.status!.setText('Creating public match, please wait...');
-                BatcherClient.setCircuitName('create_new_match');
-                this
-                    .api
-                    .create_new_match(true, false).then((matchId) => {
-                        console.log(`match id: ${matchId}`);
-                    this.scene.remove('EquipmentMenu');
-                    const equipMenu = new EquipmentMenu({ api: this.api, isP1: true });
-                    this.scene.add('EquipmentMenu', equipMenu);
-                    this.scene.start('EquipmentMenu');
-                })
-                .catch((e) => {
-                    this.status!.setError(e);
-                });
+                this.createMatch(true);
             }, 'Host a public match'),
             new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.5, 128, 32, 'Private Match', 12, () => {
-                this.status!.setText('Creating private match, please wait...');
-                BatcherClient.setCircuitName('create_new_match');
-                this.api
-                    .create_new_match(false, false)
-                    .then((matchId) => {
-                        console.log(`match id: ${matchId}`);
-                        this.scene.remove('EquipmentMenu');
-                        const equipMenu = new EquipmentMenu({ api: this.api, isP1: true });
-                        this.scene.add('EquipmentMenu', equipMenu);
-                        this.scene.start('EquipmentMenu');
-                    })
-                    .catch((e) => {
-                        this.status!.setError(e);
-                    });
+                this.createMatch(false);
             }, 'Host a private match'),
             new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.8, 128, 32, 'Back', 12, () => {
                 this.scene.remove('MainMenu');

@@ -19,7 +19,7 @@ export type BattleConfig = {
     api: DeployedPVPArenaAPI,
 };
 
-const TURN_TIMEOUT_SECS = 300;
+const TURN_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes, matches contract TURN_TIMEOUT
 
 export class Arena extends Phaser.Scene
 {
@@ -59,6 +59,11 @@ export class Arena extends Phaser.Scene
 
     preDestroy() {
         this.subscription?.unsubscribe();
+        // Clear currentMatchId so the next match starts from a clean state.
+        // Fire-and-forget is fine — this completes before the user can interact with Lobby.
+        this.config.api.clearCurrentMatch().catch((e) => {
+            console.warn('[Arena.preDestroy] clearCurrentMatch failed:', e);
+        });
     }
 
     playerTeam(): Team {
@@ -398,7 +403,7 @@ export class Arena extends Phaser.Scene
         makeSoundToggleButton(this, GAME_WIDTH - 16, 16);
 
         const localKey = this.initialState.localPublicKey;
-        const keyStr = localKey != null ? `0x${localKey.toString(16).padStart(16, '0').slice(0, 8)}…` : '?';
+        const keyStr = localKey != null ? `Me ${localKey.toString(16).padStart(16, '0').slice(0, 8)}` : '?';
         this.add.text(8, 4, keyStr, fontStyle(7, { color: '#999988' })).setOrigin(0, 0);
         const matchId = this.initialState.currentMatchId;
         if (matchId != null) {
@@ -705,27 +710,28 @@ export class Arena extends Phaser.Scene
         this.surrenderButton?.setVisible(isActive && !this.isPractice);
 
         if (isActive && !this.isPractice && this.lastMoveAt > 0n) {
-            const nowSec = Math.floor(Date.now() / 1000);
-            const elapsed = nowSec - Number(this.lastMoveAt);
-            const remaining = TURN_TIMEOUT_SECS - elapsed;
+            const nowMs = Date.now();
+            const elapsedMs = nowMs - Number(this.lastMoveAt);
+            const remainingMs = TURN_TIMEOUT_MS - elapsedMs;
+            const remainingSec = Math.max(0, Math.floor(remainingMs / 1000));
+            const mins = Math.floor(remainingSec / 60);
+            const secs = remainingSec % 60;
 
-            // Check if it's the opponent's turn (i.e., opponent might time out)
+            // isOpponentTurn: can we claim a win if they time out?
             const isOpponentTurn =
                 (this.onChainState === GAME_STATE.p2_commit_reveal && this.config.isP1) ||
                 ((this.onChainState === GAME_STATE.p1_commit || this.onChainState === GAME_STATE.p1_reveal) && !this.config.isP1);
 
-            if (isOpponentTurn) {
-                if (remaining > 0) {
-                    const mins = Math.floor(remaining / 60);
-                    const secs = remaining % 60;
-                    this.timerText?.setText(`⏱ ${mins}:${secs.toString().padStart(2, '0')}`).setVisible(true);
-                    this.claimWinButton?.setVisible(false);
-                } else {
-                    this.timerText?.setVisible(false);
-                    this.claimWinButton?.setVisible(true);
-                }
-            } else {
+            if (remainingSec > 0) {
+                const label = isOpponentTurn ? `⏱ Opp: ${mins}:${secs.toString().padStart(2, '0')}` : `⏱ You: ${mins}:${secs.toString().padStart(2, '0')}`;
+                this.timerText?.setText(label).setVisible(true);
+                this.claimWinButton?.setVisible(false);
+            } else if (isOpponentTurn) {
                 this.timerText?.setVisible(false);
+                this.claimWinButton?.setVisible(true);
+            } else {
+                // Own turn has expired — opponent can claim but we can't; just show 0:00
+                this.timerText?.setText('⏱ You: 0:00').setVisible(true);
                 this.claimWinButton?.setVisible(false);
             }
         } else {

@@ -36,6 +36,7 @@ type PlayerMatchInfo = {
     status: PlayerMatchStatus;
     label: string;
     closeable: boolean;
+    priority: number;
 };
 
 function getPlayerMatches(state: PVPArenaDerivedState): PlayerMatchInfo[] {
@@ -95,13 +96,24 @@ function getPlayerMatches(state: PVPArenaDerivedState): PlayerMatchInfo[] {
     return state.myMatches.entries().map(([id, m]) => {
         const hasP2 = m.p2PubKey != null;
         const closeable = m.isPractice || !hasP2;
-        return {
-            matchId: id,
-            status: matchStatus(m),
-            label: matchLabel(m),
-            closeable,
-        };
-    }).toArray().sort((a, b) => (a.matchId > b.matchId ? -1 : 1));
+        const status = matchStatus(m);
+        const isFinished = status === WON || status === LOST || status === 'Tie';
+
+        // Sort priority:
+        // 0 — active PvP, my turn
+        // 1 — active PvP, opponent's turn
+        // 2 — practice (ongoing)
+        // 3 — finished (win / loss / tie)
+        const priority = isFinished ? 3
+            : m.isPractice ? 2
+            : status === YOUR_TURN ? 0
+            : 1; // OPPONENT_TURN
+
+        return { matchId: id, status, label: matchLabel(m), closeable, priority };
+    }).toArray().sort((a, b) => {
+        if (a.priority !== b.priority) return a.priority - b.priority;
+        return a.matchId > b.matchId ? -1 : 1;
+    });
 }
 
 type RefreshingGrapihcs = {
@@ -245,10 +257,18 @@ class JoinGamesUI<
             .slice(this.matchIndex, this.matchIndex + this.maxMatchesShown)
             .flatMap((match, i) => {
                 const matchIdShort = match.matchId.toString().slice(0, 6);
-                let buttonText = `#${matchIdShort}… - ${match.label}`;
+                let buttonText: string;
 
                 if ("status" in match) {
-                    buttonText = `${buttonText}\n${match.status}`;
+                    // PlayerMatchInfo (Your Matches)
+                    if (match.label === 'Practice') {
+                        buttonText = 'Rejoin Practice';
+                    } else {
+                        buttonText = `Rejoin #${matchIdShort} ${match.label}\n${match.status}`;
+                    }
+                } else {
+                    // OpenMatchInfo (Public Matches)
+                    buttonText = `Join Game #${matchIdShort} VS ${match.label}`;
                 }
 
                 const hasClose = this.onClose != null && "closeable" in match && match.closeable;
@@ -378,8 +398,8 @@ export class LobbyMenu extends Phaser.Scene {
             true,
             () => this.state.openMatches.entries().filter(([_, m]) => m.isPublic).map(([id, m]) => {
                 const label = m.isPractice
-                    ? 'Practice - Waiting'
-                    : `${m.p1PubKey.toString(16).padStart(16, '0').slice(0, 8)}… - Waiting`;
+                    ? 'Practice'
+                    : `${m.p1PubKey.toString(16).padStart(16, '0').slice(0, 8)}…`;
                 return { matchId: id, label };
             }).toArray().sort((a, b) => (a.matchId > b.matchId ? -1 : 1)),
             5
@@ -508,6 +528,8 @@ export class LobbyMenu extends Phaser.Scene {
         this.api.setCurrentMatch(matchId).then(() => {
             BatcherClient.setCircuitName('close_match');
             return this.api.closeMatch();
+        }).then(() => {
+            return this.api.clearCurrentMatch();
         }).then(() => {
             this.status!.clearStatusText();
             this.rejoin?.refreshGames();

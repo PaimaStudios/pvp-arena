@@ -258,8 +258,24 @@ export class MockPVPArenaAPI implements DeployedPVPArenaAPI {
 
     async setCurrentMatch(matchId: bigint): Promise<void> {
         this.currentMatchId = matchId;
-        this.mockState.currentMatch = this.matches.get(matchId)!;
+        this.mockState.currentMatch = this.matches.get(matchId) ?? null;
         this.mockState.currentMatchId = matchId;
+        this.subscriber?.next(this.mockState);
+    }
+
+    async clearCurrentMatch(): Promise<void> {
+        this.currentMatchId = undefined;
+        this.mockState = {
+            ...this.mockState,
+            currentMatch: null,
+            currentMatchId: null,
+        };
+        this.subscriber?.next(this.mockState);
+    }
+
+    forceStateRefresh(): void {
+        // Mock API emits synchronously via subscriber — no deferred refresh needed.
+        this.subscriber?.next(this.mockState);
     }
 
     async claimTimeoutWin(): Promise<void> {
