@@ -79,13 +79,21 @@ import type {
    * Receives a serialized delegated transaction (hex), balances it with local dust funds,
    * generates proofs, and submits it to the blockchain.
    */
+  /** Thrown when the dust wallet sync times out, signalling the adapter needs a resync. */
+  export class DustSyncTimeoutError extends Error {
+    constructor(message: string, options?: ErrorOptions) {
+      super(message, options);
+      this.name = "DustSyncTimeoutError";
+    }
+  }
+
   export class MidnightBalancingAdapterX implements BlockchainAdapter<DelegatedBatchData> {
     private readonly config: MidnightBalancingAdapterConfig;
     private readonly walletNetworkId: WalletNetworkId.NetworkId;
-    private readonly walletFundingTimeoutMs: number;
-  
-    private walletResult: WalletResult | null = null;
-    private isInitialized = false;
+    protected readonly walletFundingTimeoutMs: number;
+
+    protected walletResult: WalletResult | null = null;
+    protected isInitialized = false;
     private initializationPromise: Promise<void> | null = null;
     private walletAddress: string | null = null;
     private publicDataProvider: PublicDataProvider | null = null;
@@ -197,7 +205,7 @@ import type {
       }
     }
   
-    private async ensureFunds(): Promise<void> {
+    protected async ensureFunds(): Promise<void> {
       if (!this.walletResult) return;
   
       try {
@@ -399,7 +407,8 @@ import type {
         });
         console.log("🧾 [balancing] dust sync wait complete");
       } catch (error) {
-        console.warn("⚠️ Dust wallet sync wait failed before balancing:", error);
+        console.error("❌ Dust wallet sync wait failed before balancing:", error);
+        throw new DustSyncTimeoutError("Wallet out of sync — dust sync timed out", { cause: error });
       }
       const { tx: delegatedTx, txStage } = delegatedBatchData;
       await this.logDustState(
