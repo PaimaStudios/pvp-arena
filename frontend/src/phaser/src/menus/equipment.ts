@@ -1,6 +1,6 @@
 import { ITEM, RESULT, STANCE, Hero, ARMOR, pureCircuits, GAME_STATE, TotalStats } from '@midnight-ntwrk/pvp-contract';
 import { Arena, BattleConfig } from '../battle/arena';
-import { GAME_WIDTH, GAME_HEIGHT, gameStateStr, fontStyle, isMuted, makeCopyAddressButton, makeExitMatchButton, makeSoundToggleButton, playSound } from '../main';
+import { GAME_WIDTH, GAME_HEIGHT, gameStateStr, fontStyle, isMuted, makeCopyAddressButton, makeExitMatchButton, makeSoundToggleButton, makeAddressLabel, makeMatchInfoLabel, playSound } from '../main';
 import { addHeroImages, createHeroAnims, generateRandomHero, HeroAnimationController } from '../battle/hero';
 import { type HeroIndex, Rank, type Team } from '../battle';
 import { Button } from './button';
@@ -533,38 +533,24 @@ export class EquipmentMenu extends Phaser.Scene {
         makeExitMatchButton(this, GAME_WIDTH - 48, 16);
         makeSoundToggleButton(this, GAME_WIDTH - 16, 16);
 
-        if (this.initialState) {
-            const localKey = this.initialState.localPublicKey;
-            const keyStr = localKey != null ? `Me ${localKey.toString(16).padStart(16, '0').slice(0, 8)}` : '?';
-            this.add.text(8, 4, keyStr, fontStyle(7, { color: '#999988' })).setOrigin(0, 0);
-            const matchId = this.initialState.currentMatchId;
-            if (matchId != null) {
-                const match = this.initialState.currentMatch;
-                let matchSuffix = '';
-                if (match?.isPractice) {
-                    matchSuffix = ' - Practice';
-                } else if (match != null) {
-                    const opponentKey = this.config.isP1 ? match.p2PubKey : match.p1PubKey;
-                    if (opponentKey != null) {
-                        matchSuffix = ` - VS ${opponentKey.toString(16).padStart(16, '0').slice(0, 8)}…`;
-                    }
-                }
-                const matchIdStr = matchId.toString();
-                const matchIdShort = matchIdStr.slice(0, 6);
-                const matchLabel = this.add.text(8, 20, `Match #${matchIdShort}…${matchSuffix}`, fontStyle(7, { color: '#aabbaa' }))
-                    .setOrigin(0, 0)
-                    .setInteractive({ useHandCursor: true });
-                matchLabel.on('pointerover', () => matchLabel.setStyle({ color: '#ddeedd' }));
-                matchLabel.on('pointerout', () => matchLabel.setStyle({ color: '#aabbaa' }));
-                matchLabel.on('pointerdown', () => {
-                    navigator.clipboard.writeText(matchIdStr).then(() => {
-                        const prev = matchLabel.text;
-                        matchLabel.setText('Copied!');
-                        this.time.delayedCall(1200, () => matchLabel.setText(prev));
-                    });
-                });
+        const matchId = this.initialState?.currentMatchId;
+        if (matchId != null) {
+            const match = this.initialState!.currentMatch;
+            const isOffline = this.config.api.deployedContractAddress === OFFLINE_PRACTICE_CONTRACT_ADDR;
+            let opponentLine: string;
+            if (isOffline) {
+                opponentLine = 'Off-Chain Practice';
+            } else if (match?.isPractice) {
+                opponentLine = 'On-Chain Practice';
+            } else {
+                const opponentKey = this.config.isP1 ? match?.p2PubKey : match?.p1PubKey;
+                opponentLine = opponentKey != null
+                    ? `VS ${opponentKey.toString(16).padStart(16, '0').slice(0, 8)}…`
+                    : 'WAITING FOR PLAYER TO JOIN';
             }
+            makeMatchInfoLabel(this, matchId, opponentLine);
         }
+        makeAddressLabel(this, this.initialState?.localPublicKey ?? null);
 
         for (let team = 0; team < 2; ++team) {
             let heroes = [];

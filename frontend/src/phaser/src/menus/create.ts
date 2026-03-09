@@ -1,5 +1,5 @@
 import { BrowserDeploymentManager } from '../wallet';
-import { logger, GAME_WIDTH, GAME_HEIGHT, fontStyle } from '../main';
+import { logger, GAME_WIDTH, GAME_HEIGHT, fontStyle, makeAddressLabel } from '../main';
 import { MockPVPArenaAPI } from '../battle/mockapi';
 import { Arena } from '../battle/arena';
 import { EquipmentMenu } from './equipment';
@@ -56,6 +56,7 @@ export class CreateMenu extends Phaser.Scene {
 
     create() {
         this.add.image(GAME_WIDTH, GAME_HEIGHT, 'arena_bg').setPosition(GAME_WIDTH / 2, GAME_HEIGHT / 2).setDepth(-3);
+        makeAddressLabel(this, this.state.localPublicKey);
         this.status = new StatusUI(this, [
             new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.3, 128, 32, 'Public Match', 12, () => {
                 this.createMatch(true);

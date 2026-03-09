@@ -1,6 +1,6 @@
 import { DeployedPVPArenaAPI, PVPArenaAPI, PVPArenaDerivedMatchState, PVPArenaDerivedState } from "@midnight-ntwrk/pvp-api";
 import { MockPVPArenaAPI } from "../battle/mockapi";
-import { fontStyle, GAME_HEIGHT, GAME_WIDTH, makeSoundToggleButton } from "../main";
+import { fontStyle, GAME_HEIGHT, GAME_WIDTH, makeSoundToggleButton, makeAddressLabel } from "../main";
 import { BrowserDeploymentManager } from "../wallet";
 import { Button } from "./button";
 import { EquipmentMenu } from "./equipment";
@@ -18,7 +18,16 @@ import { BatcherClient } from "../batcher-client";
 type OpenMatchInfo = {
     matchId: bigint;
     label: string;
+    createdAt: bigint;
 };
+
+function timeAgo(secondsSinceEpoch: bigint): string {
+    const elapsed = Math.max(0, Math.floor(Date.now() / 1000) - Number(secondsSinceEpoch));
+    if (elapsed < 60) return `${elapsed}s ago`;
+    if (elapsed < 3600) return `${Math.floor(elapsed / 60)}m ago`;
+    if (elapsed < 86400) return `${Math.floor(elapsed / 3600)}h ago`;
+    return `${Math.floor(elapsed / 86400)}d ago`;
+}
 
 const WON = "[color=green]Won[/color]";
 const LOST = "[color=red]Lost[/color]";
@@ -95,7 +104,10 @@ function getPlayerMatches(state: PVPArenaDerivedState): PlayerMatchInfo[] {
 
     return state.myMatches.entries().map(([id, m]) => {
         const hasP2 = m.p2PubKey != null;
-        const closeable = m.isPractice || !hasP2;
+        const isP2WaitingOnP1Selection =
+            m.isP2 &&
+            (m.state === GAME_STATE.p1_selecting_first_hero || m.state === GAME_STATE.p1_selecting_last_heroes);
+        const closeable = m.isPractice || !hasP2 || isP2WaitingOnP1Selection;
         const status = matchStatus(m);
         const isFinished = status === WON || status === LOST || status === 'Tie';
 
@@ -112,7 +124,10 @@ function getPlayerMatches(state: PVPArenaDerivedState): PlayerMatchInfo[] {
         return { matchId: id, status, label: matchLabel(m), closeable, priority };
     }).toArray().sort((a, b) => {
         if (a.priority !== b.priority) return a.priority - b.priority;
-        return a.matchId > b.matchId ? -1 : 1;
+        // Within same priority, newest first (by creation/last-activity time)
+        const aTime = state.myMatches.get(a.matchId)?.lastMoveAt ?? 0n;
+        const bTime = state.myMatches.get(b.matchId)?.lastMoveAt ?? 0n;
+        return aTime > bTime ? -1 : 1;
     });
 }
 
@@ -397,11 +412,12 @@ export class LobbyMenu extends Phaser.Scene {
             "Public Matches",
             true,
             () => this.state.openMatches.entries().filter(([_, m]) => m.isPublic).map(([id, m]) => {
-                const label = m.isPractice
+                const creator = m.isPractice
                     ? 'Practice'
                     : `${m.p1PubKey.toString(16).padStart(16, '0').slice(0, 8)}…`;
-                return { matchId: id, label };
-            }).toArray().sort((a, b) => (a.matchId > b.matchId ? -1 : 1)),
+                const age = m.lastMoveAt > 0n ? ` (${timeAgo(m.lastMoveAt)})` : '';
+                return { matchId: id, label: `${creator}${age}`, createdAt: m.lastMoveAt };
+            }).toArray().sort((a, b) => (a.createdAt > b.createdAt ? -1 : 1)),
             5
         );
         this.rejoin = new JoinGamesUI(
@@ -466,6 +482,7 @@ export class LobbyMenu extends Phaser.Scene {
         ]);
 
         makeSoundToggleButton(this, GAME_WIDTH - 16, 16);
+        makeAddressLabel(this, this.state.localPublicKey);
 
         this.subscription = this.api.state$.subscribe((state) => this.onStateChange(state));
         // Unsubscribe on shutdown (fires when scene.start() navigates away) as well as destroy.

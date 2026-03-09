@@ -359,10 +359,10 @@ const initializeProviders = async (logger: Logger): Promise<PVPArenaProviders> =
   };
 
   /**
-   * Fetch the current chain block height from the indexer.
-   * Midnight circuits use block HEIGHT (not Unix timestamp) as block_time.
-   * BLOCK_TIME=120 and TURN_TIMEOUT=300 are in blocks (≈seconds at 1 block/s).
-   * Logs height and raw timestamp for comparison/debugging.
+   * Fetch the current chain timestamp in seconds from the indexer.
+   * The compact runtime's blockTimeGte/blockTimeLt compare against secondsSinceEpoch
+   * (integer Unix seconds), so we must pass seconds — not raw ms — to circuits.
+   * TURN_TIMEOUT in the contract is therefore in seconds (e.g. 300 = 5 minutes).
    */
   const getChainTimestamp = async (): Promise<bigint> => {
     const query = `{ block { timestamp height } }`;
@@ -373,20 +373,18 @@ const initializeProviders = async (logger: Logger): Promise<PVPArenaProviders> =
     });
     const body = await response.json();
     const block = body?.data?.block;
-    const rawTimestamp: number = block?.timestamp ?? 0;
+    const rawTimestampMs: number = block?.timestamp ?? 0;
     const blockHeight: number = block?.height ?? 0;
-    // The local chain's GraphQL returns timestamps in milliseconds (e.g. 1773016578005).
-    // Compact's block_time in simulation also uses these raw ms values.
-    // BLOCK_TIME and TURN_TIMEOUT in the contract must therefore be in ms units
-    // (e.g. BLOCK_TIME=120000 for 2 min, TURN_TIMEOUT=300000 for 5 min).
-    const wallClockMs = Date.now();
+    const chainSec = Math.floor(rawTimestampMs / 1000);
+    const wallClockSec = Math.floor(Date.now() / 1000);
     console.log(
       `[wallet:getChainTimestamp] block.height=${blockHeight}` +
-      ` block.timestamp(ms)=${rawTimestamp}` +
-      ` wallClock(ms)=${wallClockMs}` +
-      ` diff(wallClock-chainMs)=${wallClockMs - rawTimestamp}`
+      ` block.timestamp(ms)=${rawTimestampMs}` +
+      ` chainSec=${chainSec}` +
+      ` wallClockSec=${wallClockSec}` +
+      ` diff(sec)=${wallClockSec - chainSec}`
     );
-    return BigInt(rawTimestamp);
+    return BigInt(chainSec);
   };
 
   return {

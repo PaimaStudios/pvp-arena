@@ -2,9 +2,9 @@ pragma language_version >= 0.19;
 
 import CompactStandardLibrary;
 
-// 5 minutes in seconds — each player must act within this time
-ledger TURN_TIMEOUT: Uint<64> ;
-// 1 block grace to allow for timestamp drift between prover and chain
+// 5-minute per-turn timeout in seconds (blockTimeGte uses secondsSinceEpoch)
+ledger TURN_TIMEOUT: Uint<64>;
+// 2 block grace to allow for timestamp drift between prover and chain
 ledger BLOCK_TIME: Uint<64>;
 
 export enum RESULT { p1_win, p2_win, tie, waiting, continue_ }
@@ -149,22 +149,28 @@ export ledger is_practice: Map<Field, Boolean>;
 // unix timestamp (seconds) of the last move — used for turn timeout enforcement
 export ledger last_move_at: Map<Field, Uint<64>>;
 
+// maximum age (seconds) a submitted timestamp may be behind the current block time
+ledger TIMESTAMP_MAX_AGE: Uint<64>;
+
 
 witness player_secret_key(): Bytes<32>;
 
 witness current_match_id(): Field;
 
 constructor() {
-    // Timestamps are in milliseconds (local chain GraphQL returns ms).
-    // BLOCK_TIME: 2 Midnight Blocks
-    // TURN_TIMEOUT: 5-minute per-turn timeout.
-    TURN_TIMEOUT = 5 * 60 * 1000;
-    BLOCK_TIME = 2 * 6 * 1000;
+    // blockTimeGte compares secondsSinceEpoch (Unix seconds), so all timestamps
+    // passed to circuits must be in seconds. TURN_TIMEOUT = 10 minutes in seconds.
+    TURN_TIMEOUT = 10 * 60;
+    BLOCK_TIME = 2 * 6;
+    // Reject timestamps older than 3 minutes to prevent replay with stale timestamps.
+    TIMESTAMP_MAX_AGE = 3 * 60;
 }
 
-export circuit create_new_match(match_nonce: Bytes<32>, is_match_public: Boolean, is_match_practice: Boolean): Field {
+export circuit create_new_match(match_nonce: Bytes<32>, is_match_public: Boolean, is_match_practice: Boolean, now: Uint<64>): Field {
     const match_id = transientHash<MatchIdHasher>(MatchIdHasher { derive_public_key(player_secret_key()), disclose(match_nonce) });
     assert(!game_state.member(match_id), "Match ID already taken");
+    assert(blockTimeGte(disclose(now - BLOCK_TIME)), "Claimed timestamp is in the future");
+    assert(blockTimeLte(disclose((now + TIMESTAMP_MAX_AGE) as Uint<64>)), "Timestamp is too old");
 
     p1_heroes.insert(match_id, [none<Hero>(), none<Hero>(), none<Hero>()]);
     p2_heroes.insert(match_id, [none<Hero>(), none<Hero>(), none<Hero>()]);
@@ -193,16 +199,19 @@ export circuit create_new_match(match_nonce: Bytes<32>, is_match_public: Boolean
     p2_alive_2.insert(match_id, true);
     public_.insert(match_id, disclose(is_match_public));
     is_practice.insert(match_id, disclose(is_match_practice));
-    last_move_at.insert(match_id, 0);
+    last_move_at.insert(match_id, disclose(now));
 
     return match_id;
 }
 
-export circuit join_match(): [] {
+export circuit join_match(now: Uint<64>): [] {
     const match_id = disclose(current_match_id());
     assert(!p2_public_key.member(match_id), "Match already has a P2");
+    assert(blockTimeGte(disclose(now - BLOCK_TIME)), "Claimed timestamp is in the future");
+    assert(blockTimeLte(disclose((now + TIMESTAMP_MAX_AGE) as Uint<64>)), "Timestamp is too old");
 
     p2_public_key.insert(match_id, derive_public_key(player_secret_key()));
+    last_move_at.insert(match_id, disclose(now));
 }
 
 export pure circuit calc_stats(hero: Hero): TotalStats {
@@ -349,12 +358,14 @@ export pure circuit derive_public_key(sk: Bytes<32>): Field {
     return transientCommit<Bytes<32>>(disclose(sk),  123456789);
 }
 
-export circuit p1_select_first_hero(first_p1_hero: HeroHack): [] {
+export circuit p1_select_first_hero(first_p1_hero: HeroHack, now: Uint<64>): [] {
     const match_id = disclose(current_match_id());
 
     assert(p1_public_key.lookup(match_id) == derive_public_key(player_secret_key()), "Not authorized as P1");
     assert(game_state.lookup(match_id) == GAME_STATE.p1_selecting_first_hero, "P1 must select first hero right after contract creation");
-    
+    assert(blockTimeGte(disclose(now - BLOCK_TIME)), "Claimed timestamp is in the future");
+    assert(blockTimeLte(disclose((now + TIMESTAMP_MAX_AGE) as Uint<64>)), "Timestamp is too old");
+
     const p1h = [some<Hero>(hack_to_hero(disclose(first_p1_hero))), none<Hero>(), none<Hero>()];
     p1_heroes.insert(match_id, p1h);
 
@@ -366,15 +377,18 @@ export circuit p1_select_first_hero(first_p1_hero: HeroHack): [] {
     const p1s2 = p1_stats.lookup(match_id)[2];
     const p1s = [p1s0, p1s1, p1s2];
     p1_stats.insert(match_id, p1s);
- 
+    last_move_at.insert(match_id, disclose(now));
+
     game_state.insert(match_id, GAME_STATE.p2_selecting_first_heroes);
 }
 
-export circuit p2_select_first_heroes(all_p2_heroes: Vector<2, HeroHack>): [] {
+export circuit p2_select_first_heroes(all_p2_heroes: Vector<2, HeroHack>, now: Uint<64>): [] {
     const match_id = disclose(current_match_id());
 
     assert(game_state.lookup(match_id) == GAME_STATE.p2_selecting_first_heroes, "P2 must select first heroes right after match creation");
     assert(p2_public_key.lookup(match_id) == derive_public_key(player_secret_key()), "Not authorized as P2");
+    assert(blockTimeGte(disclose(now - BLOCK_TIME)), "Claimed timestamp is in the future");
+    assert(blockTimeLte(disclose((now + TIMESTAMP_MAX_AGE) as Uint<64>)), "Timestamp is too old");
     // TODO: can you map some here?
     const p2arg0 = some<Hero>(hack_to_hero(disclose(all_p2_heroes[0])));
     const p2arg1 = some<Hero>(hack_to_hero(disclose(all_p2_heroes[1])));
@@ -384,6 +398,7 @@ export circuit p2_select_first_heroes(all_p2_heroes: Vector<2, HeroHack>): [] {
     const p2s1 = calc_stats(p2h[1].value);
     const p2s = [p2s0, p2s1, p2_stats.lookup(match_id)[2]];
     p2_stats.insert(match_id, p2s);
+    last_move_at.insert(match_id, disclose(now));
     game_state.insert(match_id, GAME_STATE.p1_selecting_last_heroes);
 
     base_damage_cache_p1_0_0.insert(match_id, ((100 - p2_stats.lookup(match_id)[0].crush_def) * p1_stats.lookup(match_id)[0].crush_dmg + (100 - p2_stats.lookup(match_id)[0].pierce_def) * p1_stats.lookup(match_id)[0].pierce_dmg + (50 +p2_stats.lookup(match_id)[0].weight - p1_stats.lookup(match_id)[0].weight) * p1_stats.lookup(match_id)[0].dex_bonus) as Uint<32>);
@@ -392,13 +407,16 @@ export circuit p2_select_first_heroes(all_p2_heroes: Vector<2, HeroHack>): [] {
     base_damage_cache_p2_1_0.insert(match_id, ((100 - p1_stats.lookup(match_id)[0].crush_def) * p2_stats.lookup(match_id)[1].crush_dmg + (100 - p1_stats.lookup(match_id)[0].pierce_def) * p2_stats.lookup(match_id)[1].pierce_dmg + (50 +p1_stats.lookup(match_id)[0].weight - p2_stats.lookup(match_id)[1].weight) * p2_stats.lookup(match_id)[1].dex_bonus) as Uint<32>);
 }
 
-export circuit p1_select_last_heroes(last_p1_heroes: Vector<2, HeroHack>): [] {
+export circuit p1_select_last_heroes(last_p1_heroes: Vector<2, HeroHack>, now: Uint<64>): [] {
     const match_id = disclose(current_match_id());
 
     assert(p1_public_key.lookup(match_id) == derive_public_key(player_secret_key()), "Not authorized as P1");
     assert(game_state.lookup(match_id) == GAME_STATE.p1_selecting_last_heroes, "P1 must select remaining heroes after P2 selects heroes");
+    assert(blockTimeGte(disclose(now - BLOCK_TIME)), "Claimed timestamp is in the future");
+    assert(blockTimeLte(disclose((now + TIMESTAMP_MAX_AGE) as Uint<64>)), "Timestamp is too old");
     p1_heroes.insert(match_id, [p1_heroes.lookup(match_id)[0], some<Hero>(hack_to_hero(disclose(last_p1_heroes[0]))), some<Hero>(hack_to_hero(disclose(last_p1_heroes[1])))]);
     p1_stats.insert(match_id, [p1_stats.lookup(match_id)[0], calc_stats(p1_heroes.lookup(match_id)[1].value), calc_stats(p1_heroes.lookup(match_id)[2].value)]);
+    last_move_at.insert(match_id, disclose(now));
     game_state.insert(match_id, GAME_STATE.p2_selecting_last_hero);
 
 
@@ -413,14 +431,17 @@ export circuit p1_select_last_heroes(last_p1_heroes: Vector<2, HeroHack>): [] {
 //    base_damage_cache_p2_1_1.insert(match_id, ((100 - p1_stats.lookup(match_id)[1].crush_def) * p2_stats.lookup(match_id)[1].crush_dmg + (100 - p1_stats.lookup(match_id)[1].pierce_def) * p2_stats.lookup(match_id)[1].pierce_dmg + (50 +p1_stats.lookup(match_id)[1].weight - p2_stats.lookup(match_id)[1].weight) * p2_stats.lookup(match_id)[1].dex_bonus) as Uint<32>);
 }
 
-export circuit p2_select_last_hero(last_hero: HeroHack): [] {
+export circuit p2_select_last_hero(last_hero: HeroHack, now: Uint<64>): [] {
     const match_id = disclose(current_match_id());
-    
+
     assert(p2_public_key.lookup(match_id) == derive_public_key(player_secret_key()), "Not authorized as P2");
     assert(game_state.lookup(match_id) == GAME_STATE.p2_selecting_last_hero, "P2 must select first heroes right after match creation");
+    assert(blockTimeGte(disclose(now - BLOCK_TIME)), "Claimed timestamp is in the future");
+    assert(blockTimeLte(disclose((now + TIMESTAMP_MAX_AGE) as Uint<64>)), "Timestamp is too old");
     // TODO: can you map some here?
     p2_heroes.insert(match_id, [p2_heroes.lookup(match_id)[0], p2_heroes.lookup(match_id)[1], some<Hero>(hack_to_hero(disclose(last_hero)))]);
     p2_stats.insert(match_id, [p2_stats.lookup(match_id)[0], p2_stats.lookup(match_id)[1], calc_stats(p2_heroes.lookup(match_id)[2].value)]);
+    last_move_at.insert(match_id, disclose(now));
     game_state.insert(match_id, GAME_STATE.p1_commit);
 
     base_damage_cache_p2_1_1.insert(match_id, ((100 - p1_stats.lookup(match_id)[1].crush_def) * p2_stats.lookup(match_id)[1].crush_dmg + (100 - p1_stats.lookup(match_id)[1].pierce_def) * p2_stats.lookup(match_id)[1].pierce_dmg + (50 +p1_stats.lookup(match_id)[1].weight - p2_stats.lookup(match_id)[1].weight) * p2_stats.lookup(match_id)[1].dex_bonus) as Uint<32>);
@@ -444,7 +465,8 @@ export circuit p1_commit_commands(nonce: Bytes<32>, now: Uint<64>): [] {
 
     assert(p1_public_key.lookup(match_id) == derive_public_key(player_secret_key()), "Not authorized as P1");
     assert(game_state.lookup(match_id) == GAME_STATE.p1_commit, "P1 must commit at start of round");
-    assert(blockTimeLt(disclose(now - BLOCK_TIME)), "Claimed timestamp is in the future");
+    assert(blockTimeGte(disclose(now - BLOCK_TIME)), "Claimed timestamp is in the future");
+    assert(blockTimeLte(disclose((now + TIMESTAMP_MAX_AGE) as Uint<64>)), "Timestamp is too old");
     // check you're only targetting valid (alive) gladiators
     assert(!p1_alive_0.lookup(match_id) || (disclose(player_commands())[0] <= 2 && ((disclose(player_commands())[0] == 0 && p2_alive_0.lookup(match_id)) || (disclose(player_commands())[0] == 1 && p2_alive_1.lookup(match_id)) || (disclose(player_commands())[0] == 2 && p2_alive_2.lookup(match_id)))), "Invalid move [0]");
     assert(!p1_alive_1.lookup(match_id) || (disclose(player_commands())[1] <= 2 && ((disclose(player_commands())[1] == 0 && p2_alive_0.lookup(match_id)) || (disclose(player_commands())[1] == 1 && p2_alive_1.lookup(match_id)) || (disclose(player_commands())[1] == 2 && p2_alive_2.lookup(match_id)))), "Invalid move [1]");
@@ -463,7 +485,8 @@ export circuit p2_commit_commands(now: Uint<64>): [] {
 
     assert(p2_public_key.lookup(match_id) == derive_public_key(player_secret_key()), "Not authorized as P2");
     assert(game_state.lookup(match_id) == GAME_STATE.p2_commit_reveal, "P2 must commit after P1 commits");
-    assert(blockTimeLt(disclose(now - BLOCK_TIME)), "Claimed timestamp is in the future");
+    assert(blockTimeGte(disclose(now - BLOCK_TIME)), "Claimed timestamp is in the future");
+    assert(blockTimeLte(disclose((now + TIMESTAMP_MAX_AGE) as Uint<64>)), "Timestamp is too old");
     // check you're only targetting valid (alive) gladiators
     assert(!p2_alive_0.lookup(match_id) || (disclose(player_commands())[0] <= 2 && ((disclose(player_commands())[0] == 0 && p1_alive_0.lookup(match_id)) || (disclose(player_commands())[0] == 1 && p1_alive_1.lookup(match_id)) || (disclose(player_commands())[0] == 2 && p1_alive_2.lookup(match_id)))), "Invalid move [0]");
     assert(!p2_alive_1.lookup(match_id) || (disclose(player_commands())[1] <= 2 && ((disclose(player_commands())[1] == 0 && p1_alive_0.lookup(match_id)) || (disclose(player_commands())[1] == 1 && p1_alive_1.lookup(match_id)) || (disclose(player_commands())[1] == 2 && p1_alive_2.lookup(match_id)))), "Invalid move [1]");
@@ -482,7 +505,8 @@ export circuit p1_reveal_commands(now: Uint<64>): [] {
 
     // no need to auth P1 as the commit hash check won't match otherwise
     assert(game_state.lookup(match_id) == GAME_STATE.p1_reveal, "P1 must reveal after P2 commits");
-    assert(blockTimeLt(disclose(now - BLOCK_TIME)), "Claimed timestamp is in the future");
+    assert(blockTimeGte(disclose(now - BLOCK_TIME)), "Claimed timestamp is in the future");
+    assert(blockTimeLte(disclose((now + TIMESTAMP_MAX_AGE) as Uint<64>)), "Timestamp is too old");
     assert(transientHash<MoveHasher>(MoveHasher { disclose(player_secret_key()), disclose(player_commands()), disclose(player_stances()), commit_nonce.lookup(match_id) }) == p1_commit.lookup(match_id), "Commit doesn't match");
 
     p1_cmds.insert(match_id, some<Vector<3, Uint<32>>>(disclose(player_commands())));
@@ -540,9 +564,8 @@ export circuit claim_timeout_win(): [] {
     const myKey = derive_public_key(player_secret_key());
     const state = game_state.lookup(match_id);
     const last_move_at_timestamp = last_move_at.lookup(match_id) as Uint<64>;
-    assert(last_move_at_timestamp > 0, "Game has not started yet");
-    assert(blockTimeGte(disclose((last_move_at_timestamp + TURN_TIMEOUT) as Uint<64> )), "Opponent has not timed out yet");
     assert(state == GAME_STATE.p1_commit || state == GAME_STATE.p2_commit_reveal || state == GAME_STATE.p1_reveal, "Game is not in an active turn state");
+    assert(blockTimeGte(disclose((last_move_at_timestamp + TURN_TIMEOUT) as Uint<64>)), "Opponent has not timed out yet");
     if (state == GAME_STATE.p2_commit_reveal) {
         // P1 committed, P2 is late — P1 wins
         assert(p1_public_key.lookup(match_id) == myKey, "Not authorized");
@@ -631,13 +654,28 @@ export circuit cleanup_match(): [] {
     base_damage_cache_p2_2_2.remove(match_id);
 }
 
-// Close a match before it starts (practice or unjoined lobby created by this player).
+// Close a match and declare a tie.
+// Allowed when:
+//   - P1 closes their own unjoined lobby (no P2 yet), OR
+//   - Either player closes a practice match, OR
+//   - P2 closes during hero-selection states where P1 must act (p1_selecting_first_hero or
+//     p1_selecting_last_heroes) after the turn timeout has elapsed — "creator not playing" tie.
 export circuit close_match(): [] {
     const match_id = disclose(current_match_id());
     const myKey = derive_public_key(player_secret_key());
     const hasP2 = p2_public_key.member(match_id);
     const isP1 = p1_public_key.lookup(match_id) == myKey;
     const isP2 = hasP2 && (p2_public_key.lookup(match_id) == myKey);
-    assert((isP1 && !hasP2) || ((isP1 || isP2) && is_practice.lookup(match_id)), "Not authorized to close this match");
+    const state = game_state.lookup(match_id);
+    const isPractice = is_practice.lookup(match_id);
+    const isP1TurnInSelection = state == GAME_STATE.p1_selecting_first_hero || state == GAME_STATE.p1_selecting_last_heroes;
+    if (isP2 && !isPractice && isP1TurnInSelection) {
+        // P2 can force a tie if P1 has not responded within TURN_TIMEOUT during selection.
+        const lma = last_move_at.lookup(match_id) as Uint<64>;
+        assert(lma > 0, "No moves recorded yet");
+        assert(blockTimeGte(disclose((lma + TURN_TIMEOUT) as Uint<64>)), "P1 has not timed out yet");
+    } else {
+        assert((isP1 && !hasP2) || ((isP1 || isP2) && isPractice), "Not authorized to close this match");
+    }
     game_state.insert(match_id, GAME_STATE.tie);
 }

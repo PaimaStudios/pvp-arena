@@ -104,6 +104,30 @@ export function makeExitMatchButton(scene: Phaser.Scene, x: number, y: number): 
     }, 'Exit to main menu');
 }
 
+export function makeAddressLabel(scene: Phaser.Scene, localPublicKey: bigint | null): void {
+    if (localPublicKey == null) return;
+    const keyStr = `My Address ${localPublicKey.toString(16).padStart(16, '0').slice(0, 8)}…`;
+    scene.add.text(8, GAME_HEIGHT - 8, keyStr, fontStyle(7, { color: '#999988' })).setOrigin(0, 1);
+}
+
+export function makeMatchInfoLabel(scene: Phaser.Scene, matchId: bigint, opponentLine: string): void {
+    const matchIdStr = matchId.toString();
+    const matchIdShort = matchIdStr.slice(0, 6);
+    const matchLabel = scene.add.text(8, 4, `Match #${matchIdShort}…`, fontStyle(7, { color: '#aabbaa' }))
+        .setOrigin(0, 0)
+        .setInteractive({ useHandCursor: true });
+    matchLabel.on('pointerover', () => matchLabel.setStyle({ color: '#ddeedd' }));
+    matchLabel.on('pointerout', () => matchLabel.setStyle({ color: '#aabbaa' }));
+    matchLabel.on('pointerdown', () => {
+        navigator.clipboard.writeText(matchIdStr).then(() => {
+            const prev = matchLabel.text;
+            matchLabel.setText('Copied!');
+            scene.time.delayedCall(1200, () => matchLabel.setText(prev));
+        });
+    });
+    scene.add.text(8, 16, opponentLine, fontStyle(7, { color: '#aaaacc' })).setOrigin(0, 0);
+}
+
 export function makeSoundToggleButton(scene: Phaser.Scene, x: number, y: number): Button {
     const on = scene.add.image(0, 0, 'sound_on').setAlpha(0.75).setVisible(!isMuted());
     const off = scene.add.image(0, 0, 'sound_off').setAlpha(0.75).setVisible(isMuted());

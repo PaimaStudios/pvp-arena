@@ -3,7 +3,7 @@ import { ITEM, RESULT, STANCE, Hero, ARMOR, pureCircuits, GAME_STATE } from '@mi
 import { type PVPArenaDerivedState, type DeployedPVPArenaAPI, safeJSONString } from '@midnight-ntwrk/pvp-api';
 import 'phaser';
 import RexUIPlugin from 'phaser3-rex-plugins/templates/ui/ui-plugin'
-import { GAME_WIDTH, GAME_HEIGHT, gameStateStr, MatchState, fontStyle, makeCopyAddressButton, makeExitMatchButton, makeSoundToggleButton, playSound } from '../main';
+import { GAME_WIDTH, GAME_HEIGHT, gameStateStr, MatchState, fontStyle, makeCopyAddressButton, makeExitMatchButton, makeSoundToggleButton, makeAddressLabel, makeMatchInfoLabel, playSound } from '../main';
 import { HeroActor } from './hero';
 import { HeroIndex, hpDiv, Rank, Team } from './index';
 import { Button } from '../menus/button';
@@ -19,7 +19,7 @@ export type BattleConfig = {
     api: DeployedPVPArenaAPI,
 };
 
-const TURN_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes, matches contract TURN_TIMEOUT
+const TURN_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes, matches contract TURN_TIMEOUT
 
 export class Arena extends Phaser.Scene
 {
@@ -402,36 +402,24 @@ export class Arena extends Phaser.Scene
         makeExitMatchButton(this, GAME_WIDTH - 48, 16);
         makeSoundToggleButton(this, GAME_WIDTH - 16, 16);
 
-        const localKey = this.initialState.localPublicKey;
-        const keyStr = localKey != null ? `Me ${localKey.toString(16).padStart(16, '0').slice(0, 8)}` : '?';
-        this.add.text(8, 4, keyStr, fontStyle(7, { color: '#999988' })).setOrigin(0, 0);
         const matchId = this.initialState.currentMatchId;
         if (matchId != null) {
             const match = this.initialState.currentMatch;
-            let matchSuffix = '';
-            if (match?.isPractice) {
-                matchSuffix = ' - Practice';
-            } else if (match != null) {
-                const opponentKey = this.config.isP1 ? match.p2PubKey : match.p1PubKey;
-                if (opponentKey != null) {
-                    matchSuffix = ` - VS ${opponentKey.toString(16).padStart(16, '0').slice(0, 8)}…`;
-                }
+            const isOffline = this.config.api.deployedContractAddress === OFFLINE_PRACTICE_CONTRACT_ADDR;
+            let opponentLine: string;
+            if (isOffline) {
+                opponentLine = 'Off-Chain Practice';
+            } else if (match?.isPractice) {
+                opponentLine = 'On-Chain Practice';
+            } else {
+                const opponentKey = this.config.isP1 ? match?.p2PubKey : match?.p1PubKey;
+                opponentLine = opponentKey != null
+                    ? `VS ${opponentKey.toString(16).padStart(16, '0').slice(0, 8)}…`
+                    : 'WAITING FOR PLAYER TO JOIN';
             }
-            const matchIdStr = matchId.toString();
-            const matchIdShort = matchIdStr.slice(0, 6);
-            const matchLabel = this.add.text(8, 20, `Match #${matchIdShort}…${matchSuffix}`, fontStyle(7, { color: '#aabbaa' }))
-                .setOrigin(0, 0)
-                .setInteractive({ useHandCursor: true });
-            matchLabel.on('pointerover', () => matchLabel.setStyle({ color: '#ddeedd' }));
-            matchLabel.on('pointerout', () => matchLabel.setStyle({ color: '#aabbaa' }));
-            matchLabel.on('pointerdown', () => {
-                navigator.clipboard.writeText(matchIdStr).then(() => {
-                    const prev = matchLabel.text;
-                    matchLabel.setText('Copied!');
-                    this.time.delayedCall(1200, () => matchLabel.setText(prev));
-                });
-            });
+            makeMatchInfoLabel(this, matchId, opponentLine);
         }
+        makeAddressLabel(this, this.initialState.localPublicKey);
 
         // should we get rid of these?
         this.input?.keyboard?.on('keydown-ONE', () => {
@@ -573,7 +561,7 @@ export class Arena extends Phaser.Scene
             }
         });
 
-        this.surrenderButton = new Button(this, 48, GAME_HEIGHT - 20, 80, 22, 'Surrender', 9, () => {
+        this.surrenderButton = new Button(this, 48, GAME_HEIGHT - 36, 80, 22, 'Surrender', 9, () => {
             if (window.confirm('Are you sure you want to surrender?')) {
                 BatcherClient.setCircuitName('surrender');
                 this.config.api.surrender()
@@ -711,7 +699,8 @@ export class Arena extends Phaser.Scene
 
         if (isActive && !this.isPractice && this.lastMoveAt > 0n) {
             const nowMs = Date.now();
-            const elapsedMs = nowMs - Number(this.lastMoveAt);
+            // lastMoveAt is stored in seconds (getChainTimestamp returns seconds)
+            const elapsedMs = nowMs - Number(this.lastMoveAt) * 1000;
             const remainingMs = TURN_TIMEOUT_MS - elapsedMs;
             const remainingSec = Math.max(0, Math.floor(remainingMs / 1000));
             const mins = Math.floor(remainingSec / 60);
