@@ -431,7 +431,10 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
   async create_new_match(is_match_public: boolean, is_match_practice: boolean = false): Promise<bigint> {
     const match_nonce = utils.randomBytes(32);
     console.log(`[api:create_new_match] calling circuit (public=${is_match_public}, practice=${is_match_practice})`);
-    const txData = await this.deployedContract.callTx.create_new_match(match_nonce, is_match_public, is_match_practice);
+    const wallClockSec = BigInt(Math.floor(Date.now() / 1000));
+    const chainTimestamp = this.providers.getChainTimestamp ? await this.providers.getChainTimestamp() : null;
+    const now = chainTimestamp ?? wallClockSec;
+    const txData = await this.deployedContract.callTx.create_new_match(match_nonce, is_match_public, is_match_practice, now);
 
     this.logger?.trace({
       transactionAdded: {
@@ -465,9 +468,12 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
       console.error(`[p1_select_first_hero] NO private state in DB — this will definitely fail`);
     }
 
-    const txData = await this.retryOnStaleState('p1_select_first_hero', () =>
-      this.deployedContract.callTx.p1_select_first_hero(heroToHack(first_hero))
-    );
+    const txData = await this.retryOnStaleState('p1_select_first_hero', async () => {
+      const wallClockSec = BigInt(Math.floor(Date.now() / 1000));
+      const chainTimestamp = this.providers.getChainTimestamp ? await this.providers.getChainTimestamp() : null;
+      const now = chainTimestamp ?? wallClockSec;
+      return this.deployedContract.callTx.p1_select_first_hero(heroToHack(first_hero), now);
+    });
 
     this.logger?.trace({
       transactionAdded: {
@@ -489,9 +495,12 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
     async p1_select_last_heroes(last_heroes: Hero[]): Promise<void> {
       //this.logger?.info(`postingMessage: ${message}`);
   
-      const txData = await this.retryOnStaleState('p1_select_last_heroes', () =>
-        this.deployedContract.callTx.p1_select_last_heroes(last_heroes.map(heroToHack))
-      );
+      const txData = await this.retryOnStaleState('p1_select_last_heroes', async () => {
+        const wallClockSec = BigInt(Math.floor(Date.now() / 1000));
+        const chainTimestamp = this.providers.getChainTimestamp ? await this.providers.getChainTimestamp() : null;
+        const now = chainTimestamp ?? wallClockSec;
+        return this.deployedContract.callTx.p1_select_last_heroes(last_heroes.map(heroToHack), now);
+      });
 
       this.logger?.trace({
         transactionAdded: {
@@ -512,9 +521,12 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
   async p2_select_first_heroes(first_heroes: Hero[]): Promise<void> {
     //this.logger?.info(`postingMessage: ${message}`);
 
-    const txData = await this.retryOnStaleState('p2_select_first_heroes', () =>
-      this.deployedContract.callTx.p2_select_first_heroes(first_heroes.map(heroToHack))
-    );
+    const txData = await this.retryOnStaleState('p2_select_first_heroes', async () => {
+      const wallClockSec = BigInt(Math.floor(Date.now() / 1000));
+      const chainTimestamp = this.providers.getChainTimestamp ? await this.providers.getChainTimestamp() : null;
+      const now = chainTimestamp ?? wallClockSec;
+      return this.deployedContract.callTx.p2_select_first_heroes(first_heroes.map(heroToHack), now);
+    });
 
     this.logger?.trace({
       transactionAdded: {
@@ -536,9 +548,12 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
     async p2_select_last_hero(last_hero: Hero): Promise<void> {
       //this.logger?.info(`postingMessage: ${message}`);
   
-      const txData = await this.retryOnStaleState('p2_select_last_hero', () =>
-        this.deployedContract.callTx.p2_select_last_hero(heroToHack(last_hero))
-      );
+      const txData = await this.retryOnStaleState('p2_select_last_hero', async () => {
+        const wallClockSec = BigInt(Math.floor(Date.now() / 1000));
+        const chainTimestamp = this.providers.getChainTimestamp ? await this.providers.getChainTimestamp() : null;
+        const now = chainTimestamp ?? wallClockSec;
+        return this.deployedContract.callTx.p2_select_last_hero(heroToHack(last_hero), now);
+      });
 
       this.logger?.trace({
         transactionAdded: {
@@ -644,7 +659,10 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
   async joinMatch(matchId: bigint): Promise<void> {
     console.log(`[api:joinMatch] called with matchId=${matchId}`);
     await this.setCurrentMatch(matchId);
-    await this.deployedContract.callTx.join_match();
+    const wallClockSec = BigInt(Math.floor(Date.now() / 1000));
+    const chainTimestamp = this.providers.getChainTimestamp ? await this.providers.getChainTimestamp() : null;
+    const now = chainTimestamp ?? wallClockSec;
+    await this.deployedContract.callTx.join_match(now);
     console.log(`[api:joinMatch] done`);
   }
 

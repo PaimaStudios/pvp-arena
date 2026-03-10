@@ -1,5 +1,5 @@
 import { BrowserDeploymentManager } from '../wallet';
-import { logger, networkId, GAME_WIDTH, GAME_HEIGHT, fontStyle, makeSoundToggleButton, makeAddressLabel } from '../main';
+import { logger, networkId, GAME_WIDTH, GAME_HEIGHT, fontStyle, makeSoundToggleButton, makeGuideButton, makeAddressLabel } from '../main';
 import { MockPVPArenaAPI } from '../battle/mockapi';
 import { Arena } from '../battle/arena';
 import { EquipmentMenu } from './equipment';
@@ -166,6 +166,7 @@ export class MainMenu extends Phaser.Scene {
             },
         })
         this.text = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.65, '', fontStyle(12)).setOrigin(0.5, 0.65).setVisible(false);
+        makeGuideButton(this, GAME_WIDTH - 48, 16);
         makeSoundToggleButton(this, GAME_WIDTH - 16, 16);
         makeAddressLabel(this, this.state.localPublicKey);
 

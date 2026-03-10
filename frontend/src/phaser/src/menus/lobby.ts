@@ -1,6 +1,6 @@
 import { DeployedPVPArenaAPI, PVPArenaAPI, PVPArenaDerivedMatchState, PVPArenaDerivedState } from "@midnight-ntwrk/pvp-api";
 import { MockPVPArenaAPI } from "../battle/mockapi";
-import { fontStyle, GAME_HEIGHT, GAME_WIDTH, makeSoundToggleButton, makeAddressLabel } from "../main";
+import { fontStyle, GAME_HEIGHT, GAME_WIDTH, makeSoundToggleButton, makeGuideButton, makeAddressLabel } from "../main";
 import { BrowserDeploymentManager } from "../wallet";
 import { Button } from "./button";
 import { EquipmentMenu } from "./equipment";
@@ -102,11 +102,16 @@ function getPlayerMatches(state: PVPArenaDerivedState): PlayerMatchInfo[] {
         return `VS ${opponentKey.toString(16).padStart(16, '0').slice(0, 8)}…`;
     };
 
+    const TURN_TIMEOUT_SEC = 10 * 60;
+    const nowSec = Math.floor(Date.now() / 1000);
+
     return state.myMatches.entries().map(([id, m]) => {
         const hasP2 = m.p2PubKey != null;
+        const p1TimedOut = m.lastMoveAt > 0n && (nowSec - Number(m.lastMoveAt)) >= TURN_TIMEOUT_SEC;
         const isP2WaitingOnP1Selection =
             m.isP2 &&
-            (m.state === GAME_STATE.p1_selecting_first_hero || m.state === GAME_STATE.p1_selecting_last_heroes);
+            (m.state === GAME_STATE.p1_selecting_first_hero || m.state === GAME_STATE.p1_selecting_last_heroes) &&
+            p1TimedOut;
         const closeable = m.isPractice || !hasP2 || isP2WaitingOnP1Selection;
         const status = matchStatus(m);
         const isFinished = status === WON || status === LOST || status === 'Tie';
@@ -481,6 +486,7 @@ export class LobbyMenu extends Phaser.Scene {
             this.back,
         ]);
 
+        makeGuideButton(this, GAME_WIDTH - 48, 16);
         makeSoundToggleButton(this, GAME_WIDTH - 16, 16);
         makeAddressLabel(this, this.state.localPublicKey);
 

@@ -1,6 +1,6 @@
 import { ITEM, RESULT, STANCE, Hero, ARMOR, pureCircuits, GAME_STATE, TotalStats } from '@midnight-ntwrk/pvp-contract';
 import { Arena, BattleConfig } from '../battle/arena';
-import { GAME_WIDTH, GAME_HEIGHT, gameStateStr, fontStyle, isMuted, makeCopyAddressButton, makeExitMatchButton, makeSoundToggleButton, makeAddressLabel, makeMatchInfoLabel, playSound } from '../main';
+import { GAME_WIDTH, GAME_HEIGHT, gameStateStr, fontStyle, isMuted, makeCopyAddressButton, makeExitMatchButton, makeSoundToggleButton, makeGuideButton, makeAddressLabel, makeMatchInfoLabel, playSound } from '../main';
 import { addHeroImages, createHeroAnims, generateRandomHero, HeroAnimationController } from '../battle/hero';
 import { type HeroIndex, Rank, type Team } from '../battle';
 import { Button } from './button';
@@ -372,6 +372,8 @@ class SlotSelector extends Phaser.GameObjects.Container {
     }
 }
 
+const TURN_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes, matches contract TURN_TIMEOUT
+
 enum SetupState {
     SelectingPlayerHeroes,
     WaitingOnOpponent,
@@ -388,6 +390,10 @@ export class EquipmentMenu extends Phaser.Scene {
     status: StatusUI | undefined;
     subscription: Subscription | undefined;
     lastGameState: number = -1;
+    lastMoveAt: bigint = 0n;
+    isPractice: boolean = false;
+    timerText: Phaser.GameObjects.Text | undefined;
+    claimWinButton: Button | undefined;
 
     constructor(config: BattleConfig, initialState?: PVPArenaDerivedState) {
         super('EquipmentMenu');
@@ -406,6 +412,8 @@ export class EquipmentMenu extends Phaser.Scene {
         if (!state.currentMatch) return;
         console.log(`new state: ${safeJSONString(state)}`);
         console.log(`NOW: ${gameStateStr(state.currentMatch.state)}`);
+        this.lastMoveAt = state.currentMatch.lastMoveAt;
+        this.isPractice = state.currentMatch.isPractice;
 
         // Only sync this.selecting when the game state actually changes.
         // Repeated emissions of the same state must not reset selecting back
@@ -528,9 +536,10 @@ export class EquipmentMenu extends Phaser.Scene {
         this.add.image(GAME_WIDTH, GAME_HEIGHT, 'arena_bg').setPosition(GAME_WIDTH / 2, GAME_HEIGHT / 2).setDepth(-3);
         this.add.text(GAME_WIDTH / 2 + 2, GAME_HEIGHT / 5, 'EQUIPMENT SELECT', fontStyle(24)).setOrigin(0.5, 0.65);
         if (this.config.api.deployedContractAddress != OFFLINE_PRACTICE_CONTRACT_ADDR) {
-            makeCopyAddressButton(this, GAME_WIDTH - 80, 16, this.config.api.deployedContractAddress);
+            makeCopyAddressButton(this, GAME_WIDTH - 112, 16, this.config.api.deployedContractAddress);
         }
-        makeExitMatchButton(this, GAME_WIDTH - 48, 16);
+        makeExitMatchButton(this, GAME_WIDTH - 80, 16);
+        makeGuideButton(this, GAME_WIDTH - 48, 16);
         makeSoundToggleButton(this, GAME_WIDTH - 16, 16);
 
         const matchId = this.initialState?.currentMatchId;
@@ -563,10 +572,56 @@ export class EquipmentMenu extends Phaser.Scene {
 
         this.status = new StatusUI(this, []);
 
+        this.timerText = this.add.text(
+            GAME_WIDTH - 56, GAME_HEIGHT - 34, '',
+            fontStyle(8, { color: '#ffaa44', align: 'center' })
+        ).setOrigin(0.5, 0.5).setVisible(false);
+
+        this.claimWinButton = new Button(
+            this, GAME_WIDTH - 56, GAME_HEIGHT - 20, 96, 22, 'Claim Win', 9,
+            () => {
+                BatcherClient.setCircuitName('claim_timeout_win');
+                this.config.api.claimTimeoutWin()
+                    .catch((e) => this.status!.setError(e));
+            },
+            'Opponent has timed out — claim victory'
+        );
+        this.claimWinButton.setVisible(false);
+        this.add.existing(this.claimWinButton);
+
         this.subscription = this.config.api.state$.subscribe((state) => this.onStateChange(state));
 
         if (this.initialState) {
             this.onStateChange(this.initialState);
+        }
+    }
+
+    update() {
+        // claim_timeout_win during selection is only valid when it's the opponent's
+        // selection turn — i.e. the game state is one where claim_timeout_win succeeds.
+        // P1 can claim when P2 is stalling (p2_selecting_first_heroes / p2_selecting_last_hero).
+        // P2's equivalent is close_match (tie), handled in the lobby, not here.
+        const isOpponentSelecting = this.config.isP1 && (
+            this.lastGameState === GAME_STATE.p2_selecting_first_heroes ||
+            this.lastGameState === GAME_STATE.p2_selecting_last_hero
+        );
+        const canShowTimer = isOpponentSelecting && !this.isPractice && this.lastMoveAt > 0n;
+        if (canShowTimer) {
+            const elapsedMs = Date.now() - Number(this.lastMoveAt) * 1000;
+            const remainingMs = TURN_TIMEOUT_MS - elapsedMs;
+            const remainingSec = Math.max(0, Math.floor(remainingMs / 1000));
+            const mins = Math.floor(remainingSec / 60);
+            const secs = remainingSec % 60;
+            if (remainingSec > 0) {
+                this.timerText?.setText(`⏱ Opp: ${mins}:${secs.toString().padStart(2, '0')}`).setVisible(true);
+                this.claimWinButton?.setVisible(false);
+            } else {
+                this.timerText?.setVisible(false);
+                this.claimWinButton?.setVisible(true);
+            }
+        } else {
+            this.timerText?.setVisible(false);
+            this.claimWinButton?.setVisible(false);
         }
     }
 

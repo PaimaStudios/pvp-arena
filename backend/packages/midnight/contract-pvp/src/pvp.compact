@@ -558,20 +558,23 @@ export circuit p1_reveal_commands(now: Uint<64>): [] {
 }
 
 // Claim a win if the opponent has not acted within TURN_TIMEOUT seconds.
-// Valid during p1_commit (p2 claims), p2_commit_reveal (p1 claims), p1_reveal (p2 claims).
+// P1 can claim during p2_selecting_first_heroes, p2_selecting_last_hero, p2_commit_reveal.
+// P2 can claim during p1_commit, p1_reveal.
 export circuit claim_timeout_win(): [] {
     const match_id = disclose(current_match_id());
     const myKey = derive_public_key(player_secret_key());
     const state = game_state.lookup(match_id);
     const last_move_at_timestamp = last_move_at.lookup(match_id) as Uint<64>;
-    assert(state == GAME_STATE.p1_commit || state == GAME_STATE.p2_commit_reveal || state == GAME_STATE.p1_reveal, "Game is not in an active turn state");
+    const isP2Turn = state == GAME_STATE.p2_selecting_first_heroes || state == GAME_STATE.p2_selecting_last_hero || state == GAME_STATE.p2_commit_reveal;
+    const isP1Turn = state == GAME_STATE.p1_commit || state == GAME_STATE.p1_reveal;
+    assert(isP2Turn || isP1Turn, "Opponent is not in a state where they can time out");
     assert(blockTimeGte(disclose((last_move_at_timestamp + TURN_TIMEOUT) as Uint<64>)), "Opponent has not timed out yet");
-    if (state == GAME_STATE.p2_commit_reveal) {
-        // P1 committed, P2 is late — P1 wins
+    if (isP2Turn) {
+        // P2 is late — P1 wins
         assert(p1_public_key.lookup(match_id) == myKey, "Not authorized");
         game_state.insert(match_id, GAME_STATE.p1_win);
     } else {
-        // p1_commit or p1_reveal — P2 is waiting, P2 wins
+        // P1 is late — P2 wins
         assert(p2_public_key.member(match_id) && p2_public_key.lookup(match_id) == myKey, "Not authorized");
         game_state.insert(match_id, GAME_STATE.p2_win);
     }

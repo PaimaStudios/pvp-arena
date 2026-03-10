@@ -1,0 +1,311 @@
+import type { Ledger } from "@pvp-arena-backend/midnight-contracts/pvp";
+
+const TERMINAL_STATES = new Set([
+  7, // GAME_STATE.p1_win
+  8, // GAME_STATE.p2_win
+  9, // GAME_STATE.tie
+]);
+
+const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
+
+// ---------------------------------------------------------------------------
+// Schema
+// ---------------------------------------------------------------------------
+
+export async function ensureTables(db: any): Promise<void> {
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS pvp_matches (
+      match_id    TEXT PRIMARY KEY,
+      player1     TEXT NOT NULL,
+      player2     TEXT,
+      game_state  INTEGER NOT NULL,
+      is_practice BOOLEAN NOT NULL DEFAULT FALSE,
+      created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `);
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS pvp_results (
+      match_id    TEXT PRIMARY KEY,
+      winner      TEXT NOT NULL,
+      loser       TEXT,
+      result_type TEXT NOT NULL,
+      ended_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `);
+}
+
+// ---------------------------------------------------------------------------
+// State machine: process one full ledger snapshot
+// ---------------------------------------------------------------------------
+
+interface LedgerMatch {
+  matchId: string;
+  state: number;
+  player1: string;
+  player2: string | null;
+  isPractice: boolean;
+}
+
+export async function processLedgerSnapshot(db: any, ledger: Ledger): Promise<void> {
+  // Build in-memory map of everything currently on-chain
+  const onChain = new Map<string, LedgerMatch>();
+
+  for (const [matchIdBigint, state] of ledger.game_state) {
+    const matchId = matchIdBigint.toString();
+    const p1Key = ledger.p1_public_key.member(matchIdBigint)
+      ? ledger.p1_public_key.lookup(matchIdBigint).toString()
+      : "unknown";
+    const p2Key = ledger.p2_public_key.member(matchIdBigint)
+      ? ledger.p2_public_key.lookup(matchIdBigint).toString()
+      : null;
+    const isPractice = ledger.is_practice.member(matchIdBigint)
+      ? ledger.is_practice.lookup(matchIdBigint)
+      : false;
+
+    onChain.set(matchId, {
+      matchId,
+      state: state as unknown as number,
+      player1: p1Key,
+      player2: p2Key,
+      isPractice,
+    });
+  }
+
+  if (onChain.size === 0) return;
+
+  // --- Step 1: fetch what we already know ---
+  const allMatchIds = Array.from(onChain.keys());
+  const { rows: knownRows } = await db.query(
+    `SELECT match_id, game_state FROM pvp_matches WHERE match_id = ANY($1)`,
+    [allMatchIds],
+  ) as { rows: Array<{ match_id: string; game_state: number }> };
+  const known = new Map<string, number>(knownRows.map((r: any) => [r.match_id, Number(r.game_state)]));
+
+  // --- Step 2: diff ---
+  const toUpsert: LedgerMatch[] = [];
+  const toResult: Array<{ matchId: string; winner: string; loser: string | null; resultType: string }> = [];
+
+  for (const match of onChain.values()) {
+    const prevState = known.get(match.matchId); // undefined = new match
+    const isNewOrChanged = prevState === undefined || prevState !== match.state;
+
+    if (isNewOrChanged) {
+      toUpsert.push(match);
+
+      const prevTerminal = prevState !== undefined && TERMINAL_STATES.has(prevState);
+      const nowTerminal = TERMINAL_STATES.has(match.state);
+
+      if (nowTerminal && !prevTerminal) {
+        const { winner, loser, resultType } = resolveResult(match);
+        toResult.push({ matchId: match.matchId, winner, loser, resultType });
+      }
+    }
+  }
+
+  // --- Step 3: batch upsert changed/new matches ---
+  if (toUpsert.length > 0) {
+    const placeholders = toUpsert.map((_, i) => {
+      const base = i * 5;
+      return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5})`;
+    }).join(", ");
+
+    const values = toUpsert.flatMap((m) => [
+      m.matchId,
+      m.player1,
+      m.player2,
+      m.state,
+      m.isPractice,
+    ]);
+
+    await db.query(
+      `INSERT INTO pvp_matches (match_id, player1, player2, game_state, is_practice)
+       VALUES ${placeholders}
+       ON CONFLICT (match_id) DO UPDATE
+         SET player2    = COALESCE(EXCLUDED.player2, pvp_matches.player2),
+             game_state = EXCLUDED.game_state,
+             updated_at = now()`,
+      values,
+    );
+  }
+
+  // --- Step 4: batch insert new results (idempotent) ---
+  if (toResult.length > 0) {
+    const now = new Date().toISOString();
+    const placeholders = toResult.map((_, i) => {
+      const base = i * 5;
+      return `($${base + 1}, $${base + 2}, $${base + 3}, $${base + 4}, $${base + 5})`;
+    }).join(", ");
+
+    const values = toResult.flatMap((r) => [
+      r.matchId,
+      r.winner,
+      r.loser,
+      r.resultType,
+      now,
+    ]);
+
+    await db.query(
+      `INSERT INTO pvp_results (match_id, winner, loser, result_type, ended_at)
+       VALUES ${placeholders}
+       ON CONFLICT (match_id) DO NOTHING`,
+      values,
+    );
+  }
+}
+
+function resolveResult(
+  match: LedgerMatch,
+): { winner: string; loser: string | null; resultType: string } {
+  if (match.state === 7 /* p1_win */) {
+    return { winner: match.player1, loser: match.player2, resultType: "p1_win" };
+  }
+  if (match.state === 8 /* p2_win */) {
+    return {
+      winner: match.player2 ?? "unknown",
+      loser: match.player1,
+      resultType: "p2_win",
+    };
+  }
+  // tie (9)
+  return { winner: match.player1, loser: null, resultType: "tie" };
+}
+
+// ---------------------------------------------------------------------------
+// API queries
+// ---------------------------------------------------------------------------
+
+export interface LeaderboardParams {
+  startDate?: string;
+  endDate?: string;
+  limit?: number;
+  offset?: number;
+}
+
+export interface LeaderboardEntry {
+  rank: number;
+  address: string;
+  score: number;
+}
+
+export interface LeaderboardResult {
+  channel: string;
+  startDate: string;
+  endDate: string;
+  totalPlayers: number;
+  totalScore: number;
+  entries: LeaderboardEntry[];
+}
+
+export async function getLeaderboard(
+  db: any,
+  params: LeaderboardParams,
+): Promise<LeaderboardResult> {
+  const now = new Date();
+  const endDate = params.endDate ?? now.toISOString();
+  const startDate = params.startDate ?? new Date(now.getTime() - ONE_YEAR_MS).toISOString();
+  const limit = Math.min(params.limit ?? 50, 1000);
+  const offset = params.offset ?? 0;
+
+  const { rows } = await db.query(
+    `SELECT
+       winner                                          AS address,
+       COUNT(*)::int                                   AS score,
+       RANK() OVER (ORDER BY COUNT(*) DESC)::int       AS rank
+     FROM pvp_results
+     WHERE result_type <> 'tie'
+       AND ended_at >= $1
+       AND ended_at <= $2
+     GROUP BY winner
+     ORDER BY score DESC
+     LIMIT $3 OFFSET $4`,
+    [startDate, endDate, limit, offset],
+  ) as { rows: Array<{ address: string; score: number; rank: number }> };
+
+  const entries: LeaderboardEntry[] = rows.map((r: any) => ({
+    rank: Number(r.rank),
+    address: r.address,
+    score: Number(r.score),
+  }));
+
+  const totalScore = entries.reduce((sum, e) => sum + e.score, 0);
+
+  return {
+    channel: "leaderboard",
+    startDate,
+    endDate,
+    totalPlayers: entries.length,
+    totalScore,
+    entries,
+  };
+}
+
+export interface UserChannelStats {
+  score: number;
+  rank: number;
+  matchesPlayed: number;
+}
+
+export async function getUserLeaderboardStats(
+  db: any,
+  address: string,
+  startDate: string,
+  endDate: string,
+): Promise<UserChannelStats | null> {
+  // Rank computed via subquery to avoid window functions on a filtered result
+  const { rows } = await db.query(
+    `WITH ranked AS (
+       SELECT
+         winner                                      AS address,
+         COUNT(*)::int                               AS score,
+         RANK() OVER (ORDER BY COUNT(*) DESC)::int   AS rank
+       FROM pvp_results
+       WHERE result_type <> 'tie'
+         AND ended_at >= $1
+         AND ended_at <= $2
+       GROUP BY winner
+     )
+     SELECT
+       r.score,
+       r.rank,
+       (SELECT COUNT(*)::int FROM pvp_results pr
+        WHERE (pr.winner = $3 OR pr.loser = $3)
+          AND pr.ended_at >= $1 AND pr.ended_at <= $2) AS matches_played
+     FROM ranked r
+     WHERE r.address = $3`,
+    [startDate, endDate, address],
+  ) as { rows: Array<{ score: number; rank: number; matches_played: number }> };
+
+  if (rows.length === 0) return null;
+
+  return {
+    score: Number(rows[0].score),
+    rank: Number(rows[0].rank),
+    matchesPlayed: Number(rows[0].matches_played),
+  };
+}
+
+export interface UserIdentity {
+  address: string;
+  delegatedFrom: string[];
+  displayName?: string;
+}
+
+export async function resolveUserIdentity(
+  _db: any,
+  address: string,
+): Promise<UserIdentity> {
+  // No delegation table yet — a wallet delegates to itself by default
+  return {
+    address,
+    delegatedFrom: [],
+  };
+}
+
+export async function getUserAchievements(
+  _db: any,
+  _address: string,
+): Promise<string[]> {
+  // Achievements not yet implemented
+  return [];
+}

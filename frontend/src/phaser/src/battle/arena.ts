@@ -3,7 +3,7 @@ import { ITEM, RESULT, STANCE, Hero, ARMOR, pureCircuits, GAME_STATE } from '@mi
 import { type PVPArenaDerivedState, type DeployedPVPArenaAPI, safeJSONString } from '@midnight-ntwrk/pvp-api';
 import 'phaser';
 import RexUIPlugin from 'phaser3-rex-plugins/templates/ui/ui-plugin'
-import { GAME_WIDTH, GAME_HEIGHT, gameStateStr, MatchState, fontStyle, makeCopyAddressButton, makeExitMatchButton, makeSoundToggleButton, makeAddressLabel, makeMatchInfoLabel, playSound } from '../main';
+import { GAME_WIDTH, GAME_HEIGHT, gameStateStr, MatchState, fontStyle, makeCopyAddressButton, makeExitMatchButton, makeSoundToggleButton, makeGuideButton, makeAddressLabel, makeMatchInfoLabel, playSound } from '../main';
 import { HeroActor } from './hero';
 import { HeroIndex, hpDiv, Rank, Team } from './index';
 import { Button } from '../menus/button';
@@ -91,17 +91,17 @@ export class Arena extends Phaser.Scene
             case MatchState.WaitingOnOpponent:
                 this.status?.setProgressText([
                     { text: 'Waiting for opponent to submit...', delay: 0 },
-                    { text: 'Your opponent is choosing their move...', delay: 20_000 },
+                    { text: 'Opponent is choosing their move...', delay: 20_000 },
                     { text: 'Still waiting for your opponent...', delay: 45_000 },
-                    { text: 'Your opponent might be away. Hang tight!', delay: 80_000 },
+                    { text: 'Opponent may be away. Hang tight!', delay: 80_000 },
                 ]);
                 break;
             case MatchState.SubmittingMove:
                 this.status?.setProgressText([
-                    { text: 'Submitting move to the blockchain...', delay: 0 },
+                    { text: 'Submitting to blockchain...', delay: 0 },
                     { text: 'Generating zero-knowledge proof...', delay: 10_000 },
-                    { text: 'Waiting for transaction confirmation...', delay: 25_000 },
-                    { text: 'Almost there (this can take up to a minute)...', delay: 45_000 },
+                    { text: 'Waiting for confirmation...', delay: 25_000 },
+                    { text: 'Almost there, up to a minute...', delay: 45_000 },
                 ]);
                 this.selected?.deselect();
                 this.selected = undefined;
@@ -113,16 +113,16 @@ export class Arena extends Phaser.Scene
                 this.status?.setProgressText([
                     { text: 'Revealing your move...', delay: 0 },
                     { text: 'Generating zero-knowledge proof...', delay: 10_000 },
-                    { text: 'Waiting for transaction confirmation...', delay: 25_000 },
-                    { text: 'Almost there (this can take up to a minute)...', delay: 45_000 },
+                    { text: 'Waiting for confirmation...', delay: 25_000 },
+                    { text: 'Almost there, up to a minute...', delay: 45_000 },
                 ]);
                 break;
             case MatchState.WaitingOtherPlayerReveal:
                 this.status?.setProgressText([
-                    { text: 'Waiting for opponent to reveal their move...', delay: 0 },
-                    { text: 'Opponent is generating their proof...', delay: 15_000 },
+                    { text: 'Waiting for opponent to reveal...', delay: 0 },
+                    { text: 'Opponent generating proof...', delay: 15_000 },
                     { text: 'Still waiting for reveal...', delay: 40_000 },
-                    { text: 'Your opponent might be away. Hang tight!', delay: 80_000 },
+                    { text: 'Opponent may be away. Hang tight!', delay: 80_000 },
                 ]);
                 break;
             case MatchState.CombatResolving:
@@ -397,9 +397,10 @@ export class Arena extends Phaser.Scene
     create() {
         this.add.image(GAME_WIDTH, GAME_HEIGHT, 'arena_bg').setPosition(GAME_WIDTH / 2, GAME_HEIGHT / 2).setDepth(-3);
         if (this.config.api.deployedContractAddress != OFFLINE_PRACTICE_CONTRACT_ADDR) {
-            makeCopyAddressButton(this, GAME_WIDTH - 80, 16, this.config.api.deployedContractAddress);
+            makeCopyAddressButton(this, GAME_WIDTH - 112, 16, this.config.api.deployedContractAddress);
         }
-        makeExitMatchButton(this, GAME_WIDTH - 48, 16);
+        makeExitMatchButton(this, GAME_WIDTH - 80, 16);
+        makeGuideButton(this, GAME_WIDTH - 48, 16);
         makeSoundToggleButton(this, GAME_WIDTH - 16, 16);
 
         const matchId = this.initialState.currentMatchId;

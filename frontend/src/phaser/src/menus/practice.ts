@@ -1,5 +1,5 @@
 import { BrowserDeploymentManager } from '../wallet';
-import { logger, GAME_WIDTH, GAME_HEIGHT, fontStyle, makeSoundToggleButton, makeAddressLabel } from '../main';
+import { logger, GAME_WIDTH, GAME_HEIGHT, fontStyle, makeSoundToggleButton, makeGuideButton, makeAddressLabel } from '../main';
 import { MockPVPArenaAPI } from '../battle/mockapi';
 import { Arena } from '../battle/arena';
 import { EquipmentMenu } from './equipment';
@@ -79,6 +79,7 @@ export class PracticeMenu extends Phaser.Scene {
         this.makeDescBox(GAME_HEIGHT * 0.375, 'All proofs generated/posted on-chain (Slower)');
         this.makeDescBox(GAME_HEIGHT * 0.625, 'Local only. Nothing is proven/submitted (Fastest)');
 
+        makeGuideButton(this, GAME_WIDTH - 48, 16);
         makeSoundToggleButton(this, GAME_WIDTH - 16, 16);
         makeAddressLabel(this, this.state.localPublicKey);
     }

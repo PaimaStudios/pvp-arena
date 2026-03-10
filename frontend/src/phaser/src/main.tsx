@@ -104,6 +104,51 @@ export function makeExitMatchButton(scene: Phaser.Scene, x: number, y: number): 
     }, 'Exit to main menu');
 }
 
+export function makeGuideButton(scene: Phaser.Scene, x: number, y: number): Button {
+    return new Button(scene, x, y, 24, 24, '?', 10, () => {
+        let overlay = document.getElementById('pvp-guide-overlay');
+        if (overlay) {
+            overlay.style.display = 'flex';
+            return;
+        }
+        overlay = document.createElement('div');
+        overlay.id = 'pvp-guide-overlay';
+        overlay.style.cssText = [
+            'position:fixed', 'inset:0', 'background:rgba(0,0,0,0.82)',
+            'display:flex', 'align-items:center', 'justify-content:center', 'z-index:9999',
+        ].join(';');
+
+        const box = document.createElement('div');
+        box.style.cssText = [
+            'position:relative', 'width:620px', 'height:500px',
+            'border:2px solid #3a3a20', 'border-radius:4px', 'overflow:hidden',
+        ].join(';');
+
+        const closeBtn = document.createElement('button');
+        closeBtn.textContent = '✕';
+        closeBtn.style.cssText = [
+            'position:absolute', 'top:6px', 'right:8px',
+            'background:#1a1a0e', 'border:1px solid #aabb44', 'border-radius:3px',
+            'color:#f5f5ed', 'font-family:monospace', 'font-size:14px',
+            'width:24px', 'height:24px', 'cursor:pointer', 'z-index:1',
+            'line-height:1', 'padding:0',
+        ].join(';');
+        closeBtn.onclick = () => { overlay!.style.display = 'none'; };
+
+        const iframe = document.createElement('iframe');
+        iframe.src = '/guide.html';
+        iframe.style.cssText = 'width:100%;height:100%;border:none;display:block;';
+
+        box.appendChild(closeBtn);
+        box.appendChild(iframe);
+        overlay.appendChild(box);
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) overlay!.style.display = 'none';
+        });
+        document.body.appendChild(overlay);
+    }, 'Player guide');
+}
+
 export function makeAddressLabel(scene: Phaser.Scene, localPublicKey: bigint | null): void {
     if (localPublicKey == null) return;
     const keyStr = `My Address ${localPublicKey.toString(16).padStart(16, '0').slice(0, 8)}…`;
