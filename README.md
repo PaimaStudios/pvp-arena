@@ -1,5 +1,9 @@
 # PVP Arena
 
+This project is built on the Midnight Network.
+
+It is a player vs player turn-based battle game with the logic fully on-chain using Compact.
+
 ## Pre-requisites
 
 ### Enable yarn package manager
