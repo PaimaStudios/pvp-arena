@@ -98,6 +98,12 @@ export class HeroActor extends Phaser.GameObjects.Container {
                     arena.selected.setTarget(this.rank);
                     closeTooltip(TooltipId.SetFirstAttack);
                     makeTooltip(this.scene, GAME_WIDTH / 2, 100, TooltipId.SetAllAttacks);
+                    const allTargeted = arena.getAliveHeroes(arena.playerTeam()).every(
+                        h => h.target != undefined && h.target.team == arena.opponentTeam()
+                    );
+                    if (!allTargeted) {
+                        arena.status?.setText('Select next Hero');
+                    }
                 }
             }
         });
@@ -301,6 +307,7 @@ export class HeroActor extends Phaser.GameObjects.Container {
     public select() {
         this.select_circle.visible = true;
         this.arena.selected = this;
+        this.arena.status?.setText('Target your enemy');
 
         if (this.leftStance() != undefined) {
             this.left_arrow.setInteractive({useHandCursor: true});
@@ -322,6 +329,9 @@ export class HeroActor extends Phaser.GameObjects.Container {
     public deselect() {
         this.select_circle.visible = false;
         this.arena.selected = undefined;
+        if (this.arena.matchState == MatchState.WaitingOnPlayer) {
+            this.arena.status?.setText('Select a Hero');
+        }
 
         // // TODO: hacky
         if (this.left_arrow.alpha != 1) {

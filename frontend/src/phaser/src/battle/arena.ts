@@ -81,7 +81,7 @@ export class Arena extends Phaser.Scene
                 this.status?.setText('Initializing...');
                 break;
             case MatchState.WaitingOnPlayer:
-                this.status?.setText('Make your move');
+                this.status?.setText('Select a Hero');
                 for (const hero of this.getAliveHeroes(this.playerTeam())) {
                     hero.setInteractive({useHandCursor: true});
                 }

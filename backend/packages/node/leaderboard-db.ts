@@ -47,21 +47,19 @@ interface LedgerMatch {
   isPractice: boolean;
 }
 
-export async function processLedgerSnapshot(db: any, ledger: Ledger): Promise<void> {
+export async function processLedgerSnapshot(db: any, payload: any): Promise<void> {
+  const game_state = payload["3"][8] as Record<string, number>;
+  const p1_public_key = payload["3"][9] as Record<string, string>;
+  const p2_public_key = payload["3"][10] as Record<string, string>;
+  const is_practice = payload["3"][12] as Record<string, boolean | number>;
+
   // Build in-memory map of everything currently on-chain
   const onChain = new Map<string, LedgerMatch>();
 
-  for (const [matchIdBigint, state] of ledger.game_state) {
-    const matchId = matchIdBigint.toString();
-    const p1Key = ledger.p1_public_key.member(matchIdBigint)
-      ? ledger.p1_public_key.lookup(matchIdBigint).toString()
-      : "unknown";
-    const p2Key = ledger.p2_public_key.member(matchIdBigint)
-      ? ledger.p2_public_key.lookup(matchIdBigint).toString()
-      : null;
-    const isPractice = ledger.is_practice.member(matchIdBigint)
-      ? ledger.is_practice.lookup(matchIdBigint)
-      : false;
+  for (const [matchId, state] of Object.entries(game_state)) {
+    const p1Key = p1_public_key[matchId] ?? "unknown";
+    const p2Key = p2_public_key[matchId] ?? null;
+    const isPractice = Boolean(is_practice[matchId]);
 
     onChain.set(matchId, {
       matchId,

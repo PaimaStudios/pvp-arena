@@ -284,7 +284,12 @@ class JoinGamesUI<
                     if (match.label === 'Practice') {
                         buttonText = 'Rejoin Practice';
                     } else {
-                        buttonText = `Rejoin #${matchIdShort} ${match.label}\n${match.status}`;
+                        const isFinished = match.status === WON || match.status === LOST || match.status === 'Tie';
+                        if (isFinished) {
+                            buttonText = `View #${matchIdShort}\n${match.status}`;
+                        } else {
+                            buttonText = `Rejoin #${matchIdShort} ${match.label}\n${match.status}`;
+                        }
                     }
                 } else {
                     // OpenMatchInfo (Public Matches)
@@ -397,6 +402,7 @@ export class LobbyMenu extends Phaser.Scene {
     pk: string | undefined;
     state: PVPArenaDerivedState;
     subscription: Subscription | undefined;
+    private closedMatchIds = new Set<bigint>();
 
     constructor(api: DeployedPVPArenaAPI, initialState: PVPArenaDerivedState) {
         super("LobbyMenu");
@@ -431,7 +437,7 @@ export class LobbyMenu extends Phaser.Scene {
             GAME_HEIGHT / 2,
             "Your Matches",
             false,
-            () => getPlayerMatches(this.state),
+            () => getPlayerMatches(this.state).filter(m => !this.closedMatchIds.has(m.matchId)),
             4,
             (matchId) => this.closeMatch(matchId)
         );
@@ -555,6 +561,7 @@ export class LobbyMenu extends Phaser.Scene {
             return this.api.clearCurrentMatch();
         }).then(() => {
             this.status!.clearStatusText();
+            this.closedMatchIds.add(matchId);
             this.rejoin?.refreshGames();
         }).catch((e) => {
             this.status!.setError(e);
