@@ -207,14 +207,16 @@ export async function getLeaderboard(
 
   const { rows } = await db.query(
     `SELECT
-       winner                                          AS address,
+       r.winner                                        AS address,
        COUNT(*)::int                                   AS score,
        RANK() OVER (ORDER BY COUNT(*) DESC)::int       AS rank
-     FROM pvp_results
-     WHERE result_type <> 'tie'
-       AND ended_at >= $1
-       AND ended_at <= $2
-     GROUP BY winner
+     FROM pvp_results r
+     JOIN pvp_matches m ON r.match_id = m.match_id
+     WHERE r.result_type <> 'tie'
+       AND m.is_practice = FALSE
+       AND r.ended_at >= $1
+       AND r.ended_at <= $2
+     GROUP BY r.winner
      ORDER BY score DESC
      LIMIT $3 OFFSET $4`,
     [startDate, endDate, limit, offset],
@@ -254,20 +256,24 @@ export async function getUserLeaderboardStats(
   const { rows } = await db.query(
     `WITH ranked AS (
        SELECT
-         winner                                      AS address,
+         r.winner                                    AS address,
          COUNT(*)::int                               AS score,
          RANK() OVER (ORDER BY COUNT(*) DESC)::int   AS rank
-       FROM pvp_results
-       WHERE result_type <> 'tie'
-         AND ended_at >= $1
-         AND ended_at <= $2
-       GROUP BY winner
+       FROM pvp_results r
+       JOIN pvp_matches m ON r.match_id = m.match_id
+       WHERE r.result_type <> 'tie'
+         AND m.is_practice = FALSE
+         AND r.ended_at >= $1
+         AND r.ended_at <= $2
+       GROUP BY r.winner
      )
      SELECT
        r.score,
        r.rank,
        (SELECT COUNT(*)::int FROM pvp_results pr
+        JOIN pvp_matches pm ON pr.match_id = pm.match_id
         WHERE (pr.winner = $3 OR pr.loser = $3)
+          AND pm.is_practice = FALSE
           AND pr.ended_at >= $1 AND pr.ended_at <= $2) AS matches_played
      FROM ranked r
      WHERE r.address = $3`,
