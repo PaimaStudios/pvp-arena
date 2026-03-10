@@ -9403,6 +9403,7 @@
           "npm:@midnight-ntwrk/midnight-js-types@3.0.0",
           "npm:@midnight-ntwrk/midnight-js-utils@3.0.0",
           "npm:@midnight-ntwrk/wallet-sdk-abstractions@1.0.0",
+          "npm:@midnight-ntwrk/wallet-sdk-address-format@3.0.0",
           "npm:@midnight-ntwrk/wallet-sdk-dust-wallet@1.0.0",
           "npm:@midnight-ntwrk/wallet-sdk-facade@1.0.0",
           "npm:@midnight-ntwrk/wallet-sdk-hd@3.0.0",

@@ -1,4 +1,18 @@
 import type { Ledger } from "@pvp-arena-backend/midnight-contracts/pvp";
+import { UnshieldedAddress, MidnightBech32m } from "@midnight-ntwrk/wallet-sdk-address-format";
+import { Buffer } from "node:buffer";
+
+/**
+ * Converts a decimal unshielded address (as returned by the leaderboard API)
+ * to the human-readable mn_addr_... Bech32m format.
+ */
+function decimalToUnshieldedAddress(decimal: string, networkId: string = 'testnet'): string {
+  // Pad the BigInt to exactly 32 bytes (big-endian)
+  const hex = BigInt(decimal).toString(16).padStart(64, '0');
+  const bytes = Buffer.from(hex, 'hex');
+  const addr = new UnshieldedAddress(bytes);
+  return MidnightBech32m.encode(networkId, addr).asString();
+}
 
 const TERMINAL_STATES = new Set([
   7, // GAME_STATE.p1_win
@@ -47,6 +61,15 @@ interface LedgerMatch {
   isPractice: boolean;
 }
 
+function decimalToUnshieldedAddressSafe(decimal: string, networkId: string = 'testnet'): string {
+  try {
+    if (!decimal || decimal === "0") return "unknown";
+    return decimalToUnshieldedAddress(decimal, networkId);
+  } catch (e) {
+    return decimal;
+  }
+}
+
 export async function processLedgerSnapshot(db: any, payload: any): Promise<void> {
   const game_state = payload["3"][8] as Record<string, number>;
   const p1_public_key = payload["3"][9] as Record<string, string>;
@@ -57,8 +80,8 @@ export async function processLedgerSnapshot(db: any, payload: any): Promise<void
   const onChain = new Map<string, LedgerMatch>();
 
   for (const [matchId, state] of Object.entries(game_state)) {
-    const p1Key = p1_public_key[matchId] ?? "unknown";
-    const p2Key = p2_public_key[matchId] ?? null;
+    const p1Key = p1_public_key[matchId] ? decimalToUnshieldedAddressSafe(p1_public_key[matchId]) : "unknown";
+    const p2Key = p2_public_key[matchId] ? decimalToUnshieldedAddressSafe(p2_public_key[matchId]) : null;
     const isPractice = Boolean(is_practice[matchId]);
 
     onChain.set(matchId, {
@@ -120,7 +143,8 @@ export async function processLedgerSnapshot(db: any, payload: any): Promise<void
       `INSERT INTO pvp_matches (match_id, player1, player2, game_state, is_practice)
        VALUES ${placeholders}
        ON CONFLICT (match_id) DO UPDATE
-         SET player2    = COALESCE(EXCLUDED.player2, pvp_matches.player2),
+         SET player1    = EXCLUDED.player1,
+             player2    = COALESCE(EXCLUDED.player2, pvp_matches.player2),
              game_state = EXCLUDED.game_state,
              updated_at = now()`,
       values,
@@ -146,7 +170,9 @@ export async function processLedgerSnapshot(db: any, payload: any): Promise<void
     await db.query(
       `INSERT INTO pvp_results (match_id, winner, loser, result_type, ended_at)
        VALUES ${placeholders}
-       ON CONFLICT (match_id) DO NOTHING`,
+       ON CONFLICT (match_id) DO UPDATE
+         SET winner = EXCLUDED.winner,
+             loser  = EXCLUDED.loser`,
       values,
     );
   }
@@ -224,7 +250,7 @@ export async function getLeaderboard(
 
   const entries: LeaderboardEntry[] = rows.map((r: any) => ({
     rank: Number(r.rank),
-    address: r.address,
+    address: r.address.startsWith('mn_addr_') ? r.address : decimalToUnshieldedAddressSafe(r.address),
     score: Number(r.score),
   }));
 
