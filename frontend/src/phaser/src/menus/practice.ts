@@ -33,7 +33,12 @@ export class PracticeMenu extends Phaser.Scene {
 
         this.status = new StatusUI(this, [
             new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.3, 128, 32, 'On-chain Practice', 10, () => {
-                this.status?.setText('Creating match, please wait...');
+                this.status?.setProgressText([
+                    { text: 'Creating practice match...', delay: 0 },
+                    { text: 'Submitting to blockchain...', delay: 8_000 },
+                    { text: 'Generating zero-knowledge proof...', delay: 18_000 },
+                    { text: 'Almost there, up to a minute...', delay: 35_000 },
+                ]);
                 BatcherClient.setCircuitName('create_new_match');
                 this.api.create_new_match(false, true).then((matchId) => {
                     BatcherClient.setCircuitName('join_match');

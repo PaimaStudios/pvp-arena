@@ -570,14 +570,9 @@ export circuit claim_timeout_win(): [] {
     assert(isP2Turn || isP1Turn, "Opponent is not in a state where they can time out");
     assert(blockTimeGte(disclose((last_move_at_timestamp + TURN_TIMEOUT) as Uint<64>)), "Opponent has not timed out yet");
     if (isP2Turn) {
+        // P2 is late — P1 wins
         assert(p1_public_key.lookup(match_id) == myKey, "Not authorized");
-        if (p2_public_key.member(match_id)) {
-            // P2 joined but is late — P1 wins
-            game_state.insert(match_id, GAME_STATE.p1_win);
-        } else {
-            // Nobody joined — treat as tie so P1 can close the match
-            game_state.insert(match_id, GAME_STATE.tie);
-        }
+        game_state.insert(match_id, GAME_STATE.p1_win);
     } else {
         // P1 is late — P2 wins
         assert(p2_public_key.member(match_id) && p2_public_key.lookup(match_id) == myKey, "Not authorized");
