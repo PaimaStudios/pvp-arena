@@ -29,7 +29,12 @@ export class CreateMenu extends Phaser.Scene {
     }
 
     private createMatch(isPublic: boolean) {
-        this.status!.setText(`Creating ${isPublic ? 'public' : 'private'} match, please wait...`);
+        this.status!.setProgressText([
+            { text: `Creating ${isPublic ? 'public' : 'private'} match...`, delay: 0 },
+            { text: 'Submitting to blockchain...', delay: 8_000 },
+            { text: 'Generating zero-knowledge proof...', delay: 18_000 },
+            { text: 'Almost there, up to a minute...', delay: 35_000 },
+        ]);
         BatcherClient.setCircuitName('create_new_match');
         this.api
             .create_new_match(isPublic, false)

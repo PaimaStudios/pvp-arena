@@ -229,34 +229,38 @@ class JoinGamesUI<
         this.refreshGames();
     }
 
-    refreshGames() {
-        if (this.refreshing == undefined) {
-            this.refreshing = {
-                spinner: this.scene.add
-                    .image(0, -32, "refresh")
-                    .setScale(4, 4)
-                    .setAlpha(0.6),
-                text: this.scene.add
-                    .text(0, 32, "Refreshing...", fontStyle(16))
-                    .setOrigin(0.5, 0.5),
-            };
-            this.add(this.refreshing.spinner);
-            this.add(this.refreshing.text);
-        }
+    refreshGames(skipDelay = false) {
         this.matchButtons.forEach((b) => b.destroy());
         this.matchButtons = [];
         this.matches = [];
-        setTimeout(() => {
+
+        const doRefresh = () => {
             this.refreshing?.spinner.destroy();
             this.refreshing?.text.destroy();
             this.refreshing = undefined;
             this.matches = this.getMatches();
-            // this.matches = matches.sort(
-            //     (a, b) => b.lastUpdatedBlock - a.lastUpdatedBlock
-            // );// we can't do this until ledger v8 now that's in one contract
             this.matchIndex = 0;
             this.makeMatchList();
-        }, 100);
+        };
+
+        if (skipDelay) {
+            doRefresh();
+        } else {
+            if (this.refreshing == undefined) {
+                this.refreshing = {
+                    spinner: this.scene.add
+                        .image(0, -32, "refresh")
+                        .setScale(4, 4)
+                        .setAlpha(0.6),
+                    text: this.scene.add
+                        .text(0, 32, "Refreshing...", fontStyle(16))
+                        .setOrigin(0.5, 0.5),
+                };
+                this.add(this.refreshing.spinner);
+                this.add(this.refreshing.text);
+            }
+            setTimeout(doRefresh, 100);
+        }
     }
 
     preUpdate() {
@@ -457,16 +461,7 @@ export class LobbyMenu extends Phaser.Scene {
             BUTTON_HEIGHT,
             "Direct Join",
             10,
-            () => {
-                const input = window.prompt("Enter match ID to join directly");
-                if (input != undefined) {
-                    try {
-                        this.join(BigInt(input.trim()));
-                    } catch {
-                        alert("Invalid match ID — enter a number");
-                    }
-                }
-            },
+            () => this.showDirectJoinOverlay(),
             "Join a match by entering the match ID"
         );
         this.back = new Button(
@@ -507,8 +502,8 @@ export class LobbyMenu extends Phaser.Scene {
 
     onStateChange(state: PVPArenaDerivedState) {
         this.state = state;
-        this.joinPublc?.refreshGames();
-        this.rejoin?.refreshGames();
+        this.joinPublc?.refreshGames(true);
+        this.rejoin?.refreshGames(true);
     }
 
     join(matchId: bigint) {
@@ -550,6 +545,52 @@ export class LobbyMenu extends Phaser.Scene {
             .catch((e) => {
                 this.status!.setError(e);
             });
+    }
+
+    showDirectJoinOverlay() {
+        const overlay = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.6).setDepth(50).setInteractive();
+        const panel = this.add.nineslice(GAME_WIDTH / 2, GAME_HEIGHT / 2, 'stone_button', undefined, 260, 120, 8, 8, 8, 8).setDepth(51);
+        const label = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 - 40, 'Enter Match ID', fontStyle(14)).setOrigin(0.5, 0.65).setDepth(52);
+        const errorText = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 42, '', fontStyle(8, { color: '#ff4444' })).setOrigin(0.5, 0.5).setDepth(52);
+
+        // Native HTML input positioned over the canvas
+        const canvas = this.game.canvas;
+        const rect = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / rect.width;
+        const scaleY = canvas.height / rect.height;
+        const inputX = rect.left + (GAME_WIDTH / 2 - 80) / scaleX;
+        const inputY = rect.top + (GAME_HEIGHT / 2 - 12) / scaleY;
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.placeholder = 'Match ID (number)';
+        input.style.cssText = `position:fixed;left:${inputX}px;top:${inputY}px;width:${160 / scaleX}px;height:${24 / scaleY}px;font-size:${12 / scaleY}px;padding:2px 6px;border-radius:4px;border:1px solid #888;background:#222;color:#fff;outline:none;z-index:9999`;
+        document.body.appendChild(input);
+        input.focus();
+
+        const destroy = () => {
+            overlay.destroy(); panel.destroy(); label.destroy(); errorText.destroy();
+            joinBtn.destroy(); cancelBtn.destroy();
+            input.remove();
+        };
+
+        const tryJoin = () => {
+            const raw = input.value.trim();
+            try {
+                const id = BigInt(raw);
+                destroy();
+                this.join(id);
+            } catch {
+                errorText.setText('Invalid ID — enter a number');
+                input.style.borderColor = '#ff4444';
+            }
+        };
+
+        input.addEventListener('keydown', (e) => { if (e.key === 'Enter') tryJoin(); if (e.key === 'Escape') destroy(); });
+
+        const joinBtn = new Button(this, GAME_WIDTH / 2 - 44, GAME_HEIGHT / 2 + 24, 72, 24, 'Join', 12, tryJoin);
+        joinBtn.setDepth(52);
+        const cancelBtn = new Button(this, GAME_WIDTH / 2 + 44, GAME_HEIGHT / 2 + 24, 72, 24, 'Cancel', 12, destroy);
+        cancelBtn.setDepth(52);
     }
 
     closeMatch(matchId: bigint) {

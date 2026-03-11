@@ -44,6 +44,7 @@ export class Arena extends Phaser.Scene
     // Saved at p1Commit time so p1Reveal uses the exact same values regardless of UI state changes.
     committedMoves: bigint[] | null = null;
     committedStances: STANCE[] | null = null;
+    roundLog: Array<{ myDmg: number[]; theirDmg: number[] }> = [];
 
     constructor(config: BattleConfig, initialState: PVPArenaDerivedState) {
         super('Arena');
@@ -155,11 +156,18 @@ export class Arena extends Phaser.Scene
 
     displayEndMatchText(message: string) {
         this.status?.clearStatusText();
-        this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.4, message, fontStyle(64, { align: 'center' })).setOrigin(0.5, 0.65);
+        this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.6).setDepth(10);
+        this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.4, message, fontStyle(64, { align: 'center' })).setOrigin(0.5, 0.65).setDepth(11);
+        if (this.roundLog.length > 0) {
+            const lines = this.roundLog.map((r, i) =>
+                `Round ${i + 1}:  Dealt ${r.myDmg.join(' / ')}   Took ${r.theirDmg.join(' / ')}`
+            ).join('\n');
+            this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.63, lines, fontStyle(8, { align: 'center' })).setOrigin(0.5, 0.5).setDepth(11);
+        }
         new Button(this, GAME_WIDTH / 2, GAME_HEIGHT * 0.9, 128, 32, 'Main Menu', 18, () => {
             this.scene.start('MainMenu');
             this.scene.remove('Arena');
-        });
+        }).setDepth(11);
     }
 
     private createHeroes(state: PVPArenaDerivedState) {
@@ -273,6 +281,11 @@ export class Arena extends Phaser.Scene
 
     runCombatAnims() {
         this.setMatchState(MatchState.CombatResolving);
+        // Snapshot damage dealt this round for the end-match summary
+        this.roundLog.push({
+            myDmg: this.heroes[this.playerTeam()].map(h => h.realDmg),
+            theirDmg: this.heroes[this.opponentTeam()].map(h => h.realDmg),
+        });
         const tweens: Phaser.Types.Tweens.TweenBuilderConfig[] = [];
         // stance change tweens
         const aliveUnits = this.getAllAliveUnits();
@@ -563,11 +576,20 @@ export class Arena extends Phaser.Scene
         });
 
         this.surrenderButton = new Button(this, 48, GAME_HEIGHT - 36, 80, 22, 'Surrender', 9, () => {
-            if (window.confirm('Are you sure you want to surrender?')) {
+            // In-game confirmation overlay — no native browser dialog
+            const overlay = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.6).setDepth(100).setInteractive();
+            const label = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.38, 'Surrender?', fontStyle(32, { align: 'center' })).setOrigin(0.5, 0.65).setDepth(101);
+            const yesBtn = new Button(this, GAME_WIDTH / 2 - 48, GAME_HEIGHT * 0.55, 80, 28, 'Yes', 14, () => {
+                overlay.destroy(); label.destroy(); yesBtn.destroy(); noBtn.destroy();
                 BatcherClient.setCircuitName('surrender');
                 this.config.api.surrender()
                     .catch((e) => this.status!.setError(e));
-            }
+            });
+            yesBtn.setDepth(101);
+            const noBtn = new Button(this, GAME_WIDTH / 2 + 48, GAME_HEIGHT * 0.55, 80, 28, 'Cancel', 14, () => {
+                overlay.destroy(); label.destroy(); yesBtn.destroy(); noBtn.destroy();
+            });
+            noBtn.setDepth(101);
         }, 'Give up and let your opponent win');
         this.surrenderButton.setVisible(false);
 
@@ -668,27 +690,33 @@ export class Arena extends Phaser.Scene
                 }
                 throw new Error('could not find matching commit');
             };
-            switch (this.initialState.currentMatch!.state) {
-                case GAME_STATE.p2_commit_reveal:
-                    if (this.config.isP1) {
-                        guessTargetsForP1();
-                    }
-                    break;
-                case GAME_STATE.p1_reveal:
-                    if (this.config.isP1) {
-                        guessTargetsForP1();
-                    } else {
-                        for (let i = 0; i < 3; ++i) {
-                            this.heroes[1][i].setTarget(new Rank(Number(this.initialState.currentMatch!.p2Cmds![i]) as HeroIndex, 0));
+
+            // Show status text before blocking the JS thread, then defer the
+            // brute-force + subscription setup so the browser renders one frame first.
+            this.status?.setText('Resuming match, reconstructing moves...');
+            setTimeout(() => {
+                switch (this.initialState.currentMatch!.state) {
+                    case GAME_STATE.p2_commit_reveal:
+                        if (this.config.isP1) {
+                            guessTargetsForP1();
                         }
-                    }
-                    break;
-            }
+                        break;
+                    case GAME_STATE.p1_reveal:
+                        if (this.config.isP1) {
+                            guessTargetsForP1();
+                        } else {
+                            for (let i = 0; i < 3; ++i) {
+                                this.heroes[1][i].setTarget(new Rank(Number(this.initialState.currentMatch!.p2Cmds![i]) as HeroIndex, 0));
+                            }
+                        }
+                        break;
+                }
+                this.subscription = this.config.api.state$.subscribe((state) => this.onStateChange(state));
+            }, 0);
         } else {
             this.onStateChange(this.initialState);
+            this.subscription = this.config.api.state$.subscribe((state) => this.onStateChange(state));
         }
-
-        this.subscription = this.config.api.state$.subscribe((state) => this.onStateChange(state));
     }
 
     update() {
@@ -714,7 +742,9 @@ export class Arena extends Phaser.Scene
 
             if (remainingSec > 0) {
                 const label = isOpponentTurn ? `⏱ Opp: ${mins}:${secs.toString().padStart(2, '0')}` : `⏱ You: ${mins}:${secs.toString().padStart(2, '0')}`;
-                this.timerText?.setText(label).setVisible(true);
+                // Turn urgent red when under 60s on your own turn
+                const color = (!isOpponentTurn && remainingSec < 60) ? '#ff4444' : '#ffaa44';
+                this.timerText?.setText(label).setStyle({ color }).setVisible(true);
                 this.claimWinButton?.setVisible(false);
             } else if (isOpponentTurn) {
                 this.timerText?.setVisible(false);

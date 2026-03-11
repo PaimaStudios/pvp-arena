@@ -310,11 +310,13 @@ class SlotSelector extends Phaser.GameObjects.Container {
                 if (this.hero.hero.lhs == ITEM.bow || this.hero.hero.rhs == ITEM.bow) {
                     this.hero.hero.rhs = ITEM.nothing;
                     this.equip.slots.get(EQUIP_SLOT.rhs)?.refresh();
+                    (this.scene as EquipmentMenu).showHint('Bow requires both hands — right hand cleared');
                 }
                 // disallow double shields
                 if (this.hero.hero.lhs == ITEM.shield && this.hero.hero.rhs == ITEM.shield) {
                     this.hero.hero.rhs = ITEM.nothing;
                     this.equip.slots.get(EQUIP_SLOT.rhs)?.refresh();
+                    (this.scene as EquipmentMenu).showHint('Cannot equip two shields');
                 }
                 break;
             case EQUIP_SLOT.rhs:
@@ -323,11 +325,13 @@ class SlotSelector extends Phaser.GameObjects.Container {
                 if (this.hero.hero.rhs == ITEM.bow || this.hero.hero.lhs == ITEM.bow) {
                     this.hero.hero.lhs = ITEM.nothing;
                     this.equip.slots.get(EQUIP_SLOT.lhs)?.refresh();
+                    (this.scene as EquipmentMenu).showHint('Bow requires both hands — left hand cleared');
                 }
                 // disallow double shields
                 if (this.hero.hero.lhs == ITEM.shield && this.hero.hero.rhs == ITEM.shield) {
                     this.hero.hero.lhs = ITEM.nothing;
                     this.equip.slots.get(EQUIP_SLOT.lhs)?.refresh();
+                    (this.scene as EquipmentMenu).showHint('Cannot equip two shields');
                 }
                 break;
             case EQUIP_SLOT.helmet:
@@ -512,7 +516,12 @@ export class EquipmentMenu extends Phaser.Scene {
                 this.status?.setText('Waiting on opponent\'s selection...');
                 break;
             case SetupState.Submitting:
-                this.status?.setText('Submitting selection...');
+                this.status?.setProgressText([
+                    { text: 'Submitting selection...', delay: 0 },
+                    { text: 'Generating zero-knowledge proof...', delay: 10_000 },
+                    { text: 'Waiting for on-chain confirmation...', delay: 25_000 },
+                    { text: 'Almost there, up to a minute...', delay: 45_000 },
+                ]);
                 break;
         }
     }
@@ -605,19 +614,33 @@ export class EquipmentMenu extends Phaser.Scene {
             this.lastGameState === GAME_STATE.p2_selecting_first_heroes ||
             this.lastGameState === GAME_STATE.p2_selecting_last_hero
         );
-        const canShowTimer = isOpponentSelecting && !this.isPractice && this.lastMoveAt > 0n;
+        const isMySelecting = !this.config.isP1 && (
+            this.lastGameState === GAME_STATE.p2_selecting_first_heroes ||
+            this.lastGameState === GAME_STATE.p2_selecting_last_hero
+        ) || this.config.isP1 && (
+            this.lastGameState === GAME_STATE.p1_selecting_first_hero ||
+            this.lastGameState === GAME_STATE.p1_selecting_last_heroes
+        );
+        const canShowTimer = (isOpponentSelecting || isMySelecting) && !this.isPractice && this.lastMoveAt > 0n;
         if (canShowTimer) {
             const elapsedMs = Date.now() - Number(this.lastMoveAt) * 1000;
             const remainingMs = TURN_TIMEOUT_MS - elapsedMs;
             const remainingSec = Math.max(0, Math.floor(remainingMs / 1000));
             const mins = Math.floor(remainingSec / 60);
             const secs = remainingSec % 60;
-            if (remainingSec > 0) {
-                this.timerText?.setText(`⏱ Opp: ${mins}:${secs.toString().padStart(2, '0')}`).setVisible(true);
-                this.claimWinButton?.setVisible(false);
+            if (isOpponentSelecting) {
+                if (remainingSec > 0) {
+                    this.timerText?.setText(`⏱ Opp: ${mins}:${secs.toString().padStart(2, '0')}`).setStyle({ color: '#ffaa44' }).setVisible(true);
+                    this.claimWinButton?.setVisible(false);
+                } else {
+                    this.timerText?.setVisible(false);
+                    this.claimWinButton?.setVisible(true);
+                }
             } else {
-                this.timerText?.setVisible(false);
-                this.claimWinButton?.setVisible(true);
+                // Own turn — show countdown, turn red under 60s
+                const color = remainingSec < 60 ? '#ff4444' : '#ffaa44';
+                this.timerText?.setText(`⏱ You: ${mins}:${secs.toString().padStart(2, '0')}`).setStyle({ color }).setVisible(true);
+                this.claimWinButton?.setVisible(false);
             }
         } else {
             this.timerText?.setVisible(false);
@@ -676,6 +699,17 @@ export class EquipmentMenu extends Phaser.Scene {
             }
         }
         this.selecting += 1;
+    }
+
+    showHint(msg: string) {
+        if (this.setupState !== SetupState.SelectingPlayerHeroes) return;
+        this.status?.setText(msg);
+        this.time.delayedCall(2000, () => {
+            if (this.setupState === SetupState.SelectingPlayerHeroes) {
+                this.status?.clearStatusText();
+                this.status?.setText('Select your heroes');
+            }
+        });
     }
 
     private recoverFromSubmitError(e: Error) {
