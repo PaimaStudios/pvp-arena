@@ -1,0 +1,28 @@
+{
+  "name": "@pvp-arena-backend/contract-pvp",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "require": "./dist/index.js",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "compact": "compact compile +0.29.0 src/pvp.compact ./src/managed/pvp && rm -rf ../../../../frontend/src/contract/src/managed/pvp && cp -R ./src/managed/pvp ../../../../frontend/src/contract/src/managed/ && cp ./src/pvp.compact ../../../../frontend/src/contract/src/pvp.compact",
+    "test": "jest --passWithNoTests",
+    "prepack": "yarn build",
+    "build": "rm -rf dist && tsc --project tsconfig.build.json && cp -Rf ./src/managed ./dist/managed && cp ./src/pvp.compact ./dist",
+    "lint": "eslint src",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "eslint": "^8.52.0",
+    "jest": "^29.7.0",
+    "typescript": "^5.2.2"
+  }
+}

@@ -1,0 +1,723 @@
+import { ITEM, RESULT, STANCE, Hero, ARMOR, pureCircuits, GAME_STATE, TotalStats } from '@midnight-ntwrk/pvp-contract';
+import { Arena, BattleConfig } from '../battle/arena';
+import { GAME_WIDTH, GAME_HEIGHT, gameStateStr, fontStyle, isMuted, makeCopyAddressButton, makeExitMatchButton, makeSoundToggleButton, makeGuideButton, makeAddressLabel, makeMatchInfoLabel, playSound } from '../main';
+import { addHeroImages, createHeroAnims, generateRandomHero, HeroAnimationController } from '../battle/hero';
+import { type HeroIndex, Rank, type Team } from '../battle';
+import { Button } from './button';
+import { OFFLINE_PRACTICE_CONTRACT_ADDR } from '../battle/mockapi';
+import { BatcherClient } from '../batcher-client';
+import { PVPArenaDerivedState, safeJSONString } from '@midnight-ntwrk/pvp-api';
+import { Subscription } from 'rxjs';
+import { StatusUI } from '.';
+import { makeTooltip, TooltipId } from './tooltip';
+
+class SelectHeroActor extends Phaser.GameObjects.Container {
+    hero: Hero;
+    rank: Rank;
+    statsDisplay: StatsDisplay | undefined;
+
+    select_circle: Phaser.GameObjects.Image;
+    tick: number;
+
+    anims: HeroAnimationController | undefined;
+
+    constructor(scene: EquipmentMenu, rank: Rank) {
+        super(scene, rank.x(STANCE.defensive), rank.y());
+        this.select_circle = scene.add.image(0, 8, 'select_circle').setAlpha(0);
+        if (rank.team != (scene.config.isP1 ? 0 : 1)) {
+            this.select_circle.setVisible(false);
+        }
+        this.add(this.select_circle);
+        this.tick = 0;
+        scene.add.existing(this);
+        this.hero = {
+            rhs: ITEM.nothing,
+            lhs: ITEM.nothing,
+            helmet: ARMOR.nothing,
+            chest: ARMOR.nothing,
+            skirt: ARMOR.nothing,
+            greaves: ARMOR.nothing,
+        };
+        this.rank = rank;
+        this.statsDisplay = undefined;
+
+        this.refresh();
+    }
+
+    preUpdate(): void {
+        this.select_circle.setPosition(this.x, this.y);
+        this.select_circle.angle = this.tick / 5;
+        const circleScale = 1 + 0.09 * Math.sin(this.tick / 64);
+        this.select_circle.setScale(circleScale, circleScale);
+        this.tick += 1;
+    }
+
+    refresh() {
+        if (this.anims != undefined) {
+            this.anims.destroy();
+        }
+        this.removeAll(true);
+        //addHeroImages(this, this.hero, this.rank.team == 1);
+        this.anims = new HeroAnimationController(this.scene, 0, 0, this.hero, this.rank.team == 1);
+        this.add(this.anims);
+        if (this.statsDisplay != undefined) {
+            this.statsDisplay.updateStats(pureCircuits.calc_stats(this.hero));
+        }
+    }
+
+    createStatsDisplay(tweens: Phaser.Types.Tweens.TweenBuilderConfig[]) {
+        this.statsDisplay = new StatsDisplay(this.scene, this.x + (this.rank.team == 0 ? (-96 + 40) : (96 - 40)), 84 + 110 * this.rank.index);
+        this.statsDisplay.updateStats(pureCircuits.calc_stats(this.hero));
+        this.statsDisplay.alpha = 0;
+        tweens.push({
+            targets: this,
+            x: this.rank.x(STANCE.neutral),
+            duration: 450,
+            onStart: () => {
+                playSound(this.scene, 'move');
+                this.refresh();
+                this.anims?.run();
+            },
+            onComplete: () => {
+                this.anims?.idle();
+            },
+        });
+        tweens.push({
+            targets: [this.statsDisplay!, this.select_circle!],
+            alpha: 1,
+            duration: 450,
+        });
+    }
+}
+
+enum EQUIP_SLOT {
+    rhs = 0,
+    lhs = 1,
+    helmet = 2,
+    chest = 3,
+    skirt = 4,
+    greaves = 5,
+}
+
+function equip_slot_max(slot: EQUIP_SLOT): number {
+    if (slot == EQUIP_SLOT.rhs || slot == EQUIP_SLOT.lhs) {
+        return 6;
+    }
+    return 3;
+}
+
+function equip_slot_index(hero: Hero, slot: EQUIP_SLOT): number {
+    switch (slot) {
+        case EQUIP_SLOT.rhs:
+            return hero.rhs;
+        case EQUIP_SLOT.lhs:
+            return hero.lhs;
+        case EQUIP_SLOT.chest:
+            return hero.chest;
+        case EQUIP_SLOT.helmet:
+            return hero.helmet;
+        case EQUIP_SLOT.skirt:
+            return hero.skirt;
+        case EQUIP_SLOT.greaves:
+            return hero.greaves;
+    }
+}
+
+function equip_slot_name(slot: EQUIP_SLOT): string {
+    switch (slot) {
+        case EQUIP_SLOT.rhs:
+            return 'Right hand';
+        case EQUIP_SLOT.lhs:
+            return 'Left hand';
+        case EQUIP_SLOT.chest:
+            return 'Chest';
+        case EQUIP_SLOT.helmet:
+            return 'Helmet';
+        case EQUIP_SLOT.skirt:
+            return 'Skirt';
+        case EQUIP_SLOT.greaves:
+            return 'Greaves';
+    }
+    return 'ERROR';
+}
+
+function item_str(item: ITEM): string {
+    switch (item) {
+        case ITEM.nothing:
+            return '--';
+        case ITEM.axe:
+            return 'Axe';
+        case ITEM.shield:
+            return 'Shield';
+        case ITEM.bow:
+            return 'Bow';
+        case ITEM.sword:
+            return 'Sword';
+        case ITEM.spear:
+            return 'Spear';
+    }
+    return 'ERROR';
+}
+
+function armor_str(armor: ARMOR): string {
+    switch (armor) {
+        case ARMOR.nothing:
+            return '--';
+        case ARMOR.leather:
+            return 'Leather';
+        case ARMOR.metal:
+            return 'Metal';
+    }
+    return 'ERROR';
+}
+
+class StatsDisplay extends Phaser.GameObjects.Container {
+    descriptions: Phaser.GameObjects.Text;
+    valuesText: Phaser.GameObjects.Text;
+    constructor(scene: Phaser.Scene, x: number, y: number) {
+        super(scene, x, y);
+        this.add(scene.add.nineslice(0, 0, 'stone_button', undefined, 91, 108, 8, 8, 8, 8));
+        this.descriptions = scene.add.text(8 - 45, -50, 'CRUSH DMG:\nPIERCE DMG:\nCRUSH DEF:\nPIERCE DEF:\nDEX BONUS:\nWEIGHT:', fontStyle(8, {align: 'left'}));
+        this.add(this.descriptions);
+        this.valuesText = scene.add.text(68 - 42, -50, '', fontStyle(8, {align: 'right'}));
+        this.add(this.valuesText);
+        console.log(`creating stats display (${x}, ${y})`);
+        scene.add.existing(this);
+    }
+
+    updateStats(stats: TotalStats) {
+        this.valuesText.setText (`${stats.crush_dmg}\n${stats.pierce_dmg}\n${stats.crush_def}\n${stats.pierce_def}\n${stats.dex_bonus}\n${stats.weight}`);
+    }
+}
+
+class EquipmentSelector extends Phaser.GameObjects.Container {
+    hero: SelectHeroActor;
+    slots: Map<EQUIP_SLOT, SlotSelector>;
+
+    constructor(scene: EquipmentMenu, hero: SelectHeroActor) {
+        super(scene, GAME_WIDTH / 2, GAME_HEIGHT * 0.4/* + hero.rank.index * 32*/);
+        this.hero = hero;
+        this.add(scene.add.nineslice(0, 48, 'stone_button', undefined, 128, 128, 8, 8, 8, 8));
+
+        this.slots = new Map();
+        this.slots.set(EQUIP_SLOT.rhs, new SlotSelector(scene, EQUIP_SLOT.rhs, this, hero));
+        this.slots.set(EQUIP_SLOT.lhs, new SlotSelector(scene, EQUIP_SLOT.lhs, this, hero));
+        this.slots.set(EQUIP_SLOT.helmet, new SlotSelector(scene, EQUIP_SLOT.helmet, this, hero));
+        this.slots.set(EQUIP_SLOT.chest, new SlotSelector(scene, EQUIP_SLOT.chest, this, hero));
+        this.slots.set(EQUIP_SLOT.skirt, new SlotSelector(scene, EQUIP_SLOT.skirt, this, hero));
+        this.slots.set(EQUIP_SLOT.greaves, new SlotSelector(scene, EQUIP_SLOT.greaves, this, hero));
+        this.slots.values().forEach((slot) => this.add(slot));
+
+        this.add(new Button(scene, 0, -12, 16, 16, '', 10, () => {
+            this.hero.hero = generateRandomHero();
+            this.hero.refresh();
+            this.slots.values().forEach((slot) => slot.refresh());
+        }, 'Randomize'));
+        this.add(scene.add.image(0, -12, 'dice').setAlpha(0.75));
+
+        this.add(new Button(scene, 0, 18 * 6, 64, 16, 'Confirm', 10, () => scene.next()));
+
+        scene.add.existing(this);
+
+        // in case we failed to submit it will already be created
+        if (this.hero.statsDisplay == undefined) {
+            this.createOpeningTweens();
+        }
+    }
+
+    activateSlot(slot: EQUIP_SLOT) {
+        this.slots.get(slot)?.setVisible(true);
+    }
+
+    deactivateSlot(slot: EQUIP_SLOT) {
+        this.slots.get(slot)?.setVisible(false);
+    }
+
+    private createOpeningTweens() {
+        const tweens: Phaser.Types.Tweens.TweenBuilderConfig[] = [];
+        this.alpha = 0;
+        this.hero.createStatsDisplay(tweens);
+        tweens.push({
+            targets: this,
+            alpha: 1,
+            duration: 100,
+            onComplete: () => {
+                makeTooltip(
+                    this.scene,
+                    GAME_WIDTH / 2,
+                    300,
+                    [TooltipId.EquipExplain1, TooltipId.EquipExplain2, TooltipId.EquipExplain3, TooltipId.EquipExplain4],
+                    { width: 320, clickHighlights: [new Phaser.Math.Vector2(48 + GAME_WIDTH / 2, GAME_HEIGHT * 0.4)] },
+                );
+            },
+        });
+        this.scene.tweens.chain({
+            targets: this.hero,
+            tweens
+        });
+    }
+}
+class SlotSelector extends Phaser.GameObjects.Container {
+    slot: EQUIP_SLOT;
+    hero: SelectHeroActor;
+    text: Phaser.GameObjects.Text;
+    equip: EquipmentSelector;
+
+    constructor(scene: Phaser.Scene, slot: EQUIP_SLOT, equip: EquipmentSelector, hero: SelectHeroActor) {
+        super(scene, 0, (slot as number) * 18);
+
+        this.slot = slot;
+        this.equip = equip;
+        this.hero = hero;
+
+        const left = this.scene.add.image(-53, 0, 'equip_select_arrow').setFlipX(true);
+        left.setInteractive({ useHandCursor: true });
+        left.on('pointerup', () => {
+            playSound(scene, 'select');
+            this.shift(-1);
+        });
+        left.on('pointerover', () => left.setTexture('equip_select_arrow_over'));
+        left.on('pointerout', () => left.setTexture('equip_select_arrow'));
+        this.add(left);
+        const right = this.scene.add.image(53, 0, 'equip_select_arrow');
+        right.setInteractive({ useHandCursor: true });
+        right.on('pointerup', () => {
+            playSound(scene, 'select');
+            this.shift(1);
+        });
+        right.on('pointerover', () => right.setTexture('equip_select_arrow_over'));
+        right.on('pointerout', () => right.setTexture('equip_select_arrow'));
+        this.add(right);
+
+        const text = this.scene.add.text(0, 0, '', fontStyle(8)).setOrigin(0.5, 0.65);
+        this.text = text;
+        this.add(text);
+
+        // to refresh
+        this.shift(0);
+
+        scene.add.existing(this);
+    }
+
+    // shifts hero's stats and updates visual elements
+    public shift(cycle: number) {
+        const max = equip_slot_max(this.slot);
+        const index = (equip_slot_index(this.hero.hero, this.slot) + max + cycle) % max;
+        switch (this.slot) {
+            case EQUIP_SLOT.lhs:
+                this.hero.hero.lhs = index as ITEM;
+                // disallow bow / non-unarmed
+                if (this.hero.hero.lhs == ITEM.bow || this.hero.hero.rhs == ITEM.bow) {
+                    this.hero.hero.rhs = ITEM.nothing;
+                    this.equip.slots.get(EQUIP_SLOT.rhs)?.refresh();
+                    (this.scene as EquipmentMenu).showHint('Bow requires both hands — right hand cleared');
+                }
+                // disallow double shields
+                if (this.hero.hero.lhs == ITEM.shield && this.hero.hero.rhs == ITEM.shield) {
+                    this.hero.hero.rhs = ITEM.nothing;
+                    this.equip.slots.get(EQUIP_SLOT.rhs)?.refresh();
+                    (this.scene as EquipmentMenu).showHint('Cannot equip two shields');
+                }
+                break;
+            case EQUIP_SLOT.rhs:
+                this.hero.hero.rhs = index as ITEM;
+                // disallow bow / non-unarmed
+                if (this.hero.hero.rhs == ITEM.bow || this.hero.hero.lhs == ITEM.bow) {
+                    this.hero.hero.lhs = ITEM.nothing;
+                    this.equip.slots.get(EQUIP_SLOT.lhs)?.refresh();
+                    (this.scene as EquipmentMenu).showHint('Bow requires both hands — left hand cleared');
+                }
+                // disallow double shields
+                if (this.hero.hero.lhs == ITEM.shield && this.hero.hero.rhs == ITEM.shield) {
+                    this.hero.hero.lhs = ITEM.nothing;
+                    this.equip.slots.get(EQUIP_SLOT.lhs)?.refresh();
+                    (this.scene as EquipmentMenu).showHint('Cannot equip two shields');
+                }
+                break;
+            case EQUIP_SLOT.helmet:
+                this.hero.hero.helmet = index as ARMOR;
+                break;
+            case EQUIP_SLOT.chest:
+                this.hero.hero.chest = index as ARMOR;
+                break;
+            case EQUIP_SLOT.skirt:
+                this.hero.hero.skirt = index as ARMOR;
+                break;
+            case EQUIP_SLOT.greaves:
+                this.hero.hero.greaves = index as ARMOR;
+                break;
+        }
+        this.refresh();
+        this.hero.refresh();
+    }
+
+    // refreshes the text / hero (stats) based on current hero's stats
+    public refresh() {
+        switch (this.slot) {
+            case EQUIP_SLOT.lhs:
+                this.text.setText(`${equip_slot_name(this.slot)}: ${item_str(this.hero.hero.lhs)}`);
+                break;
+            case EQUIP_SLOT.rhs:
+                this.text.setText(`${equip_slot_name(this.slot)}: ${item_str(this.hero.hero.rhs)}`);
+                break;
+            case EQUIP_SLOT.helmet:
+                this.text.setText(`${equip_slot_name(this.slot)}: ${armor_str(this.hero.hero.helmet)}`);
+                break;
+            case EQUIP_SLOT.chest:
+                this.text.setText(`${equip_slot_name(this.slot)}: ${armor_str(this.hero.hero.chest)}`);
+                break;
+            case EQUIP_SLOT.skirt:
+                this.text.setText(`${equip_slot_name(this.slot)}: ${armor_str(this.hero.hero.skirt)}`);
+                break;
+            case EQUIP_SLOT.greaves:
+                this.text.setText(`${equip_slot_name(this.slot)}: ${armor_str(this.hero.hero.greaves)}`);
+                break;
+        }
+    }
+}
+
+const TURN_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes, matches contract TURN_TIMEOUT
+
+enum SetupState {
+    SelectingPlayerHeroes,
+    WaitingOnOpponent,
+    Submitting,
+}
+
+export class EquipmentMenu extends Phaser.Scene {
+    config: BattleConfig;
+    initialState: PVPArenaDerivedState | undefined;
+    heroes: SelectHeroActor[][];
+    setupState: SetupState;
+    selecting: number;
+    selector: EquipmentSelector | undefined;
+    status: StatusUI | undefined;
+    subscription: Subscription | undefined;
+    lastGameState: number = -1;
+    lastMoveAt: bigint = 0n;
+    isPractice: boolean = false;
+    timerText: Phaser.GameObjects.Text | undefined;
+    claimWinButton: Button | undefined;
+
+    constructor(config: BattleConfig, initialState?: PVPArenaDerivedState) {
+        super('EquipmentMenu');
+        this.config = config;
+        this.initialState = initialState;
+        this.heroes = [];
+        this.selecting = 0;
+        this.setupState = config.isP1 ? SetupState.SelectingPlayerHeroes : SetupState.WaitingOnOpponent;
+    }
+
+    preDestroy() {
+        this.subscription?.unsubscribe();
+    }
+
+    onStateChange(state: PVPArenaDerivedState) {
+        if (!state.currentMatch) return;
+        console.log(`new state: ${safeJSONString(state)}`);
+        console.log(`NOW: ${gameStateStr(state.currentMatch.state)}`);
+        this.lastMoveAt = state.currentMatch.lastMoveAt;
+        this.isPractice = state.currentMatch.isPractice;
+
+        // Only sync this.selecting when the game state actually changes.
+        // Repeated emissions of the same state must not reset selecting back
+        // to its initial value — that would undo progress the player has already
+        // made within a multi-step selection phase (e.g. hero 1 → hero 2).
+        const gameState = state.currentMatch!.state;
+        if (gameState !== this.lastGameState) {
+            this.lastGameState = gameState;
+            // Game state advanced on-chain — a prior Submitting tx landed, so
+            // clear the guard so runStateChange can handle the new state.
+            if (this.setupState === SetupState.Submitting) {
+                this.setupState = SetupState.WaitingOnOpponent;
+            }
+            switch (gameState) {
+                case GAME_STATE.p1_selecting_first_hero:
+                    this.selecting = 0;
+                    break;
+                case GAME_STATE.p1_selecting_last_heroes:
+                    this.selecting = this.config.isP1 ? 1 : 2;
+                    break;
+                case GAME_STATE.p2_selecting_first_heroes:
+                    this.selecting = this.config.isP1 ? 1 : 0;
+                    break;
+                case GAME_STATE.p2_selecting_last_hero:
+                    this.selecting = 2;
+                    break;
+            }
+        }
+
+        // update heroes
+        let tweens: Phaser.Types.Tweens.TweenBuilderConfig[] = [];
+        for (let team = 0; team < 2; ++team) {
+            const newHeroes = team == 0 ? state.currentMatch!.p1Heroes : state.currentMatch!.p2Heroes;
+            for (let i = 0; i < newHeroes.length; ++i) {
+                const heroActor = this.heroes[team][i];
+                
+                if (heroActor.statsDisplay == undefined) {
+                    heroActor.hero = newHeroes[i];
+                    heroActor.createStatsDisplay(tweens);
+                }
+            }
+        }
+        tweens.push({
+            targets: null,
+            onComplete: () => {
+                this.runStateChange(state);
+            },
+        });
+        this.tweens.chain({
+            // this doesn't seem to do anything (always overridden?) but if you pass null it errors
+            targets: this.heroes[0][0],
+            tweens,
+        });
+    }
+
+    runStateChange(state: PVPArenaDerivedState) {
+        console.log(`running state change: ${state.currentMatch!.state}`);
+        // Don't override a Submitting state — a tx is already in flight.
+        if (this.setupState === SetupState.Submitting) return;
+        switch (state.currentMatch!.state) {
+            case GAME_STATE.p1_selecting_first_hero:
+            case GAME_STATE.p1_selecting_last_heroes:
+                if (this.config.isP1 && this.selector == undefined) {
+                    this.selector = new EquipmentSelector(this, this.heroes[0][this.selecting]);
+                }
+                this.setSetupState(this.config.isP1 ? SetupState.SelectingPlayerHeroes : SetupState.WaitingOnOpponent);
+                break;
+            case GAME_STATE.p2_selecting_first_heroes:
+            case GAME_STATE.p2_selecting_last_hero:
+                if (!this.config.isP1 && this.selector == undefined) {
+                    this.selector = new EquipmentSelector(this, this.heroes[1][this.selecting]);
+                }
+                this.setSetupState(this.config.isP1 ? SetupState.WaitingOnOpponent : SetupState.SelectingPlayerHeroes);
+                break;
+            case GAME_STATE.p1_commit:
+                // game started
+                console.log(`================skipping equip screen=============`);
+                // This causes black screens when uncommented. TODO: investigate. Issue: https://github.com/PaimaStudios/pvp-arena/issues/22
+                //this.scene.remove('Arena');
+                this.scene.add('Arena', new Arena(this.config, state));
+                this.scene.start('Arena');
+                break;
+            default:
+                console.error(`invalid equipment state: ${gameStateStr(state.currentMatch!.state)}`);
+                break;
+        }
+    }
+
+    setSetupState(state: SetupState) {
+        this.setupState = state;
+        switch (state) {
+            case SetupState.SelectingPlayerHeroes:
+                this.status?.setText('Select your heroes');
+                break;
+            case SetupState.WaitingOnOpponent:
+                this.status?.setText('Waiting on opponent\'s selection...');
+                break;
+            case SetupState.Submitting:
+                this.status?.setProgressText([
+                    { text: 'Submitting selection...', delay: 0 },
+                    { text: 'Generating zero-knowledge proof...', delay: 10_000 },
+                    { text: 'Waiting for on-chain confirmation...', delay: 25_000 },
+                    { text: 'Almost there, up to a minute...', delay: 45_000 },
+                ]);
+                break;
+        }
+    }
+
+    preload() {
+        this.load.setBaseURL('/');
+
+        this.load.image('arena_bg', 'arena_bg.png');
+        this.load.image('equip_select_arrow', 'equip_select_arrow.png');
+        this.load.image('equip_select_arrow_over', 'equip_select_arrow_over.png');
+        this.load.image('dice', 'dice.png');
+        this.load.image('select_circle', 'select_circle.png');
+
+        this.load.audio('select', 'select.wav');
+        this.load.audio('move', 'move.wav');
+    }
+
+    create() {
+        createHeroAnims(this);
+
+        this.add.image(GAME_WIDTH, GAME_HEIGHT, 'arena_bg').setPosition(GAME_WIDTH / 2, GAME_HEIGHT / 2).setDepth(-3);
+        this.add.text(GAME_WIDTH / 2 + 2, GAME_HEIGHT / 5, 'EQUIPMENT SELECT', fontStyle(24)).setOrigin(0.5, 0.65);
+        if (this.config.api.deployedContractAddress != OFFLINE_PRACTICE_CONTRACT_ADDR) {
+            makeCopyAddressButton(this, GAME_WIDTH - 112, 16, this.config.api.deployedContractAddress);
+        }
+        makeExitMatchButton(this, GAME_WIDTH - 80, 16);
+        makeGuideButton(this, GAME_WIDTH - 48, 16);
+        makeSoundToggleButton(this, GAME_WIDTH - 16, 16);
+
+        const matchId = this.initialState?.currentMatchId;
+        if (matchId != null) {
+            const match = this.initialState!.currentMatch;
+            const isOffline = this.config.api.deployedContractAddress === OFFLINE_PRACTICE_CONTRACT_ADDR;
+            let opponentLine: string;
+            if (isOffline) {
+                opponentLine = 'Off-Chain Practice';
+            } else if (match?.isPractice) {
+                opponentLine = 'On-Chain Practice';
+            } else {
+                const opponentKey = this.config.isP1 ? match?.p2PubKey : match?.p1PubKey;
+                opponentLine = opponentKey != null
+                    ? `VS ${opponentKey.toString(16).padStart(16, '0').slice(0, 8)}…`
+                    : 'WAITING FOR PLAYER TO JOIN';
+            }
+            makeMatchInfoLabel(this, matchId, opponentLine);
+        }
+        makeAddressLabel(this, this.initialState?.localPublicKey ?? null);
+
+        for (let team = 0; team < 2; ++team) {
+            let heroes = [];
+            for (let index = 0; index < 3; ++index) {
+                const hero = new SelectHeroActor(this, new Rank(index as HeroIndex, team as Team));
+                heroes.push(hero);
+            }
+            this.heroes.push(heroes);
+        }
+
+        this.status = new StatusUI(this, []);
+
+        this.timerText = this.add.text(
+            GAME_WIDTH - 56, GAME_HEIGHT - 34, '',
+            fontStyle(8, { color: '#ffaa44', align: 'center' })
+        ).setOrigin(0.5, 0.5).setVisible(false);
+
+        this.claimWinButton = new Button(
+            this, GAME_WIDTH - 56, GAME_HEIGHT - 20, 96, 22, 'Claim Win', 9,
+            () => {
+                BatcherClient.setCircuitName('claim_timeout_win');
+                this.config.api.claimTimeoutWin()
+                    .catch((e) => this.status!.setError(e));
+            },
+            'Opponent has timed out — claim victory'
+        );
+        this.claimWinButton.setVisible(false);
+        this.add.existing(this.claimWinButton);
+
+        this.subscription = this.config.api.state$.subscribe((state) => this.onStateChange(state));
+
+        if (this.initialState) {
+            this.onStateChange(this.initialState);
+        }
+    }
+
+    update() {
+        // claim_timeout_win during selection is only valid when it's the opponent's
+        // selection turn — i.e. the game state is one where claim_timeout_win succeeds.
+        // P1 can claim when P2 is stalling (p2_selecting_first_heroes / p2_selecting_last_hero).
+        // P2's equivalent is close_match (tie), handled in the lobby, not here.
+        const isOpponentSelecting = this.config.isP1 && (
+            this.lastGameState === GAME_STATE.p2_selecting_first_heroes ||
+            this.lastGameState === GAME_STATE.p2_selecting_last_hero
+        );
+        const isMySelecting = !this.config.isP1 && (
+            this.lastGameState === GAME_STATE.p2_selecting_first_heroes ||
+            this.lastGameState === GAME_STATE.p2_selecting_last_hero
+        ) || this.config.isP1 && (
+            this.lastGameState === GAME_STATE.p1_selecting_first_hero ||
+            this.lastGameState === GAME_STATE.p1_selecting_last_heroes
+        );
+        const canShowTimer = (isOpponentSelecting || isMySelecting) && !this.isPractice && this.lastMoveAt > 0n;
+        if (canShowTimer) {
+            const elapsedMs = Date.now() - Number(this.lastMoveAt) * 1000;
+            const remainingMs = TURN_TIMEOUT_MS - elapsedMs;
+            const remainingSec = Math.max(0, Math.floor(remainingMs / 1000));
+            const mins = Math.floor(remainingSec / 60);
+            const secs = remainingSec % 60;
+            if (isOpponentSelecting) {
+                if (remainingSec > 0) {
+                    this.timerText?.setText(`⏱ Opp: ${mins}:${secs.toString().padStart(2, '0')}`).setStyle({ color: '#ffaa44' }).setVisible(true);
+                    this.claimWinButton?.setVisible(false);
+                } else {
+                    this.timerText?.setVisible(false);
+                    this.claimWinButton?.setVisible(true);
+                }
+            } else {
+                // Own turn — show countdown, turn red under 60s
+                const color = remainingSec < 60 ? '#ff4444' : '#ffaa44';
+                this.timerText?.setText(`⏱ You: ${mins}:${secs.toString().padStart(2, '0')}`).setStyle({ color }).setVisible(true);
+                this.claimWinButton?.setVisible(false);
+            }
+        } else {
+            this.timerText?.setVisible(false);
+            this.claimWinButton?.setVisible(false);
+        }
+    }
+
+    // advances to next step
+    next() {
+        if (this.setupState === SetupState.Submitting) return;
+        this.tweens.add({
+            targets: this.heroes[this.config.isP1 ? 0 : 1][this.selecting].select_circle,
+            alpha: 0,
+            duration: 450,
+        });
+        
+        if (this.selector != undefined) {
+            this.selector.destroy();
+            this.selector = undefined;
+        }
+        if (this.config.isP1) {
+            switch (this.selecting) {
+                case 0:
+                    this.setSetupState(SetupState.Submitting);
+                    BatcherClient.setCircuitName('p1_select_first_hero');
+                    this.config.api.p1_select_first_hero(this.heroes[0][0].hero)
+                        .catch((e) => this.recoverFromSubmitError(e));
+                    break;
+                case 1:
+                    this.selector = new EquipmentSelector(this, this.heroes[0][2]);
+                    break;
+                case 2:
+                    this.setSetupState(SetupState.Submitting);
+                    BatcherClient.setCircuitName('p1_select_last_heroes');
+                    this.config.api.p1_select_last_heroes([this.heroes[0][1].hero, this.heroes[0][2].hero])
+                    .catch((e) => this.recoverFromSubmitError(e));
+                    break;
+            }
+        } else {
+            switch (this.selecting) {
+                case 0:
+                    this.selector = new EquipmentSelector(this, this.heroes[1][1]);
+                    break;
+                case 1:
+                    this.setSetupState(SetupState.Submitting);
+                    BatcherClient.setCircuitName('p2_select_first_heroes');
+                    this.config.api.p2_select_first_heroes([this.heroes[1][0].hero, this.heroes[1][1].hero])
+                    .catch((e) => this.recoverFromSubmitError(e));
+                    break;
+                case 2:
+                    this.setSetupState(SetupState.Submitting);
+                    BatcherClient.setCircuitName('p2_select_last_hero');
+                    this.config.api.p2_select_last_hero(this.heroes[1][2].hero)
+                    .catch((e) => this.recoverFromSubmitError(e));
+                    break;
+            }
+        }
+        this.selecting += 1;
+    }
+
+    showHint(msg: string) {
+        if (this.setupState !== SetupState.SelectingPlayerHeroes) return;
+        this.status?.setText(msg);
+        this.time.delayedCall(2000, () => {
+            if (this.setupState === SetupState.SelectingPlayerHeroes) {
+                this.status?.clearStatusText();
+                this.status?.setText('Select your heroes');
+            }
+        });
+    }
+
+    private recoverFromSubmitError(e: Error) {
+        console.log(`submit error: ${e}`);
+        this.status!.setError(e, () => {
+            this.selecting -= 1;
+            this.setSetupState(SetupState.SelectingPlayerHeroes);
+            this.selector = new EquipmentSelector(this, this.heroes[this.config.isP1 ? 0 : 1][this.selecting]);
+        });
+    }
+}

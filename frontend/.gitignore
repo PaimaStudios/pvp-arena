@@ -1,0 +1,10 @@
+node_modules
+.yarn
+.turbo
+dist
+.DS_Store
+.vite
+.env
+examples/pvp/contract/src/managed
+examples/pvp/contract/coverage
+examples/pvp/contract/reports

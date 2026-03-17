@@ -1,10 +1,6 @@
-node_modules
-.yarn
-.turbo
-dist
-.DS_Store
-.vite
-.env
-examples/pvp/contract/src/managed
-examples/pvp/contract/coverage
-examples/pvp/contract/reports
+backend/packages/batcher/intent-logs.txt
+backend/packages/batcher/submit-logs.txt
+stable-old-version
+midnight-reference/
+CLAUDE.md
+backend/packages/batcher/batcher-debug.log

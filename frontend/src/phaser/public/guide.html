@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>PVP Arena — Player Guide</title>
+  <style>
+    @font-face {
+      font-family: 'yana';
+      src: url('yana.ttf') format('truetype');
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #0e0e08;
+      color: #f5f5ed;
+      font-family: 'yana', monospace;
+      font-size: 26px;
+      line-height: 1.6;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Tab bar ── */
+    .tabs {
+      display: flex;
+      background: #1a1a0e;
+      border-bottom: 2px solid #3a3a20;
+      flex-shrink: 0;
+    }
+
+    .tab {
+      padding: 8px 14px;
+      cursor: pointer;
+      color: #888870;
+      border-right: 1px solid #3a3a20;
+      font-family: 'yana', monospace;
+      font-size: 24px;
+      letter-spacing: 0.5px;
+      transition: background 0.1s, color 0.1s;
+      user-select: none;
+    }
+
+    .tab:hover { background: #252515; color: #c8c8a0; }
+    .tab.active { background: #0e0e08; color: #f5f5ed; border-bottom: 2px solid #aabb44; margin-bottom: -2px; }
+
+    /* ── Scroll area ── */
+    .content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px 18px;
+      scrollbar-width: thin;
+      scrollbar-color: #3a3a20 #0e0e08;
+    }
+
+    .content::-webkit-scrollbar { width: 6px; }
+    .content::-webkit-scrollbar-track { background: #0e0e08; }
+    .content::-webkit-scrollbar-thumb { background: #3a3a20; border-radius: 3px; }
+
+    .section { display: none; }
+    .section.active { display: block; }
+
+    /* ── Typography ── */
+    h2 {
+      color: #aabb44;
+      font-size: 30px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      border-bottom: 1px solid #3a3a20;
+      padding-bottom: 4px;
+      margin: 18px 0 10px;
+    }
+
+    h2:first-child { margin-top: 0; }
+
+    h3 {
+      color: #c8c890;
+      font-size: 26px;
+      letter-spacing: 0.5px;
+      margin: 14px 0 6px;
+    }
+
+    p { margin-bottom: 8px; color: #d0d0b8; }
+
+    em { color: #9898a0; font-style: normal; }
+
+    strong { color: #f5f5ed; }
+
+    ul { padding-left: 16px; margin-bottom: 10px; }
+    ul li { margin-bottom: 5px; color: #d0d0b8; }
+
+    hr {
+      border: none;
+      border-top: 1px solid #2a2a18;
+      margin: 16px 0;
+    }
+
+    /* ── Item rows (icon + text) ── */
+    .item-list { list-style: none; padding: 0; }
+
+    .item-list li {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      margin-bottom: 10px;
+      background: #16160c;
+      border: 1px solid #2a2a18;
+      border-radius: 3px;
+      padding: 7px 10px;
+    }
+
+    .item-list li img {
+      width: 36px;
+      height: 36px;
+      object-fit: contain;
+      image-rendering: pixelated;
+      flex-shrink: 0;
+      border: 1px solid #3a3a20;
+      border-radius: 3px;
+      background: #0a0a06;
+      padding: 2px;
+    }
+
+    .item-list li .desc { flex: 1; }
+    .item-list li .desc strong { color: #e8e870; }
+
+    /* ── Tables ── */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 12px;
+      font-size: 24px;
+    }
+
+    th {
+      background: #1e1e10;
+      color: #aabb44;
+      text-align: center;
+      padding: 5px 8px;
+      border: 1px solid #3a3a20;
+      letter-spacing: 0.5px;
+      font-size: 22px;
+      text-transform: uppercase;
+    }
+
+    th:first-child { text-align: left; }
+
+    td {
+      padding: 5px 8px;
+      border: 1px solid #2a2a18;
+      text-align: center;
+      color: #c8c8a8;
+    }
+
+    td:first-child { text-align: left; color: #e8e870; font-weight: bold; }
+
+    tr:nth-child(even) td { background: #12120a; }
+
+    td.hi { color: #88dd44; font-weight: bold; }
+    td.lo { color: #dd8844; }
+
+    /* ── Counter table ── */
+    .counter-table td:first-child { color: #e8e870; }
+    .counter-table td:nth-child(2) { color: #dd6644; }
+    .counter-table td:nth-child(3) { color: #88bb88; }
+
+    /* ── Build cards ── */
+    .builds { display: grid; gap: 8px; margin-bottom: 12px; }
+
+    .build-card {
+      background: #16160c;
+      border: 1px solid #3a3a20;
+      border-left: 3px solid #aabb44;
+      border-radius: 3px;
+      padding: 8px 12px;
+    }
+
+    .build-card .name {
+      color: #e8e870;
+      font-size: 26px;
+      margin-bottom: 4px;
+    }
+
+    .build-card p { margin: 0; color: #b0b098; font-size: 24px; }
+
+    /* ── Stance grid ── */
+    .stance-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+
+    .stance-card {
+      background: #16160c;
+      border: 1px solid #3a3a20;
+      border-radius: 3px;
+      padding: 8px;
+      text-align: center;
+    }
+
+    .stance-card .label { color: #e8e870; font-size: 24px; margin-bottom: 3px; }
+    .stance-card .mod { font-size: 36px; color: #aabb44; }
+    .stance-card p { font-size: 22px; color: #888878; margin-top: 4px; }
+
+    /* ── Formula box ── */
+    .formula {
+      background: #0a0a06;
+      border: 1px solid #3a3a20;
+      border-radius: 3px;
+      padding: 10px 14px;
+      margin: 10px 0;
+      font-family: monospace;
+      font-size: 24px;
+      color: #aabb88;
+      line-height: 1.8;
+      white-space: pre;
+      overflow-x: auto;
+    }
+
+    /* ── Callout ── */
+    .callout {
+      background: #14140c;
+      border-left: 3px solid #aabb44;
+      border-radius: 0 3px 3px 0;
+      padding: 8px 12px;
+      margin: 10px 0;
+      color: #b0b090;
+      font-size: 24px;
+    }
+
+    .callout.warn { border-left-color: #dd8844; }
+
+    code {
+      font-family: monospace;
+      font-size: 24px;
+      background: #0a0a06;
+      color: #aabb88;
+      padding: 1px 4px;
+      border-radius: 2px;
+    }
+  </style>
+</head>
+<body>
+
+<div class="tabs">
+  <div class="tab active" onclick="showTab('building', this)">Character Building</div>
+  <div class="tab" onclick="showTab('strategy', this)">Battle Strategies</div>
+  <div class="tab" onclick="showTab('advanced', this)">Advanced</div>
+</div>
+
+<div class="content">
+
+  <!-- ═══════════════════════════════ CHARACTER BUILDING ═══════════════════════════════ -->
+  <div class="section active" id="tab-building">
+
+    <h2>Weapon Types</h2>
+    <ul class="item-list">
+      <li>
+        <img src="./hero_axe_r.png" alt="Axe" />
+        <div class="desc"><strong>Axe</strong> — Pure crusher. Highest crush damage per hand (17). Zero defense. Pair with a shield offhand for survivability, or dual-wield for maximum aggression.</div>
+      </li>
+      <li>
+        <img src="./hero_shield_l.png" alt="Shield" />
+        <div class="desc"><strong>Shield</strong> — Purely defensive. Massive defense on both types (35 crush / 38 pierce). Negligible damage. Always offhand — dual shields are forbidden. Frees your mainhand to be anything.</div>
+      </li>
+      <li>
+        <img src="./hero_sword_r.png" alt="Sword" />
+        <div class="desc"><strong>Sword</strong> — Balanced generalist. Some pierce damage, some crush damage, good dex, and the only weapon with built-in crush defense. Works in almost any build.</div>
+      </li>
+      <li>
+        <img src="./hero_spear_r.png" alt="Spear" />
+        <div class="desc"><strong>Spear</strong> — Pierce specialist with a defensive edge. High pierce damage plus pierce defense. Slow dex (1) — don't count on agility.</div>
+      </li>
+      <li>
+        <img src="./hero_bow_l.png" alt="Bow" />
+        <div class="desc"><strong>Bow</strong> — Highest single-weapon damage (42 pierce), two-handed. The empty other hand grants +18 DEX, making bow heroes the fastest. Glass cannon: zero defenses.</div>
+      </li>
+      <li>
+        <img src="./hero_arm_r.png" alt="Unarmed" />
+        <div class="desc"><strong>Unarmed</strong> — Each empty hand gives +18 DEX. Only effective if you can exploit weight differences against heavy opponents. Fringe dex build.</div>
+      </li>
+    </ul>
+
+    <hr />
+
+    <h2>Armor Types</h2>
+    <ul class="item-list">
+      <li>
+        <img src="./hero_chest_leather.png" alt="Leather" />
+        <div class="desc"><strong>Leather</strong> — Better against crush (6 def), lighter (weight 3). Keeps your dex strong. Best for agile or bow builds.</div>
+      </li>
+      <li>
+        <img src="./hero_chest_metal.png" alt="Metal" />
+        <div class="desc"><strong>Metal</strong> — Better against pierce (8 def), heavier (weight 7). Tanks pierce damage but makes you a dex target. Best against bow and spear builds.</div>
+      </li>
+    </ul>
+
+    <div class="callout">
+      <strong>Chest</strong> armor is <strong>3×</strong> more impactful than helmet or greaves. <strong>Skirt</strong> is <strong>2×</strong>. Always prioritize your chest slot.
+    </div>
+
+    <hr />
+
+    <h2>Weapon Counters</h2>
+    <table class="counter-table">
+      <thead>
+        <tr><th>If you face…</th><th>They threaten…</th><th>Counter with…</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Axe</td><td>High crush</td><td>Leather armor + shield or spear</td></tr>
+        <tr><td>Bow</td><td>High pierce</td><td>Metal armor, close with crush</td></tr>
+        <tr><td>Spear</td><td>Pierce + some def</td><td>Metal pierces back; leather stays light</td></tr>
+        <tr><td>Sword</td><td>Mixed damage</td><td>Stack the defense type they lean into</td></tr>
+        <tr><td>Shield + anything</td><td>Turtling</td><td>High dex build — weight exploits armor</td></tr>
+      </tbody>
+    </table>
+
+    <hr />
+
+    <h2>Quick Build Guides</h2>
+    <div class="builds">
+      <div class="build-card">
+        <div class="name">⚔ Berserker</div>
+        <p>Axe + Axe. Leather chest &amp; skirt. Play Aggressive every round. Melts heroes with no crush defense.</p>
+      </div>
+      <div class="build-card">
+        <div class="name">🛡 Tank</div>
+        <p>Shield offhand + Sword or Spear. Full metal chest &amp; skirt. Defensive under pressure, Neutral otherwise. Wins wars of attrition.</p>
+      </div>
+      <div class="build-card">
+        <div class="name">🏹 Sniper</div>
+        <p>Bow (2-handed). No armor or leather only. 42 pierce + 18 dex punishes every round. Fragile — one focused attacker drops you fast.</p>
+      </div>
+      <div class="build-card">
+        <div class="name">🗡 Brawler</div>
+        <p>Sword + Shield. Leather chest. Neutral/Defensive stance. A safer berserker that survives longer.</p>
+      </div>
+      <div class="build-card">
+        <div class="name">💨 Dex Ghost</div>
+        <p>Unarmed both hands or Bow. Zero/minimal armor. Beats heavy metal opponents. Loses to other light builds.</p>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ═══════════════════════════════ BATTLE STRATEGIES ═══════════════════════════════ -->
+  <div class="section" id="tab-strategy">
+
+    <h2>Stance Play</h2>
+    <p>Every round each hero picks a stance — this is your main decision point. Your stance affects both the damage you deal <em>and</em> the damage you receive.</p>
+
+    <div class="stance-grid">
+      <div class="stance-card">
+        <div class="label">Aggressive</div>
+        <div class="mod">8×</div>
+        <p>Max output, max exposure. Use when you have the damage edge.</p>
+      </div>
+      <div class="stance-card">
+        <div class="label">Neutral</div>
+        <div class="mod">5×</div>
+        <p>Safe default. Solid damage, moderate incoming.</p>
+      </div>
+      <div class="stance-card">
+        <div class="label">Defensive</div>
+        <div class="mod">2×</div>
+        <p>Cuts all damage in the exchange. Use when taking focused fire.</p>
+      </div>
+    </div>
+
+    <table>
+      <thead>
+        <tr><th>Matchup</th><th>Multiplier</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Aggressive vs Aggressive</td><td class="hi">16×</td></tr>
+        <tr><td>Aggressive vs Neutral</td><td>13×</td></tr>
+        <tr><td>Aggressive vs Defensive</td><td>10×</td></tr>
+        <tr><td>Neutral vs Neutral</td><td>10×</td></tr>
+        <tr><td>Neutral vs Defensive</td><td>7×</td></tr>
+        <tr><td>Defensive vs Defensive</td><td class="lo">4×</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout warn">
+      Going Defensive against an Aggressor gives the same multiplier (10×) as two Neutral heroes — but you sacrifice your own output. Worth it when your hero is low.
+    </div>
+
+    <hr />
+
+    <h2>Target Selection</h2>
+    <p>You assign each of your 3 heroes a target each round. Dead heroes stop dealing damage, so:</p>
+    <ul>
+      <li><strong>Focus fire</strong> one enemy hero to eliminate them quickly and even the numbers.</li>
+      <li><strong>Spread fire</strong> if all enemies are equally threatening — rarely optimal.</li>
+      <li><strong>Protect your key hero</strong> by anticipating where the enemy will focus — put a defensive build in that spot.</li>
+    </ul>
+
+    <hr />
+
+    <h2>The Commit-Reveal Edge</h2>
+    <p>Your moves are hidden until P1 reveals — P2 sees P1's commit hash but not the actual moves.</p>
+    <ul>
+      <li><strong>As P2</strong> — you're effectively guessing P1's targets and stance. Mix your stances if unsure rather than committing to one.</li>
+      <li><strong>As P1</strong> — you commit blind. If you suspect P2 will go Aggressive, Defensive stance can neutralize their burst round.</li>
+    </ul>
+
+  </div>
+
+  <!-- ═══════════════════════════════ ADVANCED ═══════════════════════════════ -->
+  <div class="section" id="tab-advanced">
+
+    <h2>Damage Formula</h2>
+
+    <div class="formula">damage = (
+  (100 - enemy.crush_def)  × attacker.crush_dmg
++ (100 - enemy.pierce_def) × attacker.pierce_dmg
++ (50 + enemy.weight - attacker.weight) × attacker.dex_bonus
+) × (stance_mod(attacker) + stance_mod(defender))</div>
+
+    <p>Stance modifiers: <strong>Aggressive = 8</strong>, <strong>Neutral = 5</strong>, <strong>Defensive = 2</strong>.<br/>
+    A hero dies when accumulated damage reaches <strong>100,000</strong>.</p>
+
+    <h3>What This Means</h3>
+
+    <p><strong>Defense is a percentage reduction</strong> applied before multipliers. 35 crush_def means the attacker's crush damage is multiplied by 65 instead of 100. Against a 17-crush axe, that's 1700 → 1105 crush contribution per exchange.</p>
+
+    <p><strong>Dex scales with weight delta.</strong> The term <code>(50 + enemy.weight - your.weight)</code>:</p>
+    <ul>
+      <li>Equal weights → ×50 multiplier on dex</li>
+      <li>Enemy full metal (~42 weight) vs your naked hero (0) → ×92 multiplier</li>
+      <li>You full metal vs naked enemy → ×8 multiplier — your dex is nearly worthless</li>
+    </ul>
+
+    <p><strong>Stances are additive, not multiplicative.</strong> Aggressive vs Aggressive (16×) deals 4× more damage than Defensive vs Defensive (4×) — the gap compounds over multiple rounds.</p>
+
+    <hr />
+
+    <h2>Full Stat Reference</h2>
+
+    <h3>Weapons</h3>
+    <table>
+      <thead>
+        <tr><th>Weapon</th><th>Crush DMG</th><th>Pierce DMG</th><th>Crush DEF</th><th>Pierce DEF</th><th>DEX</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Unarmed</td><td>2</td><td>0</td><td>0</td><td>0</td><td class="hi">18</td></tr>
+        <tr><td>Axe</td><td class="hi">17</td><td>5</td><td>0</td><td>0</td><td>6</td></tr>
+        <tr><td>Shield</td><td>2</td><td>0</td><td class="hi">35</td><td class="hi">38</td><td>9</td></tr>
+        <tr><td>Sword</td><td>5</td><td>9</td><td>7</td><td>0</td><td>12</td></tr>
+        <tr><td>Spear</td><td>3</td><td class="hi">20</td><td>9</td><td>5</td><td class="lo">1</td></tr>
+        <tr><td>Bow (2H)</td><td>1</td><td class="hi">42</td><td>0</td><td>0</td><td>0 <em>(+18 free hand)</em></td></tr>
+      </tbody>
+    </table>
+
+    <h3>Armor (per piece)</h3>
+    <table>
+      <thead>
+        <tr><th>Armor</th><th>Crush DEF</th><th>Pierce DEF</th><th>Weight</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Nothing</td><td>0</td><td>0</td><td>0</td></tr>
+        <tr><td>Leather</td><td class="hi">6</td><td>3</td><td>3</td></tr>
+        <tr><td>Metal</td><td>4</td><td class="hi">8</td><td class="lo">7</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout">
+      Slot multipliers: <strong>Chest ×3</strong>, <strong>Skirt ×2</strong>, Helmet ×1, Greaves ×1
+    </div>
+
+    <table>
+      <thead>
+        <tr><th>Full suit</th><th>Crush DEF</th><th>Pierce DEF</th><th>Weight</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Full Leather</td><td class="hi">60</td><td>30</td><td>18</td></tr>
+        <tr><td>Full Metal</td><td>40</td><td class="hi">80</td><td class="lo">42</td></tr>
+      </tbody>
+    </table>
+
+    <div class="callout warn">
+      Full leather gives <strong>more</strong> crush defense than full metal. Metal's advantage is entirely on the pierce side.
+    </div>
+
+  </div>
+
+</div>
+
+<script>
+  function showTab(name, el) {
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.getElementById('tab-' + name).classList.add('active');
+    el.classList.add('active');
+  }
+</script>
+
+</body>
+</html>
