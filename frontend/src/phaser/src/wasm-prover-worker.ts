@@ -11,6 +11,37 @@ import type { ProverRequest, ProverResponse } from './wasm-prover-types';
 let prover: WasmProver | undefined;
 let rng: Rng | undefined;
 let wasmInitialized = false;
+let configuredBaseUrl: string | undefined;
+
+const fetchBinary = async (url: string): Promise<ArrayBuffer> => {
+  const response = await fetch(url);
+  if (!response.ok) {
+    throw new Error(`Failed to fetch ${url}: ${response.status} ${response.statusText}`);
+  }
+  return await response.arrayBuffer();
+};
+
+const createResolver = (baseUrl: string): WasmResolver => {
+  const proverKeyFetcher = async (keyPath: string): Promise<ArrayBuffer> =>
+    await fetchBinary(`${baseUrl}/keys/${keyPath}.prover`);
+  const verifierKeyFetcher = async (keyPath: string): Promise<ArrayBuffer> =>
+    await fetchBinary(`${baseUrl}/keys/${keyPath}.verifier`);
+  const irSourceFetcher = async (keyPath: string): Promise<ArrayBuffer> =>
+    await fetchBinary(`${baseUrl}/zkir/${keyPath}.bzkir`);
+
+  return WasmResolver.newWithFetchers(
+    proverKeyFetcher,
+    verifierKeyFetcher,
+    irSourceFetcher,
+  );
+};
+
+const createParamsProvider = (baseUrl: string): MidnightWasmParamsProvider => {
+  const paramsFetcher = async (k: number): Promise<ArrayBuffer> =>
+    await fetchBinary(`${baseUrl}/bls_midnight_2p${k}`);
+
+  return MidnightWasmParamsProvider.newWithFetcher(paramsFetcher);
+};
 
 const threadCount = () => {
   const concurrency = self.navigator?.hardwareConcurrency ?? 2;
@@ -47,9 +78,10 @@ self.onmessage = async (event: MessageEvent<ProverRequest>) => {
     switch (message.type) {
       case 'init': {
         await initializeWasm();
+        configuredBaseUrl = message.baseUrl;
         prover = WasmProver.new(
-          WasmResolver.new(message.baseUrl),
-          MidnightWasmParamsProvider.new(message.baseUrl),
+          createResolver(message.baseUrl),
+          createParamsProvider(message.baseUrl),
         );
         self.postMessage({
           type: 'init-ready',
@@ -60,6 +92,9 @@ self.onmessage = async (event: MessageEvent<ProverRequest>) => {
       case 'prove': {
         if (!prover || !rng) {
           throw new Error('WASM prover worker is not initialized');
+        }
+        if (!configuredBaseUrl) {
+          throw new Error('WASM prover base URL is not configured');
         }
 
         const startedAt = performance.now();
