@@ -4,11 +4,9 @@ import {
   MidnightAdapter,
 } from "@paimaexample/batcher";
 import { readMidnightContract } from "@paimaexample/midnight-contracts/read-contract";
-import { Contract, witnesses } from "@pvp-arena-backend/midnight-contracts/pvp";
 import { midnightNetworkConfig } from "@paimaexample/midnight-contracts/midnight-env";
-import { WerewolfBalancingAdapter } from "./adapters/werewolf-balancing-adapter.ts";
 import * as path from "@std/path";
-
+import { MidnightBalancingAdapter } from "@paimaexample/batcher";
 const batchIntervalMs = 1000;
 const port = Number(Deno.env.get("BATCHER_PORT") ?? "3334");
 
@@ -65,15 +63,16 @@ const zkConfigPath = midnightContractData?.zkConfigPath ??
 //   );
 
 // The balancing adapter handles delegated transactions from BatcherClient.
-const midnightBalancingAdapter = new WerewolfBalancingAdapter(
+const midnightBalancingAdapter = new MidnightBalancingAdapter(
     midnightNetworkConfig.walletSeed!,
     {
       indexer: midnightNetworkConfig.indexer,
       indexerWS: midnightNetworkConfig.indexerWS,
       node: midnightNetworkConfig.node,
       proofServer: midnightNetworkConfig.proofServer,
-      zkConfigPath,
       walletNetworkId: midnightNetworkConfig.id,
+      addShieldedPadding: true,
+      maxBatchSize: 2,
     },
   );
 

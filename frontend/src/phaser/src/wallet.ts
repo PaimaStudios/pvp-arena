@@ -238,14 +238,10 @@ const initializeProviders = async (logger: Logger): Promise<PVPArenaProviders> =
       async balanceTx(
         tx: UnboundTransaction,
       ): Promise<FinalizedTransaction> {
+        // tx is already proven (UnboundTransaction). Delegate dust balancing to the batcher.
         const txHash = await BatcherClient.delegatedBalanceHook(tx);
-        // Store the batcher-confirmed tx hash so watchForTxData can resolve the
-        // real indexer identifier and wait for genuine chain confirmation.
         pendingTxHash = txHash;
         console.log(`[wallet:balanceTx] batcher confirmed txHash=${txHash}`);
-        // tx is already proven (UnboundTransaction — result of proofProvider.proveTx).
-        // The batcher handles real balancing + submission. Our submitTx mock ignores
-        // this return value entirely, so just cast through to satisfy the type.
         return tx as unknown as FinalizedTransaction;
       },
     };
@@ -390,7 +386,8 @@ const initializeProviders = async (logger: Logger): Promise<PVPArenaProviders> =
   return {
     privateStateProvider: levelPrivateStateProvider<string>({
       privateStateStoreName: 'pvp-private-state',
-      walletProvider,
+      privateStoragePasswordProvider: async () => "YourPasswordMy1!",
+      accountId: '0',
     }),
     zkConfigProvider,
     proofProvider: httpClientProofProvider(BASE_URL_PROOF_SERVER, zkConfigProvider),

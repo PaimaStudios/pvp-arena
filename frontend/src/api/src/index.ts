@@ -735,7 +735,9 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
     const deployedPVPArenaContract: FoundContract<PVPArenaContract> = await deployContract(providers, {
       privateStateId: 'pvpPrivateState',
       compiledContract: pvpCompiledContract,
-      initialPrivateState: await PVPArenaAPI.getPrivateState(providers.privateStateProvider),
+      // The contract address is unknown until after deployment, so setContractAddress()
+      // cannot be called first. Create a fresh private state directly.
+      initialPrivateState: createPVPArenaPrivateState(utils.randomBytes(32)),
       //args: [],
     });
     logger?.trace({
@@ -765,6 +767,7 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
 
     console.log('pvpCompiledContract', pvpCompiledContract);
     console.log('contractAddress', contractAddress);
+    providers.privateStateProvider.setContractAddress(contractAddress);
     const deployedPVPArenaContract = await findDeployedContract(providers, {
       contractAddress,
       compiledContract: pvpCompiledContract,

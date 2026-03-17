@@ -3,3 +3,4 @@ backend/packages/batcher/submit-logs.txt
 stable-old-version
 midnight-reference/
 CLAUDE.md
+backend/packages/batcher/batcher-debug.log
