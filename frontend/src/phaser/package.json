@@ -22,6 +22,7 @@
     "@paima/midnight-vm-bindings": "^0.3.1",
     "@vitejs/plugin-react": "^4.3.4",
     "buffer": "^6.0.3",
+    "crypto-browserify": "3.12.1",
     "phaser": "3.87.0",
     "phaser3-rex-plugins": "1.80.12"
   },
