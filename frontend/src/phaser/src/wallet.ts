@@ -24,10 +24,9 @@ import { type Logger } from 'pino';
 import type { ConnectedAPI, InitialAPI } from "@midnight-ntwrk/dapp-connector-api";
 import { levelPrivateStateProvider } from '@midnight-ntwrk/midnight-js-level-private-state-provider';
 import { FetchZkConfigProvider } from '@midnight-ntwrk/midnight-js-fetch-zk-config-provider';
-import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider';
 import { indexerPublicDataProvider } from '@midnight-ntwrk/midnight-js-indexer-public-data-provider';
 import { type FinalizedTxData, SucceedEntirely, UnboundTransaction, ZKConfigProvider } from '@midnight-ntwrk/midnight-js-types';
-import { CoinPublicKey, EncPublicKey, type ShieldedCoinInfo, Transaction, type TransactionId, UnprovenTransaction } from '@midnight-ntwrk/ledger-v7';
+import { CoinPublicKey, EncPublicKey, type ShieldedCoinInfo, Transaction, type TransactionId, UnprovenTransaction, ZswapSecretKeys } from '@midnight-ntwrk/ledger-v7';
 import { Transaction as ZswapTransaction } from '@midnight-ntwrk/zswap';
 import semver from 'semver';
 import { getNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
@@ -36,6 +35,7 @@ import { NodeZkConfigProvider } from '@midnight-ntwrk/midnight-js-node-zk-config
 import * as ledgerv7 from '@midnight-ntwrk/ledger-v7';
 import { FinalizedTransaction } from '@midnight-ntwrk/ledger-v7';
 import { BatcherClient } from './batcher-client';
+import { wasmProofProvider } from './wasm-proof-provider';
 // import { createUnprovenCallTx } from '@midnight-ntwrk/midnight-js-contracts';
 export class BrowserDeploymentManager {
   #initializedProviders: Promise<PVPArenaProviders> | undefined;
@@ -116,24 +116,58 @@ export const DELEGATED_SENTINEL = "Delegated balancing flow handed off to batche
 const DELEGATED_TX_SENTINEL = 'delegated-to-batcher';
 
 type DelegatedTxStage = "unproven" | "unbound" | "finalized";
+const LOCAL_ZSWAP_SEED_STORAGE_KEY = 'pvp-local-zswap-seed';
+
+const getOrCreateLocalZswapKeys = (): ZswapSecretKeys => {
+  const existingSeed = window.localStorage.getItem(LOCAL_ZSWAP_SEED_STORAGE_KEY);
+
+  if (existingSeed) {
+    return ZswapSecretKeys.fromSeed(fromHex(existingSeed));
+  }
+
+  const seed = window.crypto.getRandomValues(new Uint8Array(32));
+  window.localStorage.setItem(LOCAL_ZSWAP_SEED_STORAGE_KEY, toHex(seed));
+  return ZswapSecretKeys.fromSeed(seed);
+};
 
 
 const initializeProviders = async (logger: Logger): Promise<PVPArenaProviders> => {
-  const wallet = await connectToWallet(logger, getNetworkId());
-  const { shieldedCoinPublicKey, shieldedEncryptionPublicKey } = await wallet.getShieldedAddresses();
+  const envIndexerUri = import.meta.env.VITE_BATCHER_MODE_INDEXER_HTTP_URL as string | undefined;
+  const envIndexerWsUri = import.meta.env.VITE_BATCHER_MODE_INDEXER_WS_URL as string | undefined;
+  const useInjectedWallet = !!(window as any).midnight && !envIndexerUri;
 
-  const walletConfig = await wallet.getConfiguration();
-  console.log(`[wallet] wallet indexerUri=${walletConfig.indexerUri} indexerWsUri=${walletConfig.indexerWsUri}`);
+  let shieldedCoinPublicKey: CoinPublicKey;
+  let shieldedEncryptionPublicKey: EncPublicKey;
+  let walletConfig: { indexerUri: string; indexerWsUri: string } | undefined;
+
+  if (useInjectedWallet) {
+    const wallet = await connectToWallet(logger, getNetworkId());
+    const addresses = await wallet.getShieldedAddresses();
+    shieldedCoinPublicKey = addresses.shieldedCoinPublicKey;
+    shieldedEncryptionPublicKey = addresses.shieldedEncryptionPublicKey;
+    walletConfig = await wallet.getConfiguration();
+    console.log(`[wallet] wallet indexerUri=${walletConfig.indexerUri} indexerWsUri=${walletConfig.indexerWsUri}`);
+  } else {
+    const localKeys = getOrCreateLocalZswapKeys();
+    shieldedCoinPublicKey = localKeys.coinPublicKey;
+    shieldedEncryptionPublicKey = localKeys.encryptionPublicKey;
+    console.log('[wallet] Using local zswap identity; skipping injected wallet');
+  }
 
   // The Lace wallet's configured indexer may point to testnet/preview rather than the
   // local chain.  When VITE_BATCHER_MODE_INDEXER_HTTP_URL is set (i.e. in the
   // undeployed / local-dev build), use those URLs so that the circuit simulation
   // queries the SAME chain the batcher submits to.
   const indexerUri: string =
-    (import.meta.env.VITE_BATCHER_MODE_INDEXER_HTTP_URL as string) || walletConfig.indexerUri;
+    envIndexerUri || walletConfig?.indexerUri || '';
   const indexerWsUri: string =
-    (import.meta.env.VITE_BATCHER_MODE_INDEXER_WS_URL as string) || walletConfig.indexerWsUri;
-  console.log(`[wallet] Using indexer: ${indexerUri} (${indexerUri === walletConfig.indexerUri ? 'from wallet' : 'from env override'})`);
+    envIndexerWsUri || walletConfig?.indexerWsUri || '';
+
+  if (!indexerUri || !indexerWsUri) {
+    throw new Error('Indexer URLs are missing. Configure VITE_BATCHER_MODE_INDEXER_HTTP_URL and VITE_BATCHER_MODE_INDEXER_WS_URL, or install an injected Midnight wallet.');
+  }
+
+  console.log(`[wallet] Using indexer: ${indexerUri} (${walletConfig && indexerUri === walletConfig.indexerUri ? 'from wallet' : 'from env/local override'})`);
   console.log(`[wallet] Using indexer WS: ${indexerWsUri}`);
 
   // Stores the tx hash returned by the batcher for the most recently submitted tx.
@@ -248,7 +282,6 @@ const initializeProviders = async (logger: Logger): Promise<PVPArenaProviders> =
 
 
   const zkConfigProvider: ZKConfigProvider<PVPArenaCircuitKeys> = new FetchZkConfigProvider(window.location.origin, fetch.bind(window));
-  const BASE_URL_PROOF_SERVER = `http://127.0.0.1:6300`;
 
   // Build the real indexer provider and wrap watchForTxData so that the
   // delegated-batcher sentinel resolves immediately with a mock FinalizedTxData.
@@ -390,7 +423,7 @@ const initializeProviders = async (logger: Logger): Promise<PVPArenaProviders> =
       accountId: '0',
     }),
     zkConfigProvider,
-    proofProvider: httpClientProofProvider(BASE_URL_PROOF_SERVER, zkConfigProvider),
+    proofProvider: wasmProofProvider(zkConfigProvider),
     publicDataProvider,
     walletProvider,
     midnightProvider: {
