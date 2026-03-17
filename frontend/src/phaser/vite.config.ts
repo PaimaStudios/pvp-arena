@@ -2,6 +2,7 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { viteCommonjs } from "@originjs/vite-plugin-commonjs";
 import wasm from 'vite-plugin-wasm';
+import topLevelAwait from 'vite-plugin-top-level-await';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 
 // https://github.com/vitejs/vite/blob/ec7ee22cf15bed05a6c55693ecbac27cfd615118/packages/vite/src/node/plugins/workerImportMetaUrl.ts#L127-L128
@@ -33,7 +34,7 @@ export default defineConfig({
         };
       },
     },
-    wasm(), react(), viteCommonjs(), nodePolyfills({}),
+    wasm(), topLevelAwait(), react(), viteCommonjs(), nodePolyfills({}),
   ],
   optimizeDeps: {
     exclude: ['@midnight-ntwrk/midnight-js-level-private-state-provider'],
@@ -45,24 +46,9 @@ export default defineConfig({
   assetsInclude: ['**/*.bin'],
   worker: {
     format: "es",
-    plugins: [
-      {
-        name: "foo",
-        enforce: "pre",
-        transform(code, id) {
-          if (
-            code.includes("new Worker") &&
-            code.includes("new URL") &&
-            code.includes("import.meta.url")
-          ) {
-            const result = code.replace(
-              workerImportMetaUrlRE,
-              `((() => { throw new Error('Nested workers are disabled') })()`
-            );
-            return result;
-          }
-        },
-      },
+    plugins: () => [
+      wasm(),
+      topLevelAwait(),
     ],
     rollupOptions: {
       output: {
@@ -72,6 +58,12 @@ export default defineConfig({
     },
   },
   server: {
+    headers: {
+      "Cross-Origin-Opener-Policy": "same-origin",
+      "Cross-Origin-Embedder-Policy": "require-corp",
+    },
+  },
+  preview: {
     headers: {
       "Cross-Origin-Opener-Policy": "same-origin",
       "Cross-Origin-Embedder-Policy": "require-corp",
