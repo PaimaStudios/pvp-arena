@@ -9,9 +9,9 @@
     "start": "http-server --port 0 ./dist",
     "dev": "vite --mode undeployed",
     "prepack": "yarn build",
-    "build": "tsc && vite build --mode preview && cp -r ../contract/dist/managed/pvp/keys ./dist/keys && cp -r ../contract/dist/managed/pvp/zkir ./dist/zkir && node ./scripts/prepare-wasm-prover-assets.mjs",
-    "build-undeployed": "tsc && vite build --mode undeployed && cp -r ../contract/dist/managed/pvp/keys ./dist/keys && cp -r ../contract/dist/managed/pvp/zkir ./dist/zkir && node ./scripts/prepare-wasm-prover-assets.mjs",
-    "build-batcher": "tsc && vite build --mode batcher-undeployed && cp -r ../contract/dist/managed/pvp/keys ./dist/keys && cp -r ../contract/dist/managed/pvp/zkir ./dist/zkir && node ./scripts/prepare-wasm-prover-assets.mjs",
+    "build": "tsc && vite build --mode preview && cp -r ../contract/dist/managed/pvp/keys ./dist/keys && cp -r ../contract/dist/managed/pvp/zkir ./dist/zkir",
+    "build-undeployed": "tsc && vite build --mode undeployed && cp -r ../contract/dist/managed/pvp/keys ./dist/keys && cp -r ../contract/dist/managed/pvp/zkir ./dist/zkir",
+    "build-batcher": "tsc && vite build --mode batcher-undeployed && cp -r ../contract/dist/managed/pvp/keys ./dist/keys && cp -r ../contract/dist/managed/pvp/zkir ./dist/zkir",
     "preview": "vite preview",
     "lint": "eslint ./src",
     "test": "jest --passWithNoTests"
@@ -19,7 +19,7 @@
   "dependencies": {
     "@midnight-ntwrk/pvp-api": "workspace:*",
     "@midnight-ntwrk/pvp-contract": "workspace:*",
-    "@paima/midnight-wasm-prover": "^0.1.0-alpha2",
+    "@paima/midnight-wasm-prover": "^0.1.0-alpha3",
     "@vitejs/plugin-react": "^4.3.4",
     "buffer": "^6.0.3",
     "crypto-browserify": "3.12.1",
