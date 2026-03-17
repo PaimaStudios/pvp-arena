@@ -1672,17 +1672,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@paima/midnight-vm-bindings@npm:^0.3.1":
-  version: 0.3.1
-  resolution: "@paima/midnight-vm-bindings@npm:0.3.1"
-  checksum: 10c0/908cc0d401136456c25119dd1ceb276c9323514bf253f8a5467b6d43b98528f9b471497a64ac7c4cd0fc7799cab225f27d7b80e02078de6dcd8d5e02cdefd205
-  languageName: node
-  linkType: hard
-
-"@paima/midnight-wasm-prover@npm:0.1.0-alpha2":
-  version: 0.1.0-alpha2
-  resolution: "@paima/midnight-wasm-prover@npm:0.1.0-alpha2"
-  checksum: 10c0/554a90cf690822921de3ffd53e6274914060866f442a93f0cbdb6a6a556fa1b5e93325bbe3b2e6a135ed7c1c7f3a7f39fe7e59b813fcdc9553b9467025f17331
+"@paima/midnight-wasm-prover@npm:^0.1.0-alpha3":
+  version: 0.1.0-alpha3
+  resolution: "@paima/midnight-wasm-prover@npm:0.1.0-alpha3"
+  checksum: 10c0/35a785f6b8c379f8fdb96dca8f22acfdc41d8259546df6b78f17ecadd1e0b7b075a2a0d8908afb6fce6e41c07798fa3e5265f1b76f0229e937c4544a823823b4
   languageName: node
   linkType: hard
 
@@ -9651,8 +9644,7 @@ __metadata:
     "@midnight-ntwrk/pvp-api": "workspace:*"
     "@midnight-ntwrk/pvp-contract": "workspace:*"
     "@originjs/vite-plugin-commonjs": "npm:^1.0.3"
-    "@paima/midnight-vm-bindings": "npm:^0.3.1"
-    "@paima/midnight-wasm-prover": "npm:0.1.0-alpha2"
+    "@paima/midnight-wasm-prover": "npm:^0.1.0-alpha3"
     "@types/react": "npm:^18.2.0"
     "@types/react-dom": "npm:^18.2.0"
     "@vitejs/plugin-react": "npm:^4.3.4"
