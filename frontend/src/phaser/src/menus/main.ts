@@ -168,7 +168,7 @@ export class MainMenu extends Phaser.Scene {
         this.text = this.add.text(GAME_WIDTH / 2, GAME_HEIGHT * 0.65, '', fontStyle(12)).setOrigin(0.5, 0.65).setVisible(false);
         makeGuideButton(this, GAME_WIDTH - 48, 16);
         makeSoundToggleButton(this, GAME_WIDTH - 16, 16);
-        makeWalletDelegationButton(this, GAME_WIDTH - 128, 16, this.api, this.state.myDelegatedAddress !== null);
+        makeWalletDelegationButton(this, GAME_WIDTH - 128, 16, this.api, this.state.myDelegatedAddress !== null, this.state.localPublicKey);
         makeAddressLabel(this, this.state.localPublicKey);
 
         createHeroAnims(this);

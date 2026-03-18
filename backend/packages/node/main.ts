@@ -197,7 +197,7 @@ stm.addStateTransition("midnightContractState", function* (data) {
   // NOTE This will change if there are changes in the contract pvp.compact
   console.log(data.parsedInput);
   const { payload } = data.parsedInput;
-  const game_state = payload["3"][8] as Record<string, number>;
+  const game_state = payload["3"][6] as Record<string, number>;
 
   const game_state_map = {
       0: 'p1_selecting_first_hero', 
@@ -219,18 +219,18 @@ stm.addStateTransition("midnightContractState", function* (data) {
     }
   
 
-  // Reference of the payload:
+  // Reference of the payload (after adding TIMESTAMP_MAX_AGE, delegations, owner):
   // payload["0"] — state.asArray()[0]
-  // IndexVariable[0](internal — compact map bookkeeping, value 600)[1](internal — compact map bookkeeping, value 12)[2]p1_heroes[3]p1_stats[4]p1_cmds
+  // [0](internal 600)[1](internal 12)[2]p1_heroes[3]p1_stats[4]p1_cmds[5]p1_stances[6]p1_dmg_0
   //
   // payload["1"] — state.asArray()[1]
-  // IndexVariable[0]p1_stances[1]p1_dmg_0[2]p1_dmg_1[3]p1_dmg_2[4]p1_commit[5]p2_heroes[6]p2_stats[7]p2_cmds[8]p2_stances[9]p2_dmg_0[10]p2_dmg_1[11]p2_dmg_2[12]p1_alive_0[13]p1_alive_1[14]p1_alive_2
+  // [0]p1_dmg_1[1]p1_dmg_2[2]p1_commit[3]p2_heroes[4]p2_stats[5]p2_cmds[6]p2_stances[7]p2_dmg_0[8]p2_dmg_1[9]p2_dmg_2[10]p1_alive_0[11]p1_alive_1[12]p1_alive_2[13]p2_alive_0[14]p2_alive_1
   //
   // payload["2"] — state.asArray()[2]
-  // IndexVariable[0]p2_alive_0[1]p2_alive_1[2]p2_alive_2[3]base_damage_cache_p1_0_0[4]base_damage_cache_p1_0_1[5]base_damage_cache_p1_0_2[6]base_damage_cache_p1_1_0[7]base_damage_cache_p1_1_1[8]base_damage_cache_p1_1_2[9]base_damage_cache_p1_2_0[10]base_damage_cache_p1_2_1[11]base_damage_cache_p1_2_2[12]base_damage_cache_p2_0_0[13]base_damage_cache_p2_0_1[14]base_damage_cache_p2_0_2
+  // [0]p2_alive_2[1]base_damage_cache_p1_0_0[2]base_damage_cache_p1_0_1[3]base_damage_cache_p1_0_2[4]base_damage_cache_p1_1_0[5]base_damage_cache_p1_1_1[6]base_damage_cache_p1_1_2[7]base_damage_cache_p1_2_0[8]base_damage_cache_p1_2_1[9]base_damage_cache_p1_2_2[10]base_damage_cache_p2_0_0[11]base_damage_cache_p2_0_1[12]base_damage_cache_p2_0_2[13]base_damage_cache_p2_1_0[14]base_damage_cache_p2_1_1
   //
   // payload["3"] — state.asArray()[3]
-  // IndexVariable[0]base_damage_cache_p2_1_0[1]base_damage_cache_p2_1_1[2]base_damage_cache_p2_1_2[3]base_damage_cache_p2_2_0[4]base_damage_cache_p2_2_1[5]base_damage_cache_p2_2_2[6]commit_nonce[7]round[8]game_state[9]p1_public_key[10]p2_public_key[11]public_[12]is_practice[13]last_move_at[14]next_match_id
+  // [0]base_damage_cache_p2_1_2[1]base_damage_cache_p2_2_0[2]base_damage_cache_p2_2_1[3]base_damage_cache_p2_2_2[4]commit_nonce[5]round[6]game_state[7]p1_public_key[8]p2_public_key[9]public_[10]is_practice[11]last_move_at[12]TIMESTAMP_MAX_AGE[13]delegations[14]owner
 
   // Example payload:
   //   payload: {
@@ -367,11 +367,7 @@ stm.addStateTransition("midnightContractState", function* (data) {
   //   }
   // }
 
-  // payload["4"] — state.asArray()[4] (added by delegation feature)
-  // IndexVariable[0]delegations
-  // NOTE: The exact index depends on the compact compiler output.
-  // After running `yarn compact`, verify by inspecting the generated code
-  // or by logging the payload. Adjust "4"][0] if needed.
+  // delegations is at payload["3"][13] (see layout above)
 
   try {
     if (!dbConn) return;
@@ -379,7 +375,7 @@ stm.addStateTransition("midnightContractState", function* (data) {
       .then(async () => {
         await processLedgerSnapshot(dbConn, payload);
         // Process delegation map — located after TIMESTAMP_MAX_AGE in the ledger
-        const delegationsMap = payload["4"]?.[0] as Record<string, string> | undefined;
+        const delegationsMap = payload["3"]?.[13] as Record<string, string> | undefined;
         if (delegationsMap && typeof delegationsMap === 'object') {
           await processDelegations(dbConn, delegationsMap);
         }

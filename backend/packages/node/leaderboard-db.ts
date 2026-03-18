@@ -79,10 +79,10 @@ function decimalToUnshieldedAddressSafe(decimal: string, networkId: string = 'te
 }
 
 export async function processLedgerSnapshot(db: any, payload: any): Promise<void> {
-  const game_state = payload["3"][8] as Record<string, number>;
-  const p1_public_key = payload["3"][9] as Record<string, string>;
-  const p2_public_key = payload["3"][10] as Record<string, string>;
-  const is_practice = payload["3"][12] as Record<string, boolean | number>;
+  const game_state = payload["3"][6] as Record<string, number>;
+  const p1_public_key = payload["3"][7] as Record<string, string>;
+  const p2_public_key = payload["3"][8] as Record<string, string>;
+  const is_practice = payload["3"][10] as Record<string, boolean | number>;
 
   // Build in-memory map of everything currently on-chain
   const onChain = new Map<string, LedgerMatch>();

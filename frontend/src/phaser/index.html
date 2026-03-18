@@ -12,11 +12,97 @@
         font-weight:400;
         font-weight:normal;
       }
+
+      /* ── Shared popup / overlay styles ── */
+      .pvp-overlay {
+        position: fixed; inset: 0; background: rgba(0,0,0,0.82);
+        display: flex; align-items: center; justify-content: center; z-index: 9999;
+      }
+      .pvp-overlay-box {
+        position: relative; min-width: 300px; max-width: 800px; padding: 24px;
+        background: #1a1a0e; border: 2px solid #3a3a20; border-radius: 6px;
+        color: #f5f5ed; font-family: yana, sans-serif; text-align: center;
+      }
+      .pvp-overlay-box--wide {
+        width: 620px; height: 500px; padding: 0; overflow: hidden;
+        text-align: left;
+      }
+      .pvp-overlay-close {
+        position: absolute; top: 6px; right: 8px;
+        background: #1a1a0e; border: 1px solid #aabb44; border-radius: 3px;
+        color: #f5f5ed; font-family: monospace; font-size: 14px;
+        width: 24px; height: 24px; cursor: pointer; z-index: 1;
+        line-height: 1; padding: 0;
+      }
+      .pvp-popup-title { font-size: 36px; margin: 0 0 20px; color: #f5f5ed; }
+      .pvp-popup-body { font-size: 26px; margin: 0 0 12px; color: #d0d0b8; }
+      .pvp-popup-detail { font-size: 24px; margin: 0 0 8px; color: #d0d0b8; }
+      .pvp-popup-accent { color: #aabb44; }
+      .pvp-popup-muted { font-size: 22px; margin: 0; color: #999988; }
+      .pvp-popup-error { font-size: 24px; margin: 0; color: #cc6666; }
+      .pvp-popup-desc { font-size: 18px; margin: 0 0 24px; color: #bbbbaa; line-height: 1.5; }
+      .pvp-btn-primary {
+        display: block; padding: 14px 28px; margin: 0 0 14px;
+        background: #aabb44; color: #1a1a0e;
+        border-radius: 4px; text-decoration: none; font-weight: bold; font-size: 22px;
+      }
+      .pvp-btn-outline {
+        display: block; padding: 14px 28px;
+        background: transparent; color: #aabb44;
+        border: 1px solid #aabb44; border-radius: 4px;
+        text-decoration: none; font-weight: bold; font-size: 22px;
+      }
+      .pvp-footer-link {
+        font-family: yana, sans-serif; font-size: 24px;
+        color: #999988; text-decoration: none; letter-spacing: 0.5px;
+      }
 </style>
   </head>
   <body>
     <div id="root"></div>
     <div style="font-family:yana; position:absolute; left:-1000px; visibility:hidden;">.</div>
     <script type="module" src="/src/main.tsx"></script>
+
+    <div id="pvp-footer" style="position:fixed;bottom:6px;left:0;right:0;text-align:center;z-index:100;">
+      <a href="#" id="pvp-footer-link" class="pvp-footer-link">
+        Learn More / Report Issues
+      </a>
+    </div>
+
+    <div id="pvp-links-overlay" class="pvp-overlay" style="display:none;">
+      <div class="pvp-overlay-box">
+        <button id="pvp-links-close" class="pvp-overlay-close">&#x2715;</button>
+        <p class="pvp-popup-title" style="font-size:30px;">Kachina Kolosseum</p>
+        <p class="pvp-popup-desc" style="width:400px;">
+          Kachina Kolosseum is implemented on the Midnight Blockchain. This game demonstrates how privacy preserving smart contracts can be used for real applications.
+        </p>
+        <a href="https://github.com/effectstream/mnf-game-issues/issues" target="_blank" rel="noopener noreferrer"
+           class="pvp-btn-primary">
+          Report Issues
+        </a>
+        <a href="https://github.com/PaimaStudios/pvp-arena/" target="_blank" rel="noopener noreferrer"
+           class="pvp-btn-outline">
+          Source Code
+        </a>
+      </div>
+    </div>
+
+    <script>
+      (function() {
+        var link = document.getElementById('pvp-footer-link');
+        var overlay = document.getElementById('pvp-links-overlay');
+        var closeBtn = document.getElementById('pvp-links-close');
+        link.addEventListener('click', function(e) {
+          e.preventDefault();
+          overlay.style.display = 'flex';
+        });
+        closeBtn.addEventListener('click', function() {
+          overlay.style.display = 'none';
+        });
+        overlay.addEventListener('click', function(e) {
+          if (e.target === overlay) overlay.style.display = 'none';
+        });
+      })();
+    </script>
   </body>
 </html>

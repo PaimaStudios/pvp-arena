@@ -5,6 +5,8 @@ import { type PVPArenaDerivedState, type DeployedPVPArenaAPI, PVPArenaAPI } from
 import './globals';
 import { type ContractAddress } from '@midnight-ntwrk/compact-runtime';
 import { LedgerState } from '@midnight-ntwrk/ledger-v7';
+import { UnshieldedAddress, MidnightBech32m } from '@midnight-ntwrk/wallet-sdk-address-format';
+import { Buffer } from 'buffer';
 import { BrowserDeploymentManager } from './wallet';
 import * as pino from 'pino';
 
@@ -113,26 +115,14 @@ export function makeGuideButton(scene: Phaser.Scene, x: number, y: number): Butt
         }
         overlay = document.createElement('div');
         overlay.id = 'pvp-guide-overlay';
-        overlay.style.cssText = [
-            'position:fixed', 'inset:0', 'background:rgba(0,0,0,0.82)',
-            'display:flex', 'align-items:center', 'justify-content:center', 'z-index:9999',
-        ].join(';');
+        overlay.className = 'pvp-overlay';
 
         const box = document.createElement('div');
-        box.style.cssText = [
-            'position:relative', 'width:620px', 'height:500px',
-            'border:2px solid #3a3a20', 'border-radius:4px', 'overflow:hidden',
-        ].join(';');
+        box.className = 'pvp-overlay-box pvp-overlay-box--wide';
 
         const closeBtn = document.createElement('button');
-        closeBtn.textContent = '✕';
-        closeBtn.style.cssText = [
-            'position:absolute', 'top:6px', 'right:8px',
-            'background:#1a1a0e', 'border:1px solid #aabb44', 'border-radius:3px',
-            'color:#f5f5ed', 'font-family:monospace', 'font-size:14px',
-            'width:24px', 'height:24px', 'cursor:pointer', 'z-index:1',
-            'line-height:1', 'padding:0',
-        ].join(';');
+        closeBtn.textContent = '\u2715';
+        closeBtn.className = 'pvp-overlay-close';
         closeBtn.onclick = () => { overlay!.style.display = 'none'; };
 
         const iframe = document.createElement('iframe');
@@ -194,18 +184,74 @@ export function makeSoundToggleButton(scene: Phaser.Scene, x: number, y: number)
 
 export const isMuted = () => localStorage.getItem('muted') == 'true';
 
+function showDelegationOverlay(content: HTMLElement): void {
+    let overlay = document.getElementById('pvp-delegation-overlay');
+    if (overlay) overlay.remove();
+
+    overlay = document.createElement('div');
+    overlay.id = 'pvp-delegation-overlay';
+    overlay.className = 'pvp-overlay';
+
+    const box = document.createElement('div');
+    box.className = 'pvp-overlay-box';
+
+    const closeBtn = document.createElement('button');
+    closeBtn.textContent = '\u2715';
+    closeBtn.className = 'pvp-overlay-close';
+    closeBtn.onclick = () => overlay!.remove();
+
+    box.appendChild(closeBtn);
+    box.appendChild(content);
+    overlay.appendChild(box);
+    overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) overlay!.remove();
+    });
+    document.body.appendChild(overlay);
+}
+
+function bigintToMnAddr(value: bigint): string {
+    try {
+        if (!value || value === 0n) return 'unknown';
+        const hex = value.toString(16).padStart(64, '0');
+        const bytes = Buffer.from(hex, 'hex');
+        const addr = new UnshieldedAddress(bytes);
+        return MidnightBech32m.encode(networkId === 'undeployed' ? 'testnet' : networkId, addr).asString();
+    } catch {
+        return value.toString(16).padStart(16, '0').slice(0, 8) + '\u2026';
+    }
+}
+
+function shortAddr(addr: bigint): string {
+    const full = bigintToMnAddr(addr);
+    if (full.startsWith('mn_addr_')) {
+        return full.slice(0, 20) + '\u2026';
+    }
+    return full;
+}
+
 export function makeWalletDelegationButton(
     scene: Phaser.Scene,
     x: number,
     y: number,
     api: DeployedPVPArenaAPI,
     hasDelegation: boolean,
+    localPublicKey?: bigint | null,
 ): Button {
     const label = hasDelegation ? 'Linked' : 'Link Wallet';
     const button = new Button(scene, x, y, 72, 24, label, 9, async () => {
         const midnight = (window as any).midnight;
         if (!midnight) {
             console.warn('[wallet-delegation] Midnight Lace wallet not found');
+            const content = document.createElement('div');
+            content.innerHTML = `
+                <p class="pvp-popup-title">Wallet Not Found</p>
+                <p class="pvp-popup-body">The Midnight Lace wallet extension was not detected in your browser.</p>
+                <a href="https://www.lace.io/" target="_blank" rel="noopener noreferrer"
+                   class="pvp-btn-primary" style="display:inline-block;">
+                    Download Lace Wallet
+                </a>
+            `;
+            showDelegationOverlay(content);
             return;
         }
 
@@ -217,6 +263,16 @@ export function makeWalletDelegationButton(
 
             if (wallets.length === 0) {
                 console.warn('[wallet-delegation] No compatible wallet found');
+                const content = document.createElement('div');
+                content.innerHTML = `
+                    <p class="pvp-popup-title">No Compatible Wallet</p>
+                    <p class="pvp-popup-body">A Midnight wallet was detected but no compatible version found.</p>
+                    <a href="https://www.lace.io/" target="_blank" rel="noopener noreferrer"
+                       class="pvp-btn-primary" style="display:inline-block;">
+                        Update Lace Wallet
+                    </a>
+                `;
+                showDelegationOverlay(content);
                 return;
             }
 
@@ -240,11 +296,39 @@ export function makeWalletDelegationButton(
             const truncated = keyBytes.slice(0, 31);
             const addressBigint = BigInt('0x' + Array.from(truncated).map((b: number) => b.toString(16).padStart(2, '0')).join(''));
 
+            // Show confirmation popup
+            const content = document.createElement('div');
+            const fromLabel = localPublicKey != null ? shortAddr(localPublicKey) : 'your game account';
+            content.innerHTML = `
+                <p class="pvp-popup-title">Linking Wallet</p>
+                <p class="pvp-popup-body">We are now linking</p>
+                <p class="pvp-popup-detail pvp-popup-accent">Game Account ${fromLabel}</p>
+                <p class="pvp-popup-body">to</p>
+                <p class="pvp-popup-detail pvp-popup-accent" style="margin-bottom:20px">Wallet ${shortAddr(addressBigint)}</p>
+                <p class="pvp-popup-muted">Please wait...</p>
+            `;
+            showDelegationOverlay(content);
+
             console.log(`[wallet-delegation] Registering delegation to wallet address: ${addressBigint}`);
             await api.registerDelegation(addressBigint);
             console.log('[wallet-delegation] Delegation registered successfully');
+
+            // Update popup to show success
+            content.innerHTML = `
+                <p class="pvp-popup-title">Wallet Linked!</p>
+                <p class="pvp-popup-body">Successfully linked</p>
+                <p class="pvp-popup-detail pvp-popup-accent">Game Account ${fromLabel}</p>
+                <p class="pvp-popup-body">to</p>
+                <p class="pvp-popup-detail pvp-popup-accent" style="margin-bottom:20px">Wallet ${shortAddr(addressBigint)}</p>
+            `;
         } catch (err) {
             console.error('[wallet-delegation] Failed to register delegation:', err);
+            const content = document.createElement('div');
+            content.innerHTML = `
+                <p class="pvp-popup-title">Linking Failed</p>
+                <p class="pvp-popup-error">${err instanceof Error ? err.message : 'Unknown error'}</p>
+            `;
+            showDelegationOverlay(content);
         }
     }, 'Associate your Midnight wallet with your game identity for the leaderboard');
     return button;
