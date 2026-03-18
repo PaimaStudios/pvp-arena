@@ -194,6 +194,62 @@ export function makeSoundToggleButton(scene: Phaser.Scene, x: number, y: number)
 
 export const isMuted = () => localStorage.getItem('muted') == 'true';
 
+export function makeWalletDelegationButton(
+    scene: Phaser.Scene,
+    x: number,
+    y: number,
+    api: DeployedPVPArenaAPI,
+    hasDelegation: boolean,
+): Button {
+    const label = hasDelegation ? 'Linked' : 'Link Wallet';
+    const button = new Button(scene, x, y, 72, 24, label, 9, async () => {
+        const midnight = (window as any).midnight;
+        if (!midnight) {
+            console.warn('[wallet-delegation] Midnight Lace wallet not found');
+            return;
+        }
+
+        try {
+            // Find a compatible wallet
+            const wallets = Object.entries(midnight).filter(([_, w]: [string, any]) =>
+                w.apiVersion && w.apiVersion >= '1.0.0'
+            ) as [string, any][];
+
+            if (wallets.length === 0) {
+                console.warn('[wallet-delegation] No compatible wallet found');
+                return;
+            }
+
+            const [walletName, walletApi] = wallets[0];
+            console.log(`[wallet-delegation] Connecting to wallet: ${walletName}`);
+            const connected = await walletApi.connect(networkId);
+
+            // Get the wallet's coin public key — this is the wallet's on-chain identity
+            const addresses = await connected.getShieldedAddresses();
+            const coinPubKey = addresses.shieldedCoinPublicKey;
+            if (!coinPubKey) {
+                console.warn('[wallet-delegation] Could not get coin public key from wallet');
+                return;
+            }
+
+            // CoinPublicKey may be larger than a Compact Field (~255 bits, BLS12-381 scalar).
+            // Use only the first 31 bytes (248 bits) which is guaranteed to fit in a Field.
+            const keyBytes = coinPubKey instanceof Uint8Array
+                ? coinPubKey
+                : new Uint8Array(Object.values(coinPubKey as Record<string, number>));
+            const truncated = keyBytes.slice(0, 31);
+            const addressBigint = BigInt('0x' + Array.from(truncated).map((b: number) => b.toString(16).padStart(2, '0')).join(''));
+
+            console.log(`[wallet-delegation] Registering delegation to wallet address: ${addressBigint}`);
+            await api.registerDelegation(addressBigint);
+            console.log('[wallet-delegation] Delegation registered successfully');
+        } catch (err) {
+            console.error('[wallet-delegation] Failed to register delegation:', err);
+        }
+    }, 'Associate your Midnight wallet with your game identity for the leaderboard');
+    return button;
+}
+
 /// play a sound but only if not muted
 export function playSound(scene: Phaser.Scene, key: string) {
     if (!isMuted()) {

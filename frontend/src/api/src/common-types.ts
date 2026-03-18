@@ -98,4 +98,6 @@ export type PVPArenaDerivedState = {
   openMatches: Map<bigint, PVPArenaDerivedMatchState>;
   currentMatchId: bigint | null;
   localPublicKey: bigint | null;
+  /** Current player's delegated wallet address, or null if not delegated. */
+  myDelegatedAddress: bigint | null;
 };
