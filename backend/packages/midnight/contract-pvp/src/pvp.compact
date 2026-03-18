@@ -606,19 +606,20 @@ export circuit surrender(): [] {
 
 // Remove all ledger entries for a finished match, freeing on-chain storage.
 // Only the contract owner (admin) can call this.
-export circuit cleanup_match(match_id: Field): [] {
+export circuit cleanup_match(_match_id: Field): [] {
+    const match_id = disclose(_match_id);
     // Allow contract owner to cleanup any match
-    const isOwner = ownPublicKey() == owner, "Not the owner");
+    const isOwner = ownPublicKey() == owner;
     // Allow players to cleanup their own match
     const myKey = derive_public_key(player_secret_key());
     const isPlayer = p1_public_key.lookup(match_id) == myKey || (p2_public_key.member(match_id) && p2_public_key.lookup(match_id) == myKey);                                       
-    assert(isOwner || isPlayer, "Not a participant");
+    assert(isOwner || isPlayer, "Not owner or participant");
     // Match must be in a terminal state
     const state = game_state.lookup(match_id);
     assert(state == GAME_STATE.p1_win || state == GAME_STATE.p2_win || state == GAME_STATE.tie, "Match is not finished");
     // Clean up delegation entries
     delegations.resetToDefault();
-    
+
     // Clean up match entries
     game_state.remove(match_id);
     p1_public_key.remove(match_id);
