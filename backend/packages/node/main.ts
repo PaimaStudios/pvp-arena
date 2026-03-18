@@ -30,6 +30,7 @@ import { valueToBigInt } from "@midnight-ntwrk/compact-runtime";
 import {
   ensureTables,
   processLedgerSnapshot,
+  processDelegations,
   getLeaderboard,
   getUserLeaderboardStats,
   resolveUserIdentity,
@@ -365,11 +366,24 @@ stm.addStateTransition("midnightContractState", function* (data) {
   //     ]
   //   }
   // }
-   
+
+  // payload["4"] — state.asArray()[4] (added by delegation feature)
+  // IndexVariable[0]delegations
+  // NOTE: The exact index depends on the compact compiler output.
+  // After running `yarn compact`, verify by inspecting the generated code
+  // or by logging the payload. Adjust "4"][0] if needed.
+
   try {
     if (!dbConn) return;
     dbQueue = dbQueue
-      .then(() => processLedgerSnapshot(dbConn, payload))
+      .then(async () => {
+        await processLedgerSnapshot(dbConn, payload);
+        // Process delegation map — located after TIMESTAMP_MAX_AGE in the ledger
+        const delegationsMap = payload["4"]?.[0] as Record<string, string> | undefined;
+        if (delegationsMap && typeof delegationsMap === 'object') {
+          await processDelegations(dbConn, delegationsMap);
+        }
+      })
       .catch((err) => {
         console.error("[leaderboard] processLedgerSnapshot failed:", err);
       });
