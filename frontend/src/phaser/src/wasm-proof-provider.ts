@@ -7,6 +7,7 @@ import type {
 } from '@midnight-ntwrk/midnight-js-types';
 import WasmProverWorker from './wasm-prover-worker?worker';
 import type { ProverRequest, ProverResponse } from './wasm-prover-types';
+import { httpClientProofProvider } from '@midnight-ntwrk/midnight-js-http-client-proof-provider';
 
 const DEFAULT_TIMEOUT_MS = 300000;
 
@@ -98,25 +99,42 @@ export const wasmProofProvider = <K extends string>(
 
   return {
     async proveTx(unprovenTx, proveTxConfig?: ProveTxConfig): Promise<UnboundTransaction> {
-      const inputBytes = unprovenTx.serialize();
-      const startedAt = performance.now();
-      console.info(`[wasm-prover] proveTx started inputBytes=${inputBytes.byteLength}`);
+      // console.log('proveTx', unprovenTx.toString());
+      let circuitName = '';
+      try {
+        const key: number = unprovenTx?.intents?.keys().next()?.value!;
+        const action = unprovenTx?.intents?.get(key)?.actions[0];
+        circuitName = (action as any).entryPoint;
+      } catch (error) {
+        console.error('Error getting circuit name', error);
+      }
+      console.log('circuitName:', circuitName);
+      
+      try {
+        const inputBytes = unprovenTx.serialize();
+        const startedAt = performance.now();
+        console.info(`[wasm-prover] proveTx started inputBytes=${inputBytes.byteLength}`);
 
-      const provenSerializedTx = await client.prove(
-        inputBytes,
-        proveTxConfig?.timeout ?? DEFAULT_TIMEOUT_MS,
-      );
+        const provenSerializedTx = await client.prove(
+          inputBytes,
+          proveTxConfig?.timeout ?? DEFAULT_TIMEOUT_MS,
+        );
 
-      console.info(
-        `[wasm-prover] proveTx finished duration=${Math.round(performance.now() - startedAt)}ms outputBytes=${provenSerializedTx.byteLength}`,
-      );
+        console.info(
+          `[wasm-prover] proveTx finished duration=${Math.round(performance.now() - startedAt)}ms outputBytes=${provenSerializedTx.byteLength}`,
+        );
 
-      return Transaction.deserialize(
-        'signature',
-        'proof',
-        'pre-binding',
-        provenSerializedTx,
-      ) as UnboundTransaction;
+        return Transaction.deserialize(
+          'signature',
+          'proof',
+          'pre-binding',
+          provenSerializedTx,
+        ) as UnboundTransaction;
+      } catch (error) {
+        console.error('Error proving transaction', error);
+        console.log('Trying to use httpClientProofProvider');
+        return await httpClientProofProvider('http://localhost:6300', _zkConfigProvider).proveTx(unprovenTx);
+      }
     },
   };
 };

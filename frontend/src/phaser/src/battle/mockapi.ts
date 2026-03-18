@@ -32,6 +32,7 @@ export class MockPVPArenaAPI implements DeployedPVPArenaAPI {
             openMatches: new Map(),
             currentMatchId: null,
             localPublicKey: null,
+            myDelegatedAddress: null,
         };
         this.isP1 = isP1;
         this.nextMatch = BigInt(0);
@@ -276,6 +277,10 @@ export class MockPVPArenaAPI implements DeployedPVPArenaAPI {
     forceStateRefresh(): void {
         // Mock API emits synchronously via subscriber — no deferred refresh needed.
         this.subscriber?.next(this.mockState);
+    }
+
+    async registerDelegation(_walletAddress: bigint): Promise<void> {
+        // Not applicable in offline mode
     }
 
     async claimTimeoutWin(): Promise<void> {

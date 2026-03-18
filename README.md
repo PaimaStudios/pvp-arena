@@ -40,7 +40,7 @@ Wait until you see `finalized block {1}`, `finalized block {2}`, … before star
 ```bash
 cd frontend/src/contract && yarn install && npm run build
 cd ../api && yarn install && npm run build
-cd ../phaser && yarn install && npm run build-batcher && npm run preview
+cd ../phaser && yarn install && npm run build-undeployed && npm run preview
 ```
 
 The game will be available at `http://localhost:4173/`.

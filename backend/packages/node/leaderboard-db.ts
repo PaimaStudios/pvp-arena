@@ -47,6 +47,14 @@ export async function ensureTables(db: any): Promise<void> {
       ended_at    TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `);
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS pvp_delegations (
+      from_address    TEXT PRIMARY KEY,
+      to_address      TEXT NOT NULL,
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `);
 }
 
 // ---------------------------------------------------------------------------
@@ -71,10 +79,10 @@ function decimalToUnshieldedAddressSafe(decimal: string, networkId: string = 'te
 }
 
 export async function processLedgerSnapshot(db: any, payload: any): Promise<void> {
-  const game_state = payload["3"][8] as Record<string, number>;
-  const p1_public_key = payload["3"][9] as Record<string, string>;
-  const p2_public_key = payload["3"][10] as Record<string, string>;
-  const is_practice = payload["3"][12] as Record<string, boolean | number>;
+  const game_state = payload["3"][6] as Record<string, number>;
+  const p1_public_key = payload["3"][7] as Record<string, string>;
+  const p2_public_key = payload["3"][8] as Record<string, string>;
+  const is_practice = payload["3"][10] as Record<string, boolean | number>;
 
   // Build in-memory map of everything currently on-chain
   const onChain = new Map<string, LedgerMatch>();
@@ -178,6 +186,49 @@ export async function processLedgerSnapshot(db: any, payload: any): Promise<void
   }
 }
 
+// ---------------------------------------------------------------------------
+// Delegation processing
+// ---------------------------------------------------------------------------
+
+export async function processDelegations(
+  db: any,
+  delegationsMap: Record<string, string>,
+): Promise<void> {
+  if (Object.keys(delegationsMap).length === 0) return;
+
+  // Compare with existing DB entries
+  const entries = Object.entries(delegationsMap).map(([rawFromAddr, rawToAddr]) => ({
+    fromAddr: decimalToUnshieldedAddressSafe(rawFromAddr),
+    toAddr: decimalToUnshieldedAddressSafe(String(rawToAddr)),
+  }));
+
+  const fromKeys = entries.map((e) => e.fromAddr);
+  const { rows: existing } = await db.query(
+    `SELECT from_address, to_address FROM pvp_delegations WHERE from_address = ANY($1)`,
+    [fromKeys],
+  ) as { rows: Array<{ from_address: string; to_address: string }> };
+  const existingMap = new Map(existing.map((r: any) => [r.from_address, r.to_address]));
+
+  // Find new or changed delegations
+  const toUpsert = entries.filter((e) => existingMap.get(e.fromAddr) !== e.toAddr);
+
+  if (toUpsert.length > 0) {
+    const placeholders = toUpsert
+      .map((_, i) => `($${i * 2 + 1}, $${i * 2 + 2})`)
+      .join(", ");
+    const values = toUpsert.flatMap((u) => [u.fromAddr, u.toAddr]);
+    await db.query(
+      `INSERT INTO pvp_delegations (from_address, to_address)
+       VALUES ${placeholders}
+       ON CONFLICT (from_address) DO UPDATE
+         SET to_address = EXCLUDED.to_address,
+             updated_at = now()`,
+      values,
+    );
+    console.log(`[leaderboard] Upserted ${toUpsert.length} delegation(s)`);
+  }
+}
+
 function resolveResult(
   match: LedgerMatch,
 ): { winner: string; loser: string | null; resultType: string } {
@@ -233,16 +284,17 @@ export async function getLeaderboard(
 
   const { rows } = await db.query(
     `SELECT
-       r.winner                                        AS address,
-       COUNT(*)::int                                   AS score,
-       RANK() OVER (ORDER BY COUNT(*) DESC)::int       AS rank
+       COALESCE(d.to_address, r.winner)                   AS address,
+       COUNT(*)::int                                    AS score,
+       RANK() OVER (ORDER BY COUNT(*) DESC)::int        AS rank
      FROM pvp_results r
      JOIN pvp_matches m ON r.match_id = m.match_id
+     LEFT JOIN pvp_delegations d ON r.winner = d.from_address
      WHERE r.result_type <> 'tie'
        AND m.is_practice = FALSE
        AND r.ended_at >= $1
        AND r.ended_at <= $2
-     GROUP BY r.winner
+     GROUP BY COALESCE(d.to_address, r.winner)
      ORDER BY score DESC
      LIMIT $3 OFFSET $4`,
     [startDate, endDate, limit, offset],
@@ -278,27 +330,36 @@ export async function getUserLeaderboardStats(
   startDate: string,
   endDate: string,
 ): Promise<UserChannelStats | null> {
-  // Rank computed via subquery to avoid window functions on a filtered result
+  // Resolve the queried address through delegations:
+  // - If it's a wallet_address, find all game_addresses that delegate to it
+  // - Also include the address itself (in case it's a game address with no delegation)
   const { rows } = await db.query(
-    `WITH ranked AS (
+    `WITH delegated_keys AS (
+       SELECT from_address FROM pvp_delegations WHERE to_address = $3
+       UNION ALL
+       SELECT $3
+     ),
+     ranked AS (
        SELECT
-         r.winner                                    AS address,
-         COUNT(*)::int                               AS score,
-         RANK() OVER (ORDER BY COUNT(*) DESC)::int   AS rank
+         COALESCE(d.to_address, r.winner)              AS address,
+         COUNT(*)::int                                 AS score,
+         RANK() OVER (ORDER BY COUNT(*) DESC)::int     AS rank
        FROM pvp_results r
        JOIN pvp_matches m ON r.match_id = m.match_id
+       LEFT JOIN pvp_delegations d ON r.winner = d.from_address
        WHERE r.result_type <> 'tie'
          AND m.is_practice = FALSE
          AND r.ended_at >= $1
          AND r.ended_at <= $2
-       GROUP BY r.winner
+       GROUP BY COALESCE(d.to_address, r.winner)
      )
      SELECT
        r.score,
        r.rank,
        (SELECT COUNT(*)::int FROM pvp_results pr
         JOIN pvp_matches pm ON pr.match_id = pm.match_id
-        WHERE (pr.winner = $3 OR pr.loser = $3)
+        WHERE (pr.winner IN (SELECT from_address FROM delegated_keys)
+            OR pr.loser IN (SELECT from_address FROM delegated_keys))
           AND pm.is_practice = FALSE
           AND pr.ended_at >= $1 AND pr.ended_at <= $2) AS matches_played
      FROM ranked r
@@ -322,13 +383,24 @@ export interface UserIdentity {
 }
 
 export async function resolveUserIdentity(
-  _db: any,
+  db: any,
   address: string,
 ): Promise<UserIdentity> {
-  // No delegation table yet — a wallet delegates to itself by default
+  // Check if this address has delegated ownership to another
+  const { rows: asDelegator } = await db.query(
+    `SELECT to_address FROM pvp_delegations WHERE from_address = $1`,
+    [address],
+  ) as { rows: Array<{ to_address: string }> };
+
+  // Check if this address is one that others delegate to
+  const { rows: asDelegatee } = await db.query(
+    `SELECT from_address FROM pvp_delegations WHERE to_address = $1`,
+    [address],
+  ) as { rows: Array<{ from_address: string }> };
+
   return {
-    address,
-    delegatedFrom: [],
+    address: asDelegator.length > 0 ? asDelegator[0].to_address : address,
+    delegatedFrom: asDelegatee.map((r: any) => r.from_address),
   };
 }
 

@@ -145,10 +145,11 @@ export interface DeployedPVPArenaAPI {
   p1Reveal: (commands: bigint[], stances: STANCE[]) => Promise<void>;
   joinMatch: (matchId: bigint) => Promise<void>;
   setCurrentMatch: (matchId: bigint) => Promise<void>;
+  registerDelegation: (walletAddress: bigint) => Promise<void>;
   claimTimeoutWin: () => Promise<void>;
   surrender: () => Promise<void>;
   closeMatch: () => Promise<void>;
-  cleanupMatch: () => Promise<void>;
+  cleanupMatch: (matchId: bigint) => Promise<void>;
   clearCurrentMatch: () => Promise<void>;
   forceStateRefresh: () => void;
 }
@@ -369,12 +370,20 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
           }
         }
 
+        // NOTE: `delegations` is added by the updated pvp.compact but won't appear on the
+        // generated Ledger type until `yarn compact` is re-run. Cast to `any` until then.
+        const ledgerAny = ledgerState as any;
+        const myDelegatedAddress = localPublicKey !== null && ledgerAny.delegations?.member(localPublicKey)
+          ? ledgerAny.delegations.lookup(localPublicKey)
+          : null;
+
         return {
           currentMatch,
           myMatches: new Map(matchStates.keys().filter((id) => ledgerState.p1_public_key.lookup(id) == localPublicKey || (ledgerState.p2_public_key.member(id) && ledgerState.p2_public_key.lookup(id) == localPublicKey)).map((id) => [id, parseMatchState(id)])),
           openMatches: new Map(matchStates.keys().filter((id) => ledgerState.p1_public_key.lookup(id) != localPublicKey && (!ledgerState.p2_public_key.member(id) || ledgerState.p2_public_key.lookup(id) === ledgerState.p1_public_key.lookup(id))).map((id) => [id, parseMatchState(id)])),
           currentMatchId: hasCurrentMatch ? privateState.currentMatchId! : null,
           localPublicKey,
+          myDelegatedAddress,
         };
           }) // map(privateState)
         )   // from(...).pipe(...)
@@ -678,6 +687,14 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
       this.forceStateRefresh();
   }
 
+  async registerDelegation(walletAddress: bigint): Promise<void> {
+    console.log(`[api:registerDelegation] submitting circuit call with walletAddress=${walletAddress}`);
+    // NOTE: `register_delegation` is added by the updated pvp.compact but won't appear on
+    // the generated CircuitCallTxInterface until `yarn compact` is re-run. Cast to `any` until then.
+    await (this.deployedContract.callTx as any).register_delegation(walletAddress);
+    console.log('[api:registerDelegation] done');
+  }
+
   async claimTimeoutWin(): Promise<void> {
     console.log('[api:claimTimeoutWin] submitting circuit call');
     await this.deployedContract.callTx.claim_timeout_win();
@@ -696,9 +713,9 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
     console.log('[api:closeMatch] done');
   }
 
-  async cleanupMatch(): Promise<void> {
-    console.log('[api:cleanupMatch] submitting circuit call');
-    await this.deployedContract.callTx.cleanup_match();
+  async cleanupMatch(matchId: bigint): Promise<void> {
+    console.log(`[api:cleanupMatch] submitting circuit call for matchId=${matchId}`);
+    await (this.deployedContract.callTx as any).cleanup_match(matchId);
     console.log('[api:cleanupMatch] done');
   }
 
