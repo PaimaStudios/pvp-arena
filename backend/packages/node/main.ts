@@ -22,7 +22,6 @@ import {
   midnightNetworkConfig,
 } from "@paimaexample/midnight-contracts/midnight-env";
 import { PrimitiveTypeMidnightGeneric, PrimitiveTypeUtxorpcGeneric } from "@paimaexample/sm/builtin";
-// import * as PVPContract from "@pvp-arena-backend/midnight-contracts/pvp";
 import { readMidnightContract } from "@paimaexample/midnight-contracts/read-contract";
 import * as path from "@std/path";
 import { builtinGrammars } from "@paimaexample/sm/grammar";
@@ -38,12 +37,22 @@ import {
 } from "./leaderboard-db.ts";
 import type { AlignedValue, StateValue } from "@midnight-ntwrk/ledger-v7";
 
-const grammar = {
+// ---------------------------------------------------------------------------
+// Re-exports for env-specific entry points
+// ---------------------------------------------------------------------------
+export {
+  ConfigBuilder,
+  ConfigNetworkType,
+  ConfigSyncProtocolType,
+  midnightNetworkConfig,
+  PrimitiveTypeMidnightGeneric,
+};
+
+export const grammar = {
   midnightContractState: builtinGrammars.midnightGeneric,
 } as const satisfies GrammarDefinition;
 
-
-const counterAddress = readMidnightContract(
+export const contractAddress = readMidnightContract(
   "contract-pvp",
   {
     baseDir: path.resolve(import.meta.dirname!, "..", "midnight"),
@@ -51,139 +60,78 @@ const counterAddress = readMidnightContract(
   },
 ).contractAddress;
 
-if (!counterAddress) {
+if (!contractAddress) {
   throw new Error("Counter address not found");
 } else {
-  console.log("Counter address found:", counterAddress);
+  console.log("Counter address found:", contractAddress);
 }
 
-export const localhostConfig = new ConfigBuilder()
-  .setNamespace(
-    (builder) => builder.setSecurityNamespace("pvp-arena"),
-  )
-  .buildNetworks((builder) =>
-    builder
-      .addNetwork({
-        name: "ntp",
-        type: ConfigNetworkType.NTP,
-        startTime: new Date().getTime(),
-        blockTimeMS: 1000,
-      })
-      .addNetwork({
-        name: "midnight",
-        type: ConfigNetworkType.MIDNIGHT,
-        networkId: midnightNetworkConfig.id,
-        nodeUrl: midnightNetworkConfig.node,
-      })
-  )
-  .buildDeployments((builder) => builder).buildSyncProtocols((builder) =>
-    builder
-      .addMain(
-        (networks) => networks.ntp,
-        (network, deployments) => ({
-          name: "mainNtp",
-          type: ConfigSyncProtocolType.NTP_MAIN,
-          chainUri: "",
-          startBlockHeight: 1,
-          pollingInterval: 1000,
-        }),
-      )
-      .addParallel(
-        (networks) => (networks as any).midnight,
-        (network, deployments) => ({
-          name: "parallelMidnight",
-          type: ConfigSyncProtocolType.MIDNIGHT_PARALLEL,
-          startBlockHeight: 1,
-          pollingInterval: 1000,
-          delayMs: 18000,
-          indexer: midnightNetworkConfig.indexer,
-          indexerWs: midnightNetworkConfig.indexerWS,
-        }),
-      )
-  )
-  .buildPrimitives((builder) =>
-    builder
-      .addPrimitive(
-        (syncProtocols) => (syncProtocols as any).parallelMidnight,
-        (network, deployments, syncProtocol) => ({
-          name: "MidnightContractState",
-          type: PrimitiveTypeMidnightGeneric,
-          startBlockHeight: 1,
-          contractAddress: counterAddress,
-          stateMachinePrefix: "midnightContractState",
-          contract: {
-            ledger: (state: StateValue) => {
+// ---------------------------------------------------------------------------
+// Ledger parser (shared across all environments)
+// ---------------------------------------------------------------------------
 
-              function decodeCell(av: AlignedValue): number | bigint | string {
-                const atom = av.alignment[0];
-                
-                // Fallback for option/complex alignment
-                if (atom?.tag !== 'atom') return alignedValueToHex(av);
-              
-                switch (atom.value.tag) {
-                  case 'field':
-                    // Guaranteed valid Fr — safe to use valueToBigInt
-                    return valueToBigInt(av.value);
-              
-                  case 'bytes': {
-                    // Raw LE bytes, possibly split across multiple 31-byte chunks.
-                    // valueToBigInt will throw here — decode manually instead.
-                    let result = 0n;
-                    let shift = 0n;
-                    for (const chunk of av.value) {
-                      for (let i = 0; i < chunk.length; i++) {
-                        result |= BigInt(chunk[i]) << shift;
-                        shift += 8n;
-                      }
-                    }
-                    return result <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(result) : result;
-                  }
-              
-                  case 'compress':
-                    // Opaque cryptographic hash — no meaningful numeric value
-                    return alignedValueToHex(av);
-                }
-              }
-              
-              // Convert an AlignedValue (raw field-aligned bytes) to a hex string for use as an object key
-              function alignedValueToHex(av: AlignedValue): string {
-                return "0x" + av.value
-                  .map((chunk: Uint8Array) =>
-                    Array.from(chunk).map((b) => b.toString(16).padStart(2, "0")).join("")
-                  )
-                  .join("");
-              }
+function decodeCell(av: AlignedValue): number | bigint | string {
+  const atom = av.alignment[0];
 
-              function parseStateValue(sv: StateValue): any {
-                const t = sv.type();
+  // Fallback for option/complex alignment
+  if (atom?.tag !== 'atom') return alignedValueToHex(av);
 
-                if (t === "null") return null;
-                if (t === "cell") return decodeCell(sv.asCell());   // returns AlignedValue — or wrap with alignedValueToHex() if you want a string
-                if (t === "array") return sv.asArray()!.map(parseStateValue);
+  switch (atom.value.tag) {
+    case 'field':
+      // Guaranteed valid Fr — safe to use valueToBigInt
+      return valueToBigInt(av.value);
 
-                if (t === "map") {
-                  const m = sv.asMap()!;
-                  return Object.fromEntries(
-                    m.keys().map((k) => [
-                      alignedValueToHex(k),          // ← AlignedValue → hex string key
-                      parseStateValue(m.get(k)!)     // ← StateValue value, recurse normally
-                    ])
-                  );
-                }
+    case 'bytes': {
+      // Raw LE bytes, possibly split across multiple 31-byte chunks.
+      // valueToBigInt will throw here — decode manually instead.
+      let result = 0n;
+      let shift = 0n;
+      for (const chunk of av.value) {
+        for (let i = 0; i < chunk.length; i++) {
+          result |= BigInt(chunk[i]) << shift;
+          shift += 8n;
+        }
+      }
+      return result <= BigInt(Number.MAX_SAFE_INTEGER) ? Number(result) : result;
+    }
 
-                if (t === "boundedMerkleTree") return sv.asBoundedMerkleTree()!.toString(true);
+    case 'compress':
+      // Opaque cryptographic hash — no meaningful numeric value
+      return alignedValueToHex(av);
+  }
+}
 
-                throw new Error(`Unhandled StateValue type: "${t}"`);
-              }
+function alignedValueToHex(av: AlignedValue): string {
+  return "0x" + av.value
+    .map((chunk: Uint8Array) =>
+      Array.from(chunk).map((b) => b.toString(16).padStart(2, "0")).join("")
+    )
+    .join("");
+}
 
-              return parseStateValue(state);
-            }
-          },
-          networkId: midnightNetworkConfig.id,
-        }),
-      )
-  )
-  .build();
+function parseStateValue(sv: StateValue): any {
+  const t = sv.type();
+
+  if (t === "null") return null;
+  if (t === "cell") return decodeCell(sv.asCell());
+  if (t === "array") return sv.asArray()!.map(parseStateValue);
+
+  if (t === "map") {
+    const m = sv.asMap()!;
+    return Object.fromEntries(
+      m.keys().map((k) => [
+        alignedValueToHex(k),
+        parseStateValue(m.get(k)!)
+      ])
+    );
+  }
+
+  if (t === "boundedMerkleTree") return sv.asBoundedMerkleTree()!.toString(true);
+
+  throw new Error(`Unhandled StateValue type: "${t}"`);
+}
+
+export const ledgerParser = (state: StateValue) => parseStateValue(state);
 
 // Shared DB connection — set by apiRouter before any blocks are processed
 let dbConn: any = null;
@@ -388,7 +336,7 @@ stm.addStateTransition("midnightContractState", function* (data) {
   }
 });
 
-const gameStateTransitions: StartConfigGameStateTransitions = function* (
+export const gameStateTransitions: StartConfigGameStateTransitions = function* (
   _blockHeight: number,
   input: BaseStfInput,
 ): SyncStateUpdateStream<void> {
@@ -478,21 +426,28 @@ export const apiRouter: StartConfigApiRouter = async function (
   });
 };
 
-main(function* () {
-  yield* init();
-  console.log("Starting EffectStream Node");
+// ---------------------------------------------------------------------------
+// Node startup — called by env-specific entry points (main.dev.ts, etc.)
+// ---------------------------------------------------------------------------
 
-  yield* withEffectstreamStaticConfig(localhostConfig, function* () {
-    yield* start({
-      appName: "minimal-client",
-      appVersion: "1.0.0",
-      syncInfo: toSyncProtocolWithNetwork(localhostConfig),
-      gameStateTransitions,
-      migrations: undefined,
-      apiRouter,
-      grammar,
+// deno-lint-ignore no-explicit-any
+export function startNode(envConfig: any): void {
+  main(function* () {
+    yield* init();
+    console.log("Starting EffectStream Node");
+
+    yield* withEffectstreamStaticConfig(envConfig, function* () {
+      yield* start({
+        appName: "pvp-arena",
+        appVersion: "1.0.0",
+        syncInfo: toSyncProtocolWithNetwork(envConfig),
+        gameStateTransitions,
+        migrations: undefined,
+        apiRouter,
+        grammar,
+      });
     });
-  });
 
-  yield* suspend();
-});
+    yield* suspend();
+  });
+}
