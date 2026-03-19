@@ -5,10 +5,13 @@
     "nodeModulesDir": "auto",
     "tasks": {
       "build:midnight": "deno task -f @pvp-arena-backend/midnight compact",
-      "dev": "deno task -f @example-evm-midnight/node dev",
-      "testnet": "deno task -f @pvp-arena-backend/node dev:testnet",
+      "dev": "deno task -f @pvp-arena-backend/node dev",
+      "testnet": "deno task -f @pvp-arena-backend/node testnet",
+      "mainnet": "deno task -f @pvp-arena-backend/node mainnet",
       "start:frontend": "deno task -f @pvp-arena-backend/frontend dev",
-      "check": "deno task -f @pvp-arena-backend/node check"
+      "check:dev": "deno task -f @pvp-arena-backend/node check:dev",
+      "check:testnet": "deno task -f @pvp-arena-backend/node check:testnet",
+      "check:mainnet": "deno task -f @pvp-arena-backend/node check:mainnet"
     },
     "imports": {
       "@paimaexample/tui": "jsr:@paimaexample/tui@0.9.0",

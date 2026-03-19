@@ -11,6 +11,8 @@
     "prepack": "yarn build",
     "build": "tsc && vite build --mode preview && cp -r ../contract/src/managed/pvp/keys ./dist/keys && cp -r ../contract/src/managed/pvp/zkir ./dist/zkir",
     "build-undeployed": "tsc && vite build --mode undeployed && cp -r ../contract/src/managed/pvp/keys ./dist/keys && cp -r ../contract/src/managed/pvp/zkir ./dist/zkir",
+    "build-testnet": "tsc && vite build --mode testnet && cp -r ../contract/src/managed/pvp/keys ./dist/keys && cp -r ../contract/src/managed/pvp/zkir ./dist/zkir",
+    "build-mainnet": "tsc && vite build --mode mainnet && cp -r ../contract/src/managed/pvp/keys ./dist/keys && cp -r ../contract/src/managed/pvp/zkir ./dist/zkir",
     "preview": "vite preview",
     "lint": "eslint ./src",
     "test": "jest --passWithNoTests"
@@ -18,7 +20,7 @@
   "dependencies": {
     "@midnight-ntwrk/pvp-api": "workspace:*",
     "@midnight-ntwrk/pvp-contract": "workspace:*",
-    "@paima/midnight-wasm-prover": "^0.1.0-alpha4",
+    "@paima/midnight-wasm-prover": "^0.1.0-alpha6",
     "@vitejs/plugin-react": "^4.3.4",
     "buffer": "^6.0.3",
     "crypto-browserify": "3.12.1",

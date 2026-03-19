@@ -112,3 +112,67 @@ These are stateless helper functions used by the UI and internally by the combat
 - **`ARMOR`** — `nothing`, `leather`, `metal`
 - **`STANCE`** — `defensive` (×2 dmg), `neutral` (×5), `aggressive` (×8)
 - **`GAME_STATE`** — state machine values driving turn order
+
+
+## Deploying & Launching in Preprod & Mainnet
+
+```sh
+# Start Proof Server
+deno task -f @pvp-arena-backend/midnight-contracts midnight-proof-server:start
+
+# Deploy Contracts
+MIDNIGHT_WALLET_MNEMONIC="word1 ... word12" MIDNIGHT_NETWORK_ID=preprod MIDNIGHT_STORAGE_PASSWORD=YourPasswordMy1! deno task -f @pvp-arena-backend/midnight-contracts midnight-contract:deploy
+```
+
+Once you have the contract address, you need to patch the frontend.
+```sh
+deno task -f @pvp-arena-backend/midnight-contracts contract-pvp:patch-frontend:testnet
+```
+
+Now you can start the backend service.
+If it's the first run, you should set the start block height to the current block height.
+
+```sh
+curl -s -X POST \
+  'https://indexer.preprod.midnight.network/api/v3/graphql' \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"{ block { height timestamp } }"}' | jq
+
+> {
+  "data": {
+    "block": {
+      "height": 690163,
+      "timestamp": 1773883812000
+    }
+  }
+}
+```
+
+and update
+```ts
+    .addParallel(
+        (networks) => (networks as any).midnight,
+        (_network, _deployments) => ({
+          name: "parallelMidnight",
+          type: ConfigSyncProtocolType.MIDNIGHT_PARALLEL,
+          startBlockHeight: 690163,
+          pollingInterval: 6000,
+          delayMs: 0,
+          indexer: midnightNetworkConfig.indexer,
+          indexerWs: midnightNetworkConfig.indexerWS,
+        }),
+      )
+```
+
+Your DB must be running.
+
+```sh
+deno task -f @pvp-arena-backend/node testnet
+```
+
+Now your frontend 
+```sh
+cd frontend/src/contract && yarn install && npm run build
+cd ../api && yarn install && npm run build
+cd ../phaser && yarn install && npm run build-testnet && npm run preview
+```
