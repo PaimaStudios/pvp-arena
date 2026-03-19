@@ -284,7 +284,7 @@ export async function getLeaderboard(
 
   const { rows } = await db.query(
     `SELECT
-       COALESCE(d.to_address, r.winner)                   AS address,
+       COALESCE(d.to_address, r.winner)                 AS address,
        COUNT(*)::int                                    AS score,
        RANK() OVER (ORDER BY COUNT(*) DESC)::int        AS rank
      FROM pvp_results r
