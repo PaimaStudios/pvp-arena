@@ -1,4 +1,4 @@
-import { Transaction } from '@midnight-ntwrk/ledger-v7';
+import { Transaction } from '@midnight-ntwrk/ledger-v8';
 import type {
   ProofProvider,
   ProveTxConfig,
@@ -114,7 +114,7 @@ export const wasmProofProvider = <K extends string>(
         const inputBytes = unprovenTx.serialize();
         const startedAt = performance.now();
         console.info(`[wasm-prover] proveTx started inputBytes=${inputBytes.byteLength}`);
-
+        console.log(unprovenTx.toString());
         const provenSerializedTx = await client.prove(
           inputBytes,
           proveTxConfig?.timeout ?? DEFAULT_TIMEOUT_MS,

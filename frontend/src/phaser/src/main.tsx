@@ -4,7 +4,7 @@ import { ITEM, RESULT, STANCE, Hero, ARMOR, pureCircuits, GAME_STATE } from '@mi
 import { type PVPArenaDerivedState, type DeployedPVPArenaAPI, PVPArenaAPI } from '@midnight-ntwrk/pvp-api';
 import './globals';
 import { type ContractAddress } from '@midnight-ntwrk/compact-runtime';
-import { LedgerState } from '@midnight-ntwrk/ledger-v7';
+import { LedgerState } from '@midnight-ntwrk/ledger-v8';
 import { UnshieldedAddress, MidnightBech32m } from '@midnight-ntwrk/wallet-sdk-address-format';
 import { Buffer } from 'buffer';
 import { BrowserDeploymentManager } from './wallet';

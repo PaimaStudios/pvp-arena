@@ -13,7 +13,7 @@
 import * as bip39 from "npm:@scure/bip39@1";
 import { wordlist as english } from "npm:@scure/bip39@1/wordlists/english";
 import { Buffer } from "node:buffer";
-import { setNetworkId } from "npm:@midnight-ntwrk/midnight-js-network-id@3.2.0";
+import { setNetworkId } from "npm:@midnight-ntwrk/midnight-js-network-id@4.0.0-rc.2";
 
 import { midnightNetworkConfig } from "jsr:@paimaexample/midnight-contracts/midnight-env";
 import {

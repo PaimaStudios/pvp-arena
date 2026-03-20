@@ -35,7 +35,7 @@ import {
   resolveUserIdentity,
   getUserAchievements,
 } from "./leaderboard-db.ts";
-import type { AlignedValue, StateValue } from "@midnight-ntwrk/ledger-v7";
+import type { AlignedValue, StateValue } from "@midnight-ntwrk/ledger-v8";
 
 // ---------------------------------------------------------------------------
 // Re-exports for env-specific entry points
