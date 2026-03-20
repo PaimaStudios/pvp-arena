@@ -6,7 +6,8 @@ import {
 import { readMidnightContract } from "@paimaexample/midnight-contracts/read-contract";
 import { midnightNetworkConfig } from "@paimaexample/midnight-contracts/midnight-env";
 import * as path from "@std/path";
-import { MidnightBalancingAdapter } from "@paimaexample/batcher";
+import { MidnightBalancingAdapter } from "./adapters/midnight-balancing-adapter.ts";
+// import { MidnightBalancingAdapter } from "@paimaexample/batcher";
 const batchIntervalMs = 1000;
 const port = Number(Deno.env.get("BATCHER_PORT") ?? "3334");
 
@@ -72,6 +73,7 @@ const midnightBalancingAdapter = new MidnightBalancingAdapter(
       proofServer: midnightNetworkConfig.proofServer,
       walletNetworkId: midnightNetworkConfig.id,
       addShieldedPadding: true,
+      shieldedPaddingTokenID: "3d7652dc9391818656b1de6e7df0c49ae2a8938b185e5a1483c21a7b48a2a086",
       maxBatchSize: 2,
     },
   );
