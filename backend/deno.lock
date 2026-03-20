@@ -9192,6 +9192,7 @@
           "npm:@midnight-ntwrk/midnight-js-types@3.2.0",
           "npm:@midnight-ntwrk/midnight-js-utils@3.2.0",
           "npm:@midnight-ntwrk/wallet-sdk-abstractions@1.0.0",
+          "npm:@midnight-ntwrk/wallet-sdk-facade@2.0.0",
           "npm:effection@^3.5.0"
         ]
       },

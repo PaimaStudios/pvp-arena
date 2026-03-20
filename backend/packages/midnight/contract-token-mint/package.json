@@ -1,0 +1,11 @@
+{
+  "name": "@pvp-arena-backend/contract-token-mint",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "compact": "compact compile +0.29.0 src/token-mint.compact ./src/managed/token_mint"
+  }
+}

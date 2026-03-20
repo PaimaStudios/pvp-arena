@@ -21,7 +21,9 @@
         "contract-pvp:patch-frontend:dev": "MIDNIGHT_NETWORK_ID=undeployed deno --unstable-detect-cjs -A contract-pvp-deploy.ts patch-frontend-env",
         "contract-pvp:patch-frontend:testnet": "MIDNIGHT_NETWORK_ID=preprod deno --unstable-detect-cjs -A contract-pvp-deploy.ts patch-frontend-env",
         "contract-pvp:patch-frontend:mainnet": "MIDNIGHT_NETWORK_ID=mainnet deno --unstable-detect-cjs -A contract-pvp-deploy.ts patch-frontend-env",
-        "faucet": "deno run -A faucet.ts"
+        "faucet": "deno run -A faucet.ts",
+        "token-mint:compile": "cd contract-token-mint && compact compile +0.29.0 src/token-mint.compact ./src/managed/token_mint",
+        "token-mint:deploy": "deno run -A --unstable-detect-cjs token-mint-deploy.ts"
     },
     "imports": {
         "@paimaexample/npm-midnight-node": "npm:@paimaexample/npm-midnight-node@0.9.0",
