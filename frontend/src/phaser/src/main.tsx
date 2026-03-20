@@ -11,24 +11,17 @@ import { BrowserDeploymentManager } from './wallet';
 import * as pino from 'pino';
 
 // TODO: get this properly? it's undefined if i uncomment this
-//const networkId = import.meta.env.VITE_NETWORK_ID as NetworkId;
 //const networkId = NetworkId.TestNet;
 export const networkId = getNetworkId();
 
 function getNetworkId(): NetworkId {
-    // switch (import.meta.env.MODE) {
-    //     case 'undeployed':
-    //         return NetworkId.Undeployed;
-    //     case 'testnet':
-    //         return NetworkId.TestNet;
-    //     case 'preview':
-    //         return ;
-    //     default:
-    //         console.error(`Unknown Vite MODE ${import.meta.env.MODE}, defaulting to undeployed`);
-    //         return NetworkId.Undeployed;
-    // }
-    return "undeployed";
-    // return import.meta.env.MODE;
+    const networkId = import.meta.env.VITE_NETWORK_ID as NetworkId;
+    // console.log(">>>networkId", networkId);
+    // console.log(">>>import.meta.env.MODE", import.meta.env.MODE);
+    if (!networkId) {
+        throw new Error("VITE_NETWORK_ID is not set");
+    }
+    return networkId;
 }
 // Ensure that the network IDs are set within the Midnight libraries.
 setNetworkId(networkId);

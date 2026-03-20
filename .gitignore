@@ -4,3 +4,7 @@ stable-old-version
 midnight-reference/
 CLAUDE.md
 backend/packages/batcher/batcher-debug.log
+backend/midnight-level-db-deploy/
+backend/midnight-level-db-party-*
+backend/packages/midnight/contract-token-mint/src/managed/
+backend/wallets.json

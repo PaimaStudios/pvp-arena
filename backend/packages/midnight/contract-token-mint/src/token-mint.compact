@@ -1,0 +1,15 @@
+pragma language_version >= 0.19;
+
+import CompactStandardLibrary;
+
+ledger total_minted: Uint<64>;
+
+constructor() {
+    total_minted = 0;
+}
+
+export circuit mint_tokens(domain_sep: Bytes<32>, amount: Uint<64>, nonce: Bytes<32>): [] {
+    const recipient = left<ZswapCoinPublicKey, ContractAddress>(ownPublicKey());
+    total_minted = disclose((total_minted + amount) as Uint<64>);
+    mintShieldedToken(disclose(domain_sep), disclose(amount), disclose(nonce), recipient);
+}
