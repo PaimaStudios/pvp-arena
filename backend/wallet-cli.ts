@@ -17,9 +17,9 @@ import { parseArgs } from "jsr:@std/cli@1/parse-args";
 import * as bip39 from "npm:@scure/bip39@1";
 import { wordlist as english } from "npm:@scure/bip39@1/wordlists/english";
 import { Buffer } from "node:buffer";
-import { setNetworkId } from "npm:@midnight-ntwrk/midnight-js-network-id@3.2.0";
-import { nativeToken, UnprovenTransaction } from "npm:@midnight-ntwrk/ledger-v7@7.0.3";
-import { MidnightBech32m, UnshieldedAddress } from "npm:@midnight-ntwrk/wallet-sdk-address-format@3.0.1";
+import { setNetworkId } from "npm:@midnight-ntwrk/midnight-js-network-id@4.0.0-rc.2";
+import { nativeToken, UnprovenTransaction } from "npm:@midnight-ntwrk/ledger-v8@8.0.2";
+import { MidnightBech32m, UnshieldedAddress } from "npm:@midnight-ntwrk/wallet-sdk-address-format@3.1.0-rc.0";
 
 import { midnightNetworkConfig } from "jsr:@paimaexample/midnight-contracts/midnight-env";
 import {

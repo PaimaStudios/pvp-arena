@@ -14,20 +14,20 @@
 import { Buffer } from "node:buffer";
 import * as path from "jsr:@std/path@1";
 
-import { setNetworkId } from "npm:@midnight-ntwrk/midnight-js-network-id@3.2.0";
-import { deployContract, findDeployedContract } from "npm:@midnight-ntwrk/midnight-js-contracts@3.2.0";
-import { CompiledContract, type Contract as ContractType } from "npm:@midnight-ntwrk/compact-js@2.4.3";
-import type { PrivateStateId, MidnightProviders, UnboundTransaction } from "npm:@midnight-ntwrk/midnight-js-types@3.2.0";
+import { setNetworkId } from "npm:@midnight-ntwrk/midnight-js-network-id@4.0.0-rc.2";
+import { deployContract, findDeployedContract } from "npm:@midnight-ntwrk/midnight-js-contracts@4.0.0-rc.2";
+import { CompiledContract, type Contract as ContractType } from "npm:@midnight-ntwrk/compact-js@2.5.0-rc.3";
+import type { PrivateStateId, MidnightProviders, UnboundTransaction } from "npm:@midnight-ntwrk/midnight-js-types@4.0.0-rc.2";
 import type {
   CoinPublicKey,
   EncPublicKey,
   FinalizedTransaction,
   TransactionId,
-} from "npm:@midnight-ntwrk/ledger-v7@7.0.3";
-import { httpClientProofProvider } from "npm:@midnight-ntwrk/midnight-js-http-client-proof-provider@3.2.0";
-import { indexerPublicDataProvider } from "npm:@midnight-ntwrk/midnight-js-indexer-public-data-provider@3.2.0";
-import { levelPrivateStateProvider } from "npm:@midnight-ntwrk/midnight-js-level-private-state-provider@3.2.0";
-import { NodeZkConfigProvider } from "npm:@midnight-ntwrk/midnight-js-node-zk-config-provider@3.2.0";
+} from "npm:@midnight-ntwrk/ledger-v8@8.0.2";
+import { httpClientProofProvider } from "npm:@midnight-ntwrk/midnight-js-http-client-proof-provider@4.0.0-rc.2";
+import { indexerPublicDataProvider } from "npm:@midnight-ntwrk/midnight-js-indexer-public-data-provider@4.0.0-rc.2";
+import { levelPrivateStateProvider } from "npm:@midnight-ntwrk/midnight-js-level-private-state-provider@4.0.0-rc.2";
+import { NodeZkConfigProvider } from "npm:@midnight-ntwrk/midnight-js-node-zk-config-provider@4.0.0-rc.2";
 
 import { midnightNetworkConfig } from "jsr:@paimaexample/midnight-contracts/midnight-env";
 import {
@@ -75,7 +75,7 @@ function loadWalletSeed(): string {
 // Main
 // ============================================================================
 
-const networkId = midnightNetworkConfig.id as import("npm:@midnight-ntwrk/wallet-sdk-abstractions@1.0.0").NetworkId.NetworkId;
+const networkId = midnightNetworkConfig.id as import("npm:@midnight-ntwrk/wallet-sdk-abstractions@2.0.0").NetworkId.NetworkId;
 setNetworkId(networkId);
 
 console.log(`Network: ${networkId}`);

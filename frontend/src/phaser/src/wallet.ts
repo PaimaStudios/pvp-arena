@@ -26,14 +26,14 @@ import { levelPrivateStateProvider } from '@midnight-ntwrk/midnight-js-level-pri
 import { FetchZkConfigProvider } from '@midnight-ntwrk/midnight-js-fetch-zk-config-provider';
 import { indexerPublicDataProvider } from '@midnight-ntwrk/midnight-js-indexer-public-data-provider';
 import { type FinalizedTxData, SucceedEntirely, UnboundTransaction, ZKConfigProvider } from '@midnight-ntwrk/midnight-js-types';
-import { CoinPublicKey, EncPublicKey, type ShieldedCoinInfo, Transaction, type TransactionId, UnprovenTransaction, ZswapSecretKeys } from '@midnight-ntwrk/ledger-v7';
+import { CoinPublicKey, EncPublicKey, type ShieldedCoinInfo, Transaction, type TransactionId, UnprovenTransaction, ZswapSecretKeys } from '@midnight-ntwrk/ledger-v8';
 import { Transaction as ZswapTransaction } from '@midnight-ntwrk/zswap';
 import semver from 'semver';
 import { getNetworkId } from '@midnight-ntwrk/midnight-js-network-id';
 //import { initializeProviders as initializeBatcherModeProviders } from './batcher-providers';
 import { NodeZkConfigProvider } from '@midnight-ntwrk/midnight-js-node-zk-config-provider';
-import * as ledgerv7 from '@midnight-ntwrk/ledger-v7';
-import { FinalizedTransaction } from '@midnight-ntwrk/ledger-v7';
+import * as ledgerv8 from '@midnight-ntwrk/ledger-v8';
+import { FinalizedTransaction } from '@midnight-ntwrk/ledger-v8';
 import { BatcherClient } from './batcher-client';
 import { wasmProofProvider } from './wasm-proof-provider';
 // import { createUnprovenCallTx } from '@midnight-ntwrk/midnight-js-contracts';
@@ -430,7 +430,7 @@ const initializeProviders = async (logger: Logger): Promise<PVPArenaProviders> =
       // Return the sentinel so watchForTxData can intercept it and resolve
       // immediately, giving callTx access to txData.private.result.
       // The actual transaction is submitted asynchronously by the batcher.
-      async submitTx(_tx: ledgerv7.FinalizedTransaction): Promise<TransactionId> {
+      async submitTx(_tx: ledgerv8.FinalizedTransaction): Promise<TransactionId> {
         return DELEGATED_TX_SENTINEL as unknown as TransactionId;
       },
     },

@@ -6,6 +6,6 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "compact": "compact compile +0.29.0 src/token-mint.compact ./src/managed/token_mint"
+    "compact": "compact compile +0.30.0 src/token-mint.compact ./src/managed/token_mint"
   }
 }

@@ -19,7 +19,7 @@ import {
   shieldedToken,
   type UnprovenTransaction,
   ZswapSecretKeys,
-} from "@midnight-ntwrk/ledger-v7";
+} from "@midnight-ntwrk/ledger-v8";
 import { NetworkId } from "@midnight-ntwrk/wallet-sdk-abstractions";
 import type { DefaultV1Configuration } from "@midnight-ntwrk/wallet-sdk-shielded/v1";
 

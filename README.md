@@ -22,7 +22,7 @@ pvp-v2/
 
 - **Deno**
 - **Node.js** + **Yarn 4.1.0**: `corepack enable && corepack install --global yarn@4.1.0`
-- **Compact compiler v0.29.0** — install the correct binaries from Midnight docs
+- **Compact compiler v0.30.0** — install the correct binaries from Midnight docs
 
 ## Local Development
 
