@@ -64,8 +64,12 @@ const zkConfigPath = midnightContractData?.zkConfigPath ??
 //   );
 
 // The balancing adapter handles delegated transactions from BatcherClient.
+const seeds = process.env.MIDNIGHT_WALLET_SEEDS?.split(',');
+if (!seeds) {
+  throw new Error('MIDNIGHT_WALLET_SEEDS is not set');
+}
 const midnightBalancingAdapter = new MidnightBalancingAdapter(
-    midnightNetworkConfig.walletSeed!,
+    seeds,
     {
       indexer: midnightNetworkConfig.indexer,
       indexerWS: midnightNetworkConfig.indexerWS,
@@ -75,7 +79,7 @@ const midnightBalancingAdapter = new MidnightBalancingAdapter(
       addShieldedPadding: true,
       shieldedPaddingTokenID: midnightNetworkConfig.id === 'undeployed' ? 
       '0000000000000000000000000000000000000000000000000000000000000000' :
-      "3d7652dc9391818656b1de6e7df0c49ae2a8938b185e5a1483c21a7b48a2a086",
+      "bdf277073b1583a64b328fea341118349c42051b117b3b080b1c063094075fc6",
       maxBatchSize: 2,
     },
   );
