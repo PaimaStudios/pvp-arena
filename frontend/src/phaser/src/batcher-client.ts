@@ -1,7 +1,7 @@
 import { toHex } from "@midnight-ntwrk/compact-runtime";
 
-// Default batcher URL. In browser environments, this should be overridden via the constructor if different.
-const DEFAULT_BATCHER_URL = "http://localhost:3334";
+// Use env var if available (e.g. testnet), fall back to localhost for local dev.
+const DEFAULT_BATCHER_URL = import.meta.env.VITE_BATCHER_MODE_BATCHER_URL || "http://localhost:3334";
 
 /** Sentinel message thrown by balanceTx when the delegation hook intercepts the transaction. */
 export const DELEGATED_SENTINEL = "Delegated balancing flow handed off to batcher";
