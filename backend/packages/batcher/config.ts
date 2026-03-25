@@ -84,8 +84,7 @@ const midnightBalancingAdapter = new MidnightBalancingAdapter(
       addShieldedPadding: false, // true,
       shieldedPaddingTokenID: midnightNetworkConfig.id === 'undeployed' ? 
       '0000000000000000000000000000000000000000000000000000000000000000' :
-      "bdf277073b1583a64b328fea341118349c42051b117b3b080b1c063094075fc6",
-      maxBatchSize: 2,
+      (process.env.MIDNIGHT_TOKEN_ID || "bdf277073b1583a64b328fea341118349c42051b117b3b080b1c063094075fc6"),
     },
   );
 
