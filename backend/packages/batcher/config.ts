@@ -8,6 +8,7 @@ import { midnightNetworkConfig } from "@paimaexample/midnight-contracts/midnight
 import * as path from "@std/path";
 // import { MidnightBalancingAdapter } from "./adapters/midnight-balancing-adapter.ts";
 import { MidnightBalancingAdapter } from "@paimaexample/batcher";
+import process from "node:process";
 const batchIntervalMs = 1000;
 const port = Number(Deno.env.get("BATCHER_PORT") ?? "3334");
 
@@ -64,9 +65,13 @@ const zkConfigPath = midnightContractData?.zkConfigPath ??
 //   );
 
 // The balancing adapter handles delegated transactions from BatcherClient.
-const seeds = process.env.MIDNIGHT_WALLET_SEEDS?.split(',');
-if (!seeds) {
-  throw new Error('MIDNIGHT_WALLET_SEEDS is not set');
+let seeds = process.env.MIDNIGHT_WALLET_SEEDS?.split(',');
+if (midnightNetworkConfig.id === 'undeployed') {
+  seeds = [midnightNetworkConfig.walletSeed!];
+} else {
+  if (!seeds || seeds.length === 0) {
+    throw new Error('MIDNIGHT_WALLET_SEEDS is not set');
+  }
 }
 const midnightBalancingAdapter = new MidnightBalancingAdapter(
     seeds,
@@ -76,7 +81,7 @@ const midnightBalancingAdapter = new MidnightBalancingAdapter(
       node: midnightNetworkConfig.node,
       proofServer: midnightNetworkConfig.proofServer,
       walletNetworkId: midnightNetworkConfig.id,
-      addShieldedPadding: true,
+      addShieldedPadding: false, // true,
       shieldedPaddingTokenID: midnightNetworkConfig.id === 'undeployed' ? 
       '0000000000000000000000000000000000000000000000000000000000000000' :
       "bdf277073b1583a64b328fea341118349c42051b117b3b080b1c063094075fc6",

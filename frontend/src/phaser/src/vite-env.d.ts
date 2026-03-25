@@ -8,6 +8,7 @@ interface ImportMetaEnv {
   readonly VITE_BATCHER_MODE_INDEXER_WS_URL: string | undefined;
   readonly VITE_BATCHER_MODE_BATCHER_URL: string | undefined;
   readonly VITE_CONTRACT_ADDRESS: string;
+  readonly VITE_NODE_API_URL: string | undefined;
 }
 
 interface ImportMeta {

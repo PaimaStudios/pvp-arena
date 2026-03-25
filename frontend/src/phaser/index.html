@@ -24,7 +24,7 @@
         color: #f5f5ed; font-family: yana, sans-serif; text-align: center;
       }
       .pvp-overlay-box--wide {
-        width: 620px; height: 500px; padding: 0; overflow: hidden;
+        width: 760px; height: 560px; padding: 0; overflow: hidden;
         text-align: left;
       }
       .pvp-overlay-close {
@@ -56,6 +56,38 @@
         font-family: yana, sans-serif; font-size: 24px;
         color: #999988; text-decoration: none; letter-spacing: 0.5px;
       }
+      /* Leaderboard table */
+      .pvp-lb-wrap {
+        width: 100%; height: 100%; display: flex; flex-direction: column;
+      }
+      .pvp-lb-header {
+        padding: 18px 24px 12px; border-bottom: 1px solid #3a3a20;
+      }
+      .pvp-lb-header h2 { margin: 0; font-size: 36px; color: #f5f5ed; }
+      .pvp-lb-header p { margin: 4px 0 0; font-size: 26px; color: #999988; }
+      .pvp-lb-body {
+        flex: 1; overflow-y: auto; padding: 8px 24px;
+      }
+      .pvp-lb-table { width: 100%; border-collapse: collapse; }
+      .pvp-lb-table th {
+        text-align: left; font-size: 26px; color: #999988;
+        padding: 6px 8px; border-bottom: 1px solid #3a3a20;
+      }
+      .pvp-lb-table td {
+        font-size: 26px; color: #d0d0b8; padding: 8px;
+        border-bottom: 1px solid #2a2a18;
+      }
+      .pvp-lb-table tr.pvp-lb-me td { color: #aabb44; font-weight: bold; }
+      .pvp-lb-table tr.pvp-lb-me { background: rgba(170,187,68,0.08); }
+      .pvp-lb-rank { width: 60px; text-align: center; }
+      .pvp-lb-score { width: 90px; text-align: center; }
+      .pvp-lb-addr { font-size: 26px; }
+      .pvp-lb-loading { text-align: center; padding: 40px; color: #999988; font-size: 26px; }
+      .pvp-lb-empty { text-align: center; padding: 40px; color: #777766; font-size: 26px; }
+      .pvp-lb-me-section {
+        padding: 10px 24px 14px; border-top: 1px solid #3a3a20;
+        font-size: 26px; color: #aabb44;
+      }
 </style>
   </head>
   <body>
@@ -63,9 +95,12 @@
     <div style="font-family:yana; position:absolute; left:-1000px; visibility:hidden;">.</div>
     <script type="module" src="/src/main.tsx"></script>
 
-    <div id="pvp-footer" style="position:fixed;bottom:6px;left:0;right:0;text-align:center;z-index:100;">
+    <div id="pvp-footer" style="position:fixed;bottom:6px;left:0;right:0;display:flex;justify-content:space-between;padding:0 16px;z-index:100;">
       <a href="#" id="pvp-footer-link" class="pvp-footer-link">
         Learn More / Report Issues
+      </a>
+      <a href="#" id="pvp-leaderboard-link" class="pvp-footer-link">
+        Leaderboard
       </a>
     </div>
 
@@ -87,6 +122,22 @@
       </div>
     </div>
 
+    <div id="pvp-lb-overlay" class="pvp-overlay" style="display:none;">
+      <div class="pvp-overlay-box pvp-overlay-box--wide">
+        <button id="pvp-lb-close" class="pvp-overlay-close">&#x2715;</button>
+        <div class="pvp-lb-wrap">
+          <div class="pvp-lb-header">
+            <h2>Leaderboard</h2>
+            <p>Top players by wins</p>
+          </div>
+          <div id="pvp-lb-body" class="pvp-lb-body">
+            <div class="pvp-lb-loading">Loading...</div>
+          </div>
+          <div id="pvp-lb-me" class="pvp-lb-me-section" style="display:none;"></div>
+        </div>
+      </div>
+    </div>
+
     <script>
       (function() {
         var link = document.getElementById('pvp-footer-link');
@@ -101,6 +152,94 @@
         });
         overlay.addEventListener('click', function(e) {
           if (e.target === overlay) overlay.style.display = 'none';
+        });
+
+        // --- Leaderboard ---
+        var lbLink = document.getElementById('pvp-leaderboard-link');
+        var lbOverlay = document.getElementById('pvp-lb-overlay');
+        var lbClose = document.getElementById('pvp-lb-close');
+        var lbBody = document.getElementById('pvp-lb-body');
+        var lbMe = document.getElementById('pvp-lb-me');
+
+        function shortAddr(addr) {
+          if (addr && addr.length > 20) return addr.slice(0, 20) + '\u2026';
+          return addr || 'unknown';
+        }
+
+        function renderTable(entries, myAddr) {
+          if (!entries || entries.length === 0) {
+            lbBody.innerHTML = '<div class="pvp-lb-empty">No ranked players yet.</div>';
+            return;
+          }
+          var html = '<table class="pvp-lb-table"><thead><tr>' +
+            '<th class="pvp-lb-rank">#</th><th>Player</th><th class="pvp-lb-score">Wins</th>' +
+            '</tr></thead><tbody>';
+          var found = false;
+          for (var i = 0; i < entries.length; i++) {
+            var e = entries[i];
+            var isMe = myAddr && e.address === myAddr;
+            if (isMe) found = true;
+            html += '<tr' + (isMe ? ' class="pvp-lb-me"' : '') + '>' +
+              '<td class="pvp-lb-rank">' + e.rank + '</td>' +
+              '<td class="pvp-lb-addr">' + shortAddr(e.address) + (isMe ? ' (you)' : '') + '</td>' +
+              '<td class="pvp-lb-score">' + e.score + '</td></tr>';
+          }
+          html += '</tbody></table>';
+          lbBody.innerHTML = html;
+          return found;
+        }
+
+        async function fetchLeaderboard() {
+          var baseUrl = window.__pvpNodeApiUrl;
+          if (!baseUrl) {
+            lbBody.innerHTML = '<div class="pvp-lb-empty">Node API URL not configured.</div>';
+            return;
+          }
+          lbBody.innerHTML = '<div class="pvp-lb-loading">Loading...</div>';
+          lbMe.style.display = 'none';
+
+          try {
+            var resp = await fetch(baseUrl + '/metrics/leaderboard?limit=50');
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            var data = await resp.json();
+            var myAddr = window.__pvpPlayerAddress || null;
+            var found = renderTable(data.entries || [], myAddr);
+
+            // If current player not in the top list, fetch their stats separately
+            if (myAddr && !found) {
+              try {
+                var userResp = await fetch(baseUrl + '/metrics/users/' + encodeURIComponent(myAddr) + '?channel=leaderboard');
+                if (userResp.ok) {
+                  var userData = await userResp.json();
+                  var stats = userData.channels && userData.channels.leaderboard && userData.channels.leaderboard.stats;
+                  if (stats && stats.score > 0) {
+                    lbMe.innerHTML = 'Your rank: <strong>#' + stats.rank + '</strong> &mdash; ' +
+                      stats.score + ' win' + (stats.score !== 1 ? 's' : '') +
+                      ' &mdash; ' + stats.matchesPlayed + ' match' + (stats.matchesPlayed !== 1 ? 'es' : '') + ' played';
+                    lbMe.style.display = 'block';
+                  } else {
+                    lbMe.innerHTML = 'You have no ranked wins yet. Play some matches!';
+                    lbMe.style.display = 'block';
+                  }
+                }
+              } catch (_) { /* ignore user fetch errors */ }
+            }
+          } catch (err) {
+            lbBody.innerHTML = '<div class="pvp-lb-empty">Could not load leaderboard.<br>' +
+              (err.message || err) + '</div>';
+          }
+        }
+
+        lbLink.addEventListener('click', function(e) {
+          e.preventDefault();
+          lbOverlay.style.display = 'flex';
+          fetchLeaderboard();
+        });
+        lbClose.addEventListener('click', function() {
+          lbOverlay.style.display = 'none';
+        });
+        lbOverlay.addEventListener('click', function(e) {
+          if (e.target === lbOverlay) lbOverlay.style.display = 'none';
         });
       })();
     </script>

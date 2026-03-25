@@ -31,6 +31,11 @@ export const logger = pino.pino({
 console.log(`networkId = ${networkId}`);
 
 console.log(`VITE: [\n${JSON.stringify(import.meta.env)}\n]`);
+
+// Expose node API URL for the leaderboard overlay (runs in index.html)
+(window as any).__pvpNodeApiUrl = import.meta.env.VITE_NODE_API_URL || '';
+(window as any).__pvpNetworkId = networkId;
+
 // phaser part
 
 import 'phaser';
@@ -134,6 +139,8 @@ export function makeGuideButton(scene: Phaser.Scene, x: number, y: number): Butt
 
 export function makeAddressLabel(scene: Phaser.Scene, localPublicKey: bigint | null): void {
     if (localPublicKey == null) return;
+    // Expose player address for the leaderboard overlay
+    (window as any).__pvpPlayerAddress = bigintToMnAddr(localPublicKey);
     const keyStr = `My Address ${localPublicKey.toString(16).padStart(16, '0').slice(0, 8)}…`;
     scene.add.text(8, GAME_HEIGHT - 8, keyStr, fontStyle(7, { color: '#999988' })).setOrigin(0, 1);
 }
