@@ -259,6 +259,14 @@ export class Arena extends Phaser.Scene
                             this.committedStances = null;
                         })
                         .catch((e) => {
+                            // The batcher can take 2-3 minutes. If state$ already advanced
+                            // past p1_reveal, the tx succeeded on-chain — suppress the error.
+                            if (this.onChainState !== GAME_STATE.p1_reveal) {
+                                console.log(`[arena] p1Reveal error suppressed — chain already at ${gameStateStr(this.onChainState)}`);
+                                this.committedMoves = null;
+                                this.committedStances = null;
+                                return;
+                            }
                             // Reset matchState so the RevealingMove guard doesn't block retry.
                             this.matchState = MatchState.WaitingOtherPlayerReveal;
                             this.status!.setError(e, () => this.runStateChange(), 'Retry');
@@ -556,12 +564,12 @@ export class Arena extends Phaser.Scene
                         this.committedStances = stances;
                         console.log(`[arena] p1Commit moves=${JSON.stringify(moves.map(Number))} stances=${JSON.stringify(stances)}`);
                         this.config.api.p1Commit(moves, stances)
-                            .catch((e) => this.recoverFromSubmitError(MatchState.WaitingOnPlayer, e));
+                            .catch((e) => this.recoverFromSubmitError(MatchState.WaitingOnPlayer, GAME_STATE.p1_commit, e));
                     } else {
                         console.log('submitting move (as p2)');
                         BatcherClient.setCircuitName('p2_commit_commands');
                         this.config.api.p2Commit(this.movesForContract(), this.stancesForContract())
-                           .catch((e) => this.recoverFromSubmitError(MatchState.WaitingOnPlayer, e));
+                           .catch((e) => this.recoverFromSubmitError(MatchState.WaitingOnPlayer, GAME_STATE.p2_commit_reveal, e));
                     }
                 } else {
                     console.log(`invalid move: |${moves.length} < ${this.getAliveHeroes(this.playerTeam()).length}| ${JSON.stringify(this.heroes[this.playerTeam()].map((hero) => hero.target))}`);
@@ -614,12 +622,12 @@ export class Arena extends Phaser.Scene
                 this.committedStances = stances;
                 console.log(`[arena] p1Commit moves=${JSON.stringify(moves.map(Number))} stances=${JSON.stringify(stances)}`);
                 this.config.api.p1Commit(moves, stances)
-                    .catch((e) => this.recoverFromSubmitError(MatchState.WaitingOnPlayer, e));
+                    .catch((e) => this.recoverFromSubmitError(MatchState.WaitingOnPlayer, GAME_STATE.p1_commit, e));
             } else {
                 console.log('submitting move (as p2)');
                 BatcherClient.setCircuitName('p2_commit_commands');
                 this.config.api.p2Commit(this.movesForContract(), this.stancesForContract())
-                    .catch((e) => this.recoverFromSubmitError(MatchState.WaitingOnPlayer, e));
+                    .catch((e) => this.recoverFromSubmitError(MatchState.WaitingOnPlayer, GAME_STATE.p2_commit_reveal, e));
             }
             this.submitButton!.visible = false;
             closeTooltip(TooltipId.SetAllAttacks);
@@ -785,7 +793,13 @@ export class Arena extends Phaser.Scene
         return this.heroes[this.playerTeam()].map((hero) => hero.nextStance);
     }
 
-    private recoverFromSubmitError(recoveryState: MatchState, e: Error) {
+    private recoverFromSubmitError(recoveryState: MatchState, expectedChainState: GAME_STATE, e: Error) {
+        // The batcher can take 2-3 minutes. If state$ already advanced past the
+        // expected chain state, the tx succeeded on-chain — suppress the error.
+        if (this.onChainState !== expectedChainState) {
+            console.log(`[arena] submit error suppressed — chain already at ${gameStateStr(this.onChainState)}`);
+            return;
+        }
         console.log(`submit error: ${e}`);
         this.status!.setError(e, () => {
             this.setMatchState(recoveryState);
