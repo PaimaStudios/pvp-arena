@@ -29,15 +29,20 @@ const ONE_YEAR_MS = 365 * 24 * 60 * 60 * 1000;
 export async function ensureTables(db: any): Promise<void> {
   await db.query(`
     CREATE TABLE IF NOT EXISTS pvp_matches (
-      match_id    TEXT PRIMARY KEY,
-      player1     TEXT NOT NULL,
-      player2     TEXT,
-      game_state  INTEGER NOT NULL,
-      is_practice BOOLEAN NOT NULL DEFAULT FALSE,
-      created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
-      updated_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+      match_id        TEXT PRIMARY KEY,
+      player1         TEXT NOT NULL,
+      player2         TEXT,
+      game_state      INTEGER NOT NULL,
+      is_practice     BOOLEAN NOT NULL DEFAULT FALSE,
+      has_ledger_data BOOLEAN NOT NULL DEFAULT TRUE,
+      created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
+      updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
     )
   `);
+  // Migration: add has_ledger_data column if it doesn't exist
+  await db.query(`
+    ALTER TABLE pvp_matches ADD COLUMN IF NOT EXISTS has_ledger_data BOOLEAN NOT NULL DEFAULT TRUE
+  `).catch(() => { /* column already exists or table just created */ });
   await db.query(`
     CREATE TABLE IF NOT EXISTS pvp_results (
       match_id    TEXT PRIMARY KEY,

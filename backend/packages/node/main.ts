@@ -15,9 +15,12 @@ import {
   ConfigSyncProtocolType,
 } from "@paimaexample/config";
 import type { GrammarDefinition } from "@paimaexample/concise";
-import type { SyncStateUpdateStream } from "@paimaexample/coroutine";
+import { type SyncStateUpdateStream, World } from "@paimaexample/coroutine";
 import { PaimaSTM } from "@paimaexample/sm";
 import type { BaseStfInput } from "@paimaexample/sm";
+import { newScheduledTimestampData } from "@paimaexample/db";
+import { AddressType } from "@paimaexample/utils";
+import { Type } from "@sinclair/typebox";
 import {
   midnightNetworkConfig,
 } from "@paimaexample/midnight-contracts/midnight-env";
@@ -50,6 +53,9 @@ export {
 
 export const grammar = {
   midnightContractState: builtinGrammars.midnightGeneric,
+  clean_up_game: [
+    ["game_id", Type.String()],
+  ],
 } as const satisfies GrammarDefinition;
 
 export const contractAddress = readMidnightContract(
@@ -136,6 +142,13 @@ export const ledgerParser = (state: StateValue) => parseStateValue(state);
 // Shared DB connection — set by apiRouter before any blocks are processed
 let dbConn: any = null;
 
+async function waitForDb() {
+  while (!dbConn) {
+    console.log("Waiting for db connection...");
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+}
+
 // Sequential queue: each DB write waits for the previous to finish,
 // preventing concurrent writes across consecutive blocks.
 let dbQueue = Promise.resolve();
@@ -160,10 +173,24 @@ stm.addStateTransition("midnightContractState", function* (data) {
       9: 'tie',
     };
 
+    const five_minutes = 1; //  5 * 60 * 1000;
+
     for (const [key, value] of Object.entries(game_state)) {
       const gameId = key;
       const currentState = game_state_map[value as unknown as keyof typeof game_state_map];
       console.log(`Game ID: ${gameId}, Current State: ${currentState}`);
+
+      // Schedule cleanup for newly created games (state 0 = p1_selecting_first_hero)
+      if (currentState === 'p1_selecting_first_hero') {
+        console.log(`[clean_up_game] New game detected: ${gameId}, scheduling cleanup in 5 minutes`);
+        // We need some guard here...
+        yield* World.resolve(newScheduledTimestampData, {
+          from_address: "0x0",
+          from_address_type: AddressType.NONE,
+          future_ms_timestamp: new Date(data.blockTimestamp + five_minutes),
+          input_data: JSON.stringify(["clean_up_game", gameId]),
+        });
+      }
     }
   
 
@@ -318,7 +345,7 @@ stm.addStateTransition("midnightContractState", function* (data) {
   // delegations is at payload["3"][13] (see layout above)
 
   try {
-    if (!dbConn) return;
+    yield* World.promise(waitForDb());
     dbQueue = dbQueue
       .then(async () => {
         await processLedgerSnapshot(dbConn, payload);
@@ -334,6 +361,69 @@ stm.addStateTransition("midnightContractState", function* (data) {
   } catch (err) {
     console.error("[leaderboard] processLedgerSnapshot failed:", err);
   }
+});
+
+async function getLedgerData(game_id: string): Promise<{ rows: Array<{ has_ledger_data: boolean }> }> {
+  const result = await dbConn.query(
+    `SELECT has_ledger_data FROM pvp_matches WHERE match_id = $1`,
+    [game_id],
+  ) as { rows: Array<{ has_ledger_data: boolean }> };
+  return result;
+}
+
+async function markAsCleanedUp(game_id: string): Promise<void> {
+  await dbConn.query(
+    `UPDATE pvp_matches SET has_ledger_data = FALSE WHERE match_id = $1`,
+    [game_id],
+  );
+}
+
+stm.addStateTransition("clean_up_game", function* (data) {
+  const { game_id } = data.parsedInput;
+  setTimeout(async () => {
+    // Spawn cleanup script in a fully isolated setTimeout / try-catch
+    try {
+      console.log(`[clean_up_game] Scheduled cleanup fired for game_id: ${game_id}`);
+  
+      await waitForDb();
+  
+      // Check if match still has ledger data to clean up
+      const { rows } = await getLedgerData(game_id);
+      if (rows.length === 0 || !rows[0].has_ledger_data) {
+        console.log(`[clean_up_game] game_id=${game_id} already cleaned up or not found, skipping`);
+        return;
+      }
+
+      // Mark as cleaned up immediately to prevent duplicate runs
+      await markAsCleanedUp(game_id);
+
+      
+      const scriptPath = path.resolve(import.meta.dirname!, "..", "midnight", "contract-pvp-cleanup.ts");
+      const command = new Deno.Command("deno", {
+        args: ["run", "-A", "--unstable-detect-cjs", scriptPath, game_id],
+        env: {
+          MIDNIGHT_BACKEND_SECRET: Deno.env.get("MIDNIGHT_BACKEND_SECRET")!,
+          MIDNIGHT_CLEAN_SEED: Deno.env.get("MIDNIGHT_CLEAN_SEED")!,
+          MIDNIGHT_NETWORK_ID: Deno.env.get("MIDNIGHT_NETWORK_ID")!,
+          // MIDNIGHT_STORAGE_PASSWORD: Deno.env.get("MIDNIGHT_STORAGE_PASSWORD") ?? "",
+        },
+        stdout: "inherit",
+        stderr: "inherit",
+      });
+      const child = command.spawn();
+      child.status.then((status) => {
+        if (status.success) {
+          console.log(`[clean_up_game] cleanup script succeeded for game_id=${game_id}`);
+        } else {
+          console.error(`[clean_up_game] cleanup script exited with code ${status.code} for game_id=${game_id}`);
+        }
+      }).catch((err) => {
+        console.error(`[clean_up_game] cleanup script status error for game_id=${game_id}:`, err);
+      });
+    } catch (err) {
+      console.error(`[clean_up_game] failed to spawn cleanup script for game_id=${game_id}:`, err);
+    }
+  }, 0);
 });
 
 export const gameStateTransitions: StartConfigGameStateTransitions = function* (

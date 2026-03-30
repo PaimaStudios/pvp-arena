@@ -157,10 +157,11 @@ ledger TIMESTAMP_MAX_AGE: Uint<64>;
 export ledger delegations: Map<Field, Field>;
 
 // Owner of the contract
-ledger owner: ZswapCoinPublicKey;
+ledger owner: Field;
 
 export circuit initialize(): [] {
-  owner = disclose(ownPublicKey());
+  assert(owner == 0, "Owner already initialized");
+  owner = derive_public_key(player_secret_key());
 }
 
 witness player_secret_key(): Bytes<32>;
@@ -609,14 +610,14 @@ export circuit surrender(): [] {
 export circuit cleanup_match(_match_id: Field): [] {
     const match_id = disclose(_match_id);
     // Allow contract owner to cleanup any match
-    const isOwner = ownPublicKey() == owner;
+    const isOwner = derive_public_key(player_secret_key()) == owner;
     // Allow players to cleanup their own match
     const myKey = derive_public_key(player_secret_key());
     const isPlayer = p1_public_key.lookup(match_id) == myKey || (p2_public_key.member(match_id) && p2_public_key.lookup(match_id) == myKey);                                       
     assert(isOwner || isPlayer, "Not owner or participant");
     // Match must be in a terminal state
     const state = game_state.lookup(match_id);
-    assert(state == GAME_STATE.p1_win || state == GAME_STATE.p2_win || state == GAME_STATE.tie, "Match is not finished");
+    assert(isOwner || (state == GAME_STATE.p1_win || state == GAME_STATE.p2_win || state == GAME_STATE.tie), "Match is not finished");
     // Clean up delegation entries
     delegations.resetToDefault();
 

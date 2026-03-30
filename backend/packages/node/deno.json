@@ -32,6 +32,7 @@
     "@paimaexample/orchestrator": "jsr:@paimaexample/orchestrator@0.10.17",
     "@paimaexample/runtime": "jsr:@paimaexample/runtime@0.10.17",
     "@paimaexample/sm": "jsr:@paimaexample/sm@0.10.17",
+    "@paimaexample/utils": "jsr:@paimaexample/utils@0.10.17",
     "viem": "npm:viem@2.37.3",
     "@sinclair/typebox": "npm:@sinclair/typebox@0.34.41",
     "effection": "npm:effection@^3.5.0",

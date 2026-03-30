@@ -55,6 +55,14 @@ function getEnvMapping(networkId: string): EnvMapping {
   return mapping;
 }
 
+if (midnightNetworkConfig.id === "mainnet") {
+ // We require to set a custom RPC
+ if (!Deno.env.get("MIDNIGHT_NODE_URL")) {
+  throw new Error("MIDNIGHT_NODE_URL is not set");
+ }
+ midnightNetworkConfig.node = Deno.env.get("MIDNIGHT_NODE_URL")!;
+}
+
 // ---------------------------------------------------------------------------
 // Update frontend files with the deployed contract address
 // ---------------------------------------------------------------------------

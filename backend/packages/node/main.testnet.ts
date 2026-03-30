@@ -46,9 +46,10 @@ export const testnetConfig = new ConfigBuilder()
         (_network, _deployments) => ({
           name: "parallelMidnight",
           type: ConfigSyncProtocolType.MIDNIGHT_PARALLEL,
-          startBlockHeight: 697449,
+          startBlockHeight: 39604,
           pollingInterval: 6000,
           delayMs: 0,
+          stepSize: 2,
           indexer: midnightNetworkConfig.indexer,
           indexerWs: midnightNetworkConfig.indexerWS,
         }),
