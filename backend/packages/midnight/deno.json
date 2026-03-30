@@ -26,9 +26,9 @@
         "token-mint:deploy": "deno run -A --unstable-detect-cjs token-mint-deploy.ts"
     },
     "imports": {
-        "@paimaexample/npm-midnight-node": "npm:@paimaexample/npm-midnight-node@0.10.14",
-        "@paimaexample/npm-midnight-indexer": "npm:@paimaexample/npm-midnight-indexer@0.10.14",
-        "@paimaexample/npm-midnight-proof-server": "npm:@paimaexample/npm-midnight-proof-server@0.10.14",
+        "@paimaexample/npm-midnight-node": "npm:@paimaexample/npm-midnight-node@0.10.15",
+        "@paimaexample/npm-midnight-indexer": "npm:@paimaexample/npm-midnight-indexer@0.10.15",
+        "@paimaexample/npm-midnight-proof-server": "npm:@paimaexample/npm-midnight-proof-server@0.10.15",
         "@std/path": "jsr:@std/path",
         "@std/fs": "jsr:@std/fs",
         "rxjs": "npm:rxjs@^7.8.2",
