@@ -74,17 +74,33 @@ interface LedgerMatch {
   isPractice: boolean;
 }
 
+const addressCache = new Map<string, string>();
+
 function decimalToUnshieldedAddressSafe(decimal: string, networkId: string = 'testnet'): string {
   try {
     if (!decimal || decimal === "0") return "unknown";
-    return decimalToUnshieldedAddress(decimal, networkId);
+    const key = `${decimal}:${networkId}`;
+    const cached = addressCache.get(key);
+    if (cached) return cached;
+    const result = decimalToUnshieldedAddress(decimal, networkId);
+    addressCache.set(key, result);
+    return result;
   } catch (e) {
     return decimal;
   }
 }
 
+let lastSnapshotKey: string | null = null;
+
 export async function processLedgerSnapshot(db: any, payload: any): Promise<void> {
   const game_state = payload["3"][6] as Record<string, number>;
+
+  // Skip re-processing if the ledger snapshot hasn't changed since last block
+  const snapshotKey = JSON.stringify(game_state);
+  if (snapshotKey === lastSnapshotKey) {
+    return;
+  }
+  lastSnapshotKey = snapshotKey;
   const p1_public_key = payload["3"][7] as Record<string, string>;
   const p2_public_key = payload["3"][8] as Record<string, string>;
   const is_practice = payload["3"][10] as Record<string, boolean | number>;

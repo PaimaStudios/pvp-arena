@@ -11,10 +11,12 @@ const config = Value.Parse(OrchestratorConfig, {
   packageName: "@paimaexample",
 logs: "stdout",
   processes: {
-    [ComponentNames.EFFECTSTREAM_PGLITE]: true,
+    [ComponentNames.EFFECTSTREAM_PGLITE]: false,
     [ComponentNames.COLLECTOR]: false,
     [ComponentNames.TMUX]: false,
     [ComponentNames.TUI]: false,
+    [ComponentNames.COLLECTOR]: false,
+    [ComponentNames.LOKI]: false,
   },
 
   processesToLaunch: [

@@ -302,7 +302,6 @@ let dbQueue = Promise.resolve();
 const stm = new PaimaSTM<typeof grammar, {}>(grammar);
 stm.addStateTransition("midnightContractState", function* (data) {
   // NOTE This will change if there are changes in the contract pvp.compact
-  console.log(data.parsedInput);
   const { payload } = data.parsedInput;
   const game_state = payload["3"][6] as Record<string, number>;
 
@@ -324,7 +323,6 @@ stm.addStateTransition("midnightContractState", function* (data) {
     for (const [key, value] of Object.entries(game_state)) {
       const gameId = key;
       const currentState = game_state_map[value as unknown as keyof typeof game_state_map];
-      console.log(`Game ID: ${gameId}, Current State: ${currentState}`);
 
       // Schedule cleanup for newly created games (state 0 = p1_selecting_first_hero)
       if (currentState === 'p1_selecting_first_hero') {
@@ -494,12 +492,15 @@ stm.addStateTransition("midnightContractState", function* (data) {
     yield* World.promise(waitForDb());
     dbQueue = dbQueue
       .then(async () => {
+        const t0 = performance.now();
         await processLedgerSnapshot(dbConn, payload);
         // Process delegation map — located after TIMESTAMP_MAX_AGE in the ledger
         const delegationsMap = payload["3"]?.[13] as Record<string, string> | undefined;
         if (delegationsMap && typeof delegationsMap === 'object') {
           await processDelegations(dbConn, delegationsMap);
         }
+        const elapsed = (performance.now() - t0).toFixed(1);
+        console.log(`[ledger] block processed in ${elapsed}ms (${Object.keys(game_state).length} matches)`);
       })
       .catch((err) => {
         console.error("[leaderboard] processLedgerSnapshot failed:", err);

@@ -48,10 +48,10 @@ export const mainnetConfig = new ConfigBuilder()
         (_network, _deployments) => ({
           name: "parallelMidnight",
           type: ConfigSyncProtocolType.MIDNIGHT_PARALLEL,
-          startBlockHeight: 168393, 
+          startBlockHeight: 170068, 
           pollingInterval: 6000,
           delayMs: 0,
-          stepSize: 2,
+          stepSize: 1,
           indexer: midnightNetworkConfig.indexer,
           indexerWs: midnightNetworkConfig.indexerWS,
         }),

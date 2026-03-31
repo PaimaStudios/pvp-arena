@@ -2,7 +2,7 @@
   "name": "@pvp-arena-backend/batcher",
   "exports": "./main.ts",
   "imports": {
-    "@paimaexample/batcher": "jsr:@paimaexample/batcher@0.10.17",
+    "@paimaexample/batcher": "jsr:@paimaexample/batcher@0.10.19",
     "@paimaexample/midnight-contracts": "jsr:@paimaexample/midnight-contracts@0.10.17",
     "@paimaexample/utils": "jsr:@paimaexample/utils@0.10.17",
     "effection": "npm:effection@^3.5.0",
