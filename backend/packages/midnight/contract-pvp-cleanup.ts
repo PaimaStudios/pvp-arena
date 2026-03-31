@@ -5,6 +5,9 @@
  * Calls the `cleanup_match(matchId)` circuit on the deployed contract,
  * removing all ledger entries for a finished match.
  *
+ * Transaction balancing and submission are delegated to the batcher
+ * (the cleanup wallet does not need NIGHT tokens for dust).
+ *
  * The caller must be the contract owner (using MIDNIGHT_BACKEND_SECRET)
  * or a participant in the match.
  *
@@ -13,10 +16,13 @@
  *   MIDNIGHT_STORAGE_PASSWORD="YourPasswordMy1!" \
  *   MIDNIGHT_BACKEND_SECRET="<hex-or-string>" \
  *   MIDNIGHT_CLEAN_SEED="<seed>" \
+ *   BATCHER_URL="http://localhost:3334" \
  *   deno run -A --unstable-detect-cjs contract-pvp-cleanup.ts <match_id>
  *
  * Arguments:
  *   match_id  The match ID (bigint or hex) to clean up
+ *
+ * Requires: proof server + batcher running.
  */
 
 import { Buffer } from "node:buffer";
@@ -40,9 +46,6 @@ import { NodeZkConfigProvider } from "npm:@midnight-ntwrk/midnight-js-node-zk-co
 import { midnightNetworkConfig } from "jsr:@paimaexample/midnight-contracts/midnight-env";
 import {
   buildWalletFacade,
-  syncAndWaitForFunds,
-  registerNightForDust,
-  waitForDustFunds,
 } from "jsr:@paimaexample/midnight-contracts";
 import {
   Contract,
@@ -54,11 +57,8 @@ import {
 // Constants
 // ============================================================================
 
-const TTL_DURATION_MS = 60 * 60 * 1000;
-
-function createTtl(): Date {
-  return new Date(Date.now() + TTL_DURATION_MS);
-}
+const BATCHER_URL = Deno.env.get("BATCHER_URL") || "http://localhost:3334";
+const DELEGATED_TX_SENTINEL = "delegated-to-batcher";
 
 // ============================================================================
 // Parse arguments
@@ -177,31 +177,30 @@ try {
   Deno.exit(1);
 }
 
-// Build wallet
-console.log("\n--- Building wallet ---");
+// Check batcher
+try {
+  const resp = await fetch(`${BATCHER_URL}/health`);
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  console.log(`Batcher: OK (${BATCHER_URL})`);
+} catch {
+  console.error(`Batcher not running at ${BATCHER_URL}`);
+  Deno.exit(1);
+}
+
+// Build wallet (keys only — batcher handles balancing/dust)
+console.log("\n--- Building wallet (keys only, batcher handles balancing) ---");
 const walletSeed = Deno.env.get("MIDNIGHT_CLEAN_SEED")!;
 const walletResult = await buildWalletFacade(NETWORK as any, walletSeed, networkId);
 console.log(`Unshielded address: ${walletResult.unshieldedAddress}`);
-
-console.log("Syncing wallet...");
-const balances = await syncAndWaitForFunds(walletResult.wallet, {
-  waitNonZero: false,
-  timeoutMs: 300_000,
-} as any);
-console.log(`Shielded: ${balances.shieldedBalance}, Unshielded: ${balances.unshieldedBalance}, Dust: ${balances.dustBalance}`);
-
-if (balances.dustBalance === 0n && balances.unshieldedBalance > 0n) {
-  console.log("Registering NIGHT for dust...");
-  await registerNightForDust(walletResult);
-  const dust = await waitForDustFunds(walletResult.wallet, { waitNonZero: true, timeoutMs: 300_000 });
-  console.log(`Dust balance after registration: ${dust}`);
-}
 
 // Set up providers
 const here = path.dirname(path.fromFileUrl(import.meta.url));
 const managedDir = path.resolve(path.join(here, "contract-pvp/src/managed"));
 const zkConfigPath = path.resolve(path.join(managedDir, "pvp"));
 const zkConfigProvider = new NodeZkConfigProvider(zkConfigPath);
+
+// Batcher delegation: balanceTx posts the proven tx to the batcher, submitTx returns a sentinel.
+let pendingTxHash: string | null = null;
 
 const walletAndMidnightProvider = {
   getCoinPublicKey(): CoinPublicKey {
@@ -210,19 +209,103 @@ const walletAndMidnightProvider = {
   getEncryptionPublicKey(): EncPublicKey {
     return walletResult.zswapSecretKeys.encryptionPublicKey;
   },
-  async balanceTx(tx: UnboundTransaction, ttl?: Date): Promise<FinalizedTransaction> {
-    const bound = tx.bind();
-    const recipe = await walletResult.wallet.balanceFinalizedTransaction(bound, {
-      shieldedSecretKeys: walletResult.zswapSecretKeys,
-      dustSecretKey: walletResult.dustSecretKey,
-    }, { ttl: ttl ?? createTtl() });
-    const signed = await walletResult.wallet.signRecipe(recipe, (payload: Uint8Array) =>
-      walletResult.unshieldedKeystore.signData(payload),
-    );
-    return walletResult.wallet.finalizeRecipe(signed);
+  async balanceTx(tx: UnboundTransaction): Promise<FinalizedTransaction> {
+    const serializedTx = Buffer.from(tx.serialize()).toString("hex");
+    const body = {
+      data: {
+        target: "midnight_balancing",
+        address: "moderator_trusted_node",
+        addressType: 0,
+        input: JSON.stringify({ tx: serializedTx, txStage: "unbound", circuitId: "cleanup_match" }),
+        timestamp: Date.now(),
+      },
+      confirmationLevel: "wait-receipt",
+    };
+    const response = await fetch(`${BATCHER_URL}/send-input`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`Batcher rejected transaction (HTTP ${response.status}): ${text}`);
+    }
+    const result = await response.json();
+    if (!result.success) throw new Error(`Batcher failed: ${result.message}`);
+    pendingTxHash = result.transactionHash ?? null;
+    console.log(`[cleanup] Batcher confirmed txHash=${pendingTxHash}`);
+    return tx as unknown as FinalizedTransaction;
   },
-  submitTx(tx: FinalizedTransaction): Promise<TransactionId> {
-    return walletResult.wallet.submitTransaction(tx);
+  submitTx(_tx: FinalizedTransaction): Promise<TransactionId> {
+    return Promise.resolve(DELEGATED_TX_SENTINEL as unknown as TransactionId);
+  },
+};
+
+// Query indexer for the ZK identifier of a transaction by its hash.
+const getTxIdentifierByHash = async (txHash: string): Promise<string | null> => {
+  const query = `
+    query GetTxByHash($hash: String!) {
+      transactions(offset: { hash: $hash }) {
+        ... on RegularTransaction { identifiers }
+      }
+    }
+  `;
+  for (let attempt = 0; attempt < 10; attempt++) {
+    try {
+      const response = await fetch(NETWORK.indexer, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query, variables: { hash: txHash } }),
+      });
+      const json = await response.json();
+      const txs: any[] = json?.data?.transactions ?? [];
+      if (txs.length > 0 && Array.isArray(txs[0].identifiers) && txs[0].identifiers.length > 0) {
+        console.log(`[cleanup] txHash=${txHash} → identifier=${txs[0].identifiers[0]} (attempt ${attempt})`);
+        return txs[0].identifiers[0] as string;
+      }
+    } catch (e) {
+      console.warn(`[cleanup:getTxIdentifierByHash] attempt ${attempt} error:`, e);
+    }
+    await new Promise(r => setTimeout(r, 1000));
+  }
+  return null;
+};
+
+// Wrap publicDataProvider to intercept the sentinel txId from batcher delegation.
+const basePublicDataProvider = indexerPublicDataProvider(NETWORK.indexer, NETWORK.indexerWS);
+const publicDataProvider = {
+  ...basePublicDataProvider,
+  watchForTxData: async (txId: any): Promise<any> => {
+    if ((txId as string) !== DELEGATED_TX_SENTINEL) {
+      return basePublicDataProvider.watchForTxData(txId);
+    }
+    const txHash = pendingTxHash;
+    pendingTxHash = null;
+    if (txHash) {
+      console.log(`[cleanup] watchForTxData: resolving identifier for txHash=${txHash}...`);
+      const identifier = await getTxIdentifierByHash(txHash);
+      if (identifier) {
+        console.log(`[cleanup] watchForTxData: waiting for chain confirmation via identifier=${identifier}`);
+        return basePublicDataProvider.watchForTxData(identifier as any);
+      }
+      console.warn("[cleanup] watchForTxData: could not resolve identifier, returning mock");
+    }
+    return {
+      tx: null as any,
+      status: "succeed-entirely",
+      txId,
+      identifiers: [],
+      txHash: DELEGATED_TX_SENTINEL as any,
+      blockHash: DELEGATED_TX_SENTINEL,
+      blockHeight: 0,
+      blockTimestamp: Date.now(),
+      blockAuthor: null,
+      indexerId: 0,
+      protocolVersion: 0,
+      fees: { paidFees: "0", estimatedFees: "0" },
+      segmentStatusMap: undefined,
+      unshielded: { created: [], spent: [] },
+    };
   },
 };
 
@@ -234,7 +317,7 @@ const providers: MidnightProviders = {
     privateStoragePasswordProvider: async () => Deno.env.get("MIDNIGHT_STORAGE_PASSWORD") ?? "YourPasswordMy1!",
     accountId: Buffer.from(walletResult.zswapSecretKeys.coinPublicKey).toString("hex"),
   }),
-  publicDataProvider: indexerPublicDataProvider(NETWORK.indexer, NETWORK.indexerWS),
+  publicDataProvider,
   zkConfigProvider,
   proofProvider: httpClientProofProvider(NETWORK.proofServer, zkConfigProvider),
   walletProvider: walletAndMidnightProvider,

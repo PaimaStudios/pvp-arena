@@ -8,6 +8,7 @@ import {
   ledgerParser,
   grammar,
   startNode,
+  validateAndPrintNodeEnv,
 } from "./main.ts";
 
 export const mainnetConfig = new ConfigBuilder()
@@ -73,4 +74,5 @@ export const mainnetConfig = new ConfigBuilder()
   )
   .build();
 
+validateAndPrintNodeEnv();
 startNode(mainnetConfig);

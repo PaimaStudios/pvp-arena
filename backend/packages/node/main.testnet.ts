@@ -7,6 +7,7 @@ import {
   contractAddress,
   ledgerParser,
   startNode,
+  validateAndPrintNodeEnv,
 } from "./main.ts";
 
 export const testnetConfig = new ConfigBuilder()
@@ -72,4 +73,5 @@ export const testnetConfig = new ConfigBuilder()
   )
   .build();
 
+validateAndPrintNodeEnv();
 startNode(testnetConfig);

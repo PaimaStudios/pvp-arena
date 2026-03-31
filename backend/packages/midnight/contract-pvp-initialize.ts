@@ -117,6 +117,14 @@ const witnesses = {
 // ============================================================================
 
 const networkId = midnightNetworkConfig.id as import("npm:@midnight-ntwrk/wallet-sdk-abstractions@2.0.0").NetworkId.NetworkId;
+if (midnightNetworkConfig.id === "mainnet") {
+  // We require to set a custom RPC
+  if (!Deno.env.get("MIDNIGHT_NODE_URL")) {
+   throw new Error("MIDNIGHT_NODE_URL is not set");
+  }
+  midnightNetworkConfig.node = Deno.env.get("MIDNIGHT_NODE_URL")!;
+ }
+
 setNetworkId(networkId);
 
 const contractAddress = loadContractAddress();

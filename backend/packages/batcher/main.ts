@@ -1,7 +1,8 @@
 import { main, suspend } from "effection";
 import { createNewBatcher } from "@paimaexample/batcher";
-import { config, storage } from "./config.ts";
+import { config, storage, validateAndPrintBatcherEnv } from "./config.ts";
 
+validateAndPrintBatcherEnv();
 const batcher = createNewBatcher(config, storage);
 
 main(function* () {

@@ -18,17 +18,17 @@ logs: "stdout",
   },
 
   processesToLaunch: [
-    {
-      name: "batcher",
-      args: ["task", "-f", "@pvp-arena-backend/batcher", "start"],
-      env: {
-        MIDNIGHT_NETWORK_ID: "mainnet",
-      },
-      waitToExit: false,
-      type: "system-dependency",
-      link: "http://localhost:3334",
-      stopProcessAtPort: [3334],
-    },
+    // {
+    //   name: "batcher",
+    //   args: ["task", "-f", "@pvp-arena-backend/batcher", "start"],
+    //   env: {
+    //     MIDNIGHT_NETWORK_ID: "mainnet",
+    //   },
+    //   waitToExit: false,
+    //   type: "system-dependency",
+    //   link: "http://localhost:3334",
+    //   stopProcessAtPort: [3334],
+    // },
   ],
 });
 

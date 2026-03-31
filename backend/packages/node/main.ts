@@ -51,6 +51,152 @@ export {
   PrimitiveTypeMidnightGeneric,
 };
 
+// ---------------------------------------------------------------------------
+// Environment validation & startup print
+// ---------------------------------------------------------------------------
+
+type EnvEntry = {
+  name: string;
+  value: string;
+  isSet: boolean;
+  secret: boolean;
+  requiredWhenDeployed: boolean;
+};
+
+function printEnvTable(title: string, entries: EnvEntry[]): string[] {
+  const errors: string[] = [];
+  const nameW = Math.max(...entries.map((e) => e.name.length));
+  const valW = 38;
+
+  const lineW = nameW + valW + 16;
+  const sep = "=".repeat(lineW);
+  const dash = "-".repeat(lineW);
+
+  console.log(`\n${sep}`);
+  console.log(`  ${title}`);
+  console.log(sep);
+  console.log(
+    `  ${"Variable".padEnd(nameW)}  ${"Value".padEnd(valW)}  Status`,
+  );
+  console.log(`  ${"-".repeat(nameW)}  ${"-".repeat(valW)}  ----------`);
+
+  for (const e of entries) {
+    let display: string;
+    let status: string;
+
+    if (e.secret) {
+      display = e.isSet ? "****" : "(not set)";
+      status = e.isSet ? "set" : "(not set)";
+    } else {
+      display = e.value || "(not set)";
+      if (display.length > valW) display = display.slice(0, valW - 3) + "...";
+      status = e.isSet ? "overridden" : "default";
+    }
+
+    console.log(
+      `  ${e.name.padEnd(nameW)}  ${display.padEnd(valW)}  ${status}`,
+    );
+
+    if (e.requiredWhenDeployed && !e.isSet && !e.value) {
+      errors.push(`FATAL: ${e.name} is required for deployed networks but is not set.`);
+    }
+  }
+
+  console.log(`${sep}\n`);
+  return errors;
+}
+
+export function validateAndPrintNodeEnv(): void {
+  const networkId = midnightNetworkConfig.id as string;
+  const isDeployed = networkId !== "undeployed";
+
+  const entries: EnvEntry[] = [
+    {
+      name: "MIDNIGHT_NETWORK_ID",
+      value: networkId,
+      isSet: !!Deno.env.get("MIDNIGHT_NETWORK_ID"),
+      secret: false,
+      requiredWhenDeployed: false,
+    },
+    {
+      name: "MIDNIGHT_WALLET_SEED",
+      value: Deno.env.get("MIDNIGHT_WALLET_SEED") ?? "",
+      isSet: !!Deno.env.get("MIDNIGHT_WALLET_SEED"),
+      secret: true,
+      requiredWhenDeployed: false,
+    },
+    {
+      name: "MIDNIGHT_WALLET_MNEMONIC",
+      value: Deno.env.get("MIDNIGHT_WALLET_MNEMONIC") ?? "",
+      isSet: !!Deno.env.get("MIDNIGHT_WALLET_MNEMONIC")?.trim(),
+      secret: true,
+      requiredWhenDeployed: false,
+    },
+    {
+      name: "MIDNIGHT_INDEXER_HTTP",
+      value: midnightNetworkConfig.indexer,
+      isSet: !!Deno.env.get("MIDNIGHT_INDEXER_HTTP"),
+      secret: false,
+      requiredWhenDeployed: false,
+    },
+    {
+      name: "MIDNIGHT_INDEXER_WS",
+      value: midnightNetworkConfig.indexerWS,
+      isSet: !!Deno.env.get("MIDNIGHT_INDEXER_WS"),
+      secret: false,
+      requiredWhenDeployed: false,
+    },
+    {
+      name: "MIDNIGHT_NODE_HTTP",
+      value: midnightNetworkConfig.node,
+      isSet: !!Deno.env.get("MIDNIGHT_NODE_HTTP"),
+      secret: false,
+      requiredWhenDeployed: false,
+    },
+    {
+      name: "MIDNIGHT_PROOF_SERVER_URL",
+      value: midnightNetworkConfig.proofServer,
+      isSet: !!(Deno.env.get("MIDNIGHT_PROOF_SERVER_URL") || Deno.env.get("MIDNIGHT_PROOF_SERVER")),
+      secret: false,
+      requiredWhenDeployed: false,
+    },
+    {
+      name: "MIDNIGHT_BACKEND_SECRET",
+      value: Deno.env.get("MIDNIGHT_BACKEND_SECRET") ?? "",
+      isSet: !!Deno.env.get("MIDNIGHT_BACKEND_SECRET"),
+      secret: true,
+      requiredWhenDeployed: true,
+    },
+    {
+      name: "MIDNIGHT_CLEAN_SEED",
+      value: Deno.env.get("MIDNIGHT_CLEAN_SEED") ?? "",
+      isSet: !!Deno.env.get("MIDNIGHT_CLEAN_SEED"),
+      secret: true,
+      requiredWhenDeployed: true,
+    },
+    {
+      name: "BATCHER_URL",
+      value: Deno.env.get("BATCHER_URL") || "http://localhost:3334",
+      isSet: !!Deno.env.get("BATCHER_URL"),
+      secret: false,
+      requiredWhenDeployed: false,
+    },
+  ];
+
+  const errors = printEnvTable("PVP Arena — Node Environment", entries);
+
+  if (isDeployed && !midnightNetworkConfig.walletSeed) {
+    errors.push(
+      `FATAL: For network '${networkId}', either MIDNIGHT_WALLET_SEED or MIDNIGHT_WALLET_MNEMONIC must be set.`,
+    );
+  }
+
+  if (isDeployed && errors.length > 0) {
+    for (const err of errors) console.error(err);
+    Deno.exit(1);
+  }
+}
+
 export const grammar = {
   midnightContractState: builtinGrammars.midnightGeneric,
   clean_up_game: [
@@ -173,7 +319,7 @@ stm.addStateTransition("midnightContractState", function* (data) {
       9: 'tie',
     };
 
-    const five_minutes = 1; //  5 * 60 * 1000;
+    const three_hours = 3 * 60 * 60 * 1000;
 
     for (const [key, value] of Object.entries(game_state)) {
       const gameId = key;
@@ -187,7 +333,7 @@ stm.addStateTransition("midnightContractState", function* (data) {
         yield* World.resolve(newScheduledTimestampData, {
           from_address: "0x0",
           from_address_type: AddressType.NONE,
-          future_ms_timestamp: new Date(data.blockTimestamp + five_minutes),
+          future_ms_timestamp: new Date(data.blockTimestamp + three_hours),
           input_data: JSON.stringify(["clean_up_game", gameId]),
         });
       }
@@ -402,10 +548,10 @@ stm.addStateTransition("clean_up_game", function* (data) {
       const command = new Deno.Command("deno", {
         args: ["run", "-A", "--unstable-detect-cjs", scriptPath, game_id],
         env: {
-          MIDNIGHT_BACKEND_SECRET: Deno.env.get("MIDNIGHT_BACKEND_SECRET")!,
-          MIDNIGHT_CLEAN_SEED: Deno.env.get("MIDNIGHT_CLEAN_SEED")!,
-          MIDNIGHT_NETWORK_ID: Deno.env.get("MIDNIGHT_NETWORK_ID")!,
-          // MIDNIGHT_STORAGE_PASSWORD: Deno.env.get("MIDNIGHT_STORAGE_PASSWORD") ?? "",
+          MIDNIGHT_BACKEND_SECRET: Deno.env.get("MIDNIGHT_BACKEND_SECRET") || "",
+          MIDNIGHT_CLEAN_SEED: Deno.env.get("MIDNIGHT_CLEAN_SEED") || "",
+          MIDNIGHT_NETWORK_ID: Deno.env.get("MIDNIGHT_NETWORK_ID") || "",
+          BATCHER_URL: Deno.env.get("BATCHER_URL") || "",
         },
         stdout: "inherit",
         stderr: "inherit",
