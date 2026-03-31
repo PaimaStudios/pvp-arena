@@ -65,10 +65,15 @@ export class PracticeMenu extends Phaser.Scene {
                 this.status?.setText('Entering offline practice arena...');
                 const mockApi = new MockPVPArenaAPI(true);
                 mockApi.create_new_match(false, true).then((matchId) => {
-                    return mockApi.setCurrentMatch(matchId);
-                }).then(() => {
+                    // Subscribe BEFORE setCurrentMatch so its synchronous emission is captured
+                    const statePromise = firstValueFrom(
+                        mockApi.state$.pipe(filter(s => s.currentMatchId === matchId && s.currentMatch !== null))
+                    );
+                    mockApi.setCurrentMatch(matchId);
+                    return statePromise;
+                }).then((initialState) => {
                     this.scene.remove('EquipmentMenu');
-                    this.scene.add('EquipmentMenu', new EquipmentMenu({ api: mockApi, isP1: true }));
+                    this.scene.add('EquipmentMenu', new EquipmentMenu({ api: mockApi, isP1: true }, initialState));
                     this.scene.start('EquipmentMenu');
                 }).catch((e) => {
                     this.status?.setError(e);

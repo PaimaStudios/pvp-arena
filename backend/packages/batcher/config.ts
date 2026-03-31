@@ -76,6 +76,7 @@ if (midnightNetworkConfig.id === 'undeployed') {
 const midnightBalancingAdapter = new MidnightBalancingAdapter(
     seeds,
     {
+      syncProtocolName: 'parallelMidnight',
       indexer: midnightNetworkConfig.indexer,
       indexerWS: midnightNetworkConfig.indexerWS,
       node: midnightNetworkConfig.node,
