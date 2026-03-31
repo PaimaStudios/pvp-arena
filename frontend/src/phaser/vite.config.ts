@@ -4,10 +4,15 @@ import { viteCommonjs } from "@originjs/vite-plugin-commonjs";
 import wasm from 'vite-plugin-wasm';
 import topLevelAwait from 'vite-plugin-top-level-await';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
+import { sentryVitePlugin } from "@sentry/vite-plugin";
+import { existsSync } from 'node:fs';
 
 // https://github.com/vitejs/vite/blob/ec7ee22cf15bed05a6c55693ecbac27cfd615118/packages/vite/src/node/plugins/workerImportMetaUrl.ts#L127-L128
 const workerImportMetaUrlRE =
   /\bnew\s+(?:Worker|SharedWorker)\s*\(\s*(new\s+URL\s*\(\s*('[^']+'|"[^"]+"|`[^`]+`)\s*,\s*import\.meta\.url\s*\))/g;
+
+// Source maps + Sentry upload only when .env.sentry-build-plugin exists
+const sentryEnabled = existsSync('.env.sentry-build-plugin');
 
 // https://vitejs.dev/config/
 export default defineConfig({
@@ -15,6 +20,7 @@ export default defineConfig({
   build: {
     target: "esnext",
     minify: false,
+    sourcemap: sentryEnabled ? "hidden" : false,
   },
   plugins: [
     // crypto-browserify lacks timingSafeEqual. Patch the level-private-state-provider
@@ -35,6 +41,11 @@ export default defineConfig({
       },
     },
     wasm(), topLevelAwait(), react(), viteCommonjs(), nodePolyfills({}),
+    // Sentry source maps upload — only when .env.sentry-build-plugin is present
+    sentryEnabled && sentryVitePlugin({
+      org: "midnight-foundation",
+      project: "pvp",
+    }),
   ],
   optimizeDeps: {
     exclude: ['@midnight-ntwrk/midnight-js-level-private-state-provider'],
