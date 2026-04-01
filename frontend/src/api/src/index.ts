@@ -182,6 +182,29 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
    *  Key is "${round}:${state}" — resets across rounds automatically. */
   private lastAiCalledForKey: string = '';
 
+  /**
+   * Serializes callTx operations to prevent private-state race conditions.
+   * In practice mode the AI's p2Commit and the arena's p1Reveal can overlap
+   * because state$ emits the next game-state (via WebSocket) before the previous
+   * callTx fully resolves (watchForTxData still pending). When the earlier callTx
+   * eventually resolves, the Midnight SDK may write back its private-state snapshot,
+   * clobbering values that the later operation had already written. Serializing
+   * guarantees each callTx reads the private state written by its own caller.
+   */
+  private _txQueue: Promise<void> = Promise.resolve();
+
+  private async _queueTx<T>(fn: () => Promise<T>): Promise<T> {
+    const prev = this._txQueue;
+    let release!: () => void;
+    this._txQueue = new Promise<void>(r => { release = r; });
+    await prev;
+    try {
+      return await fn();
+    } finally {
+      release();
+    }
+  }
+
   /** Cached last ledger state — used by forceStateRefresh to re-derive state$ without waiting for the next block. */
   private lastLedgerState: ReturnType<typeof ledger> | null = null;
   /** Emitting here re-triggers the state$ switchMap with the cached ledger state. */
@@ -575,93 +598,95 @@ export class PVPArenaAPI implements DeployedPVPArenaAPI {
 
   async p1Commit(commands: bigint[], stances: STANCE[]): Promise<void> {
     this.logger?.info(`api.p1Commit(${safeJSONString(commands)}, ${safeJSONString(stances)})`);
-
-    //console.log(`commands: ${commands.map((c) => c.attack.toString()).join(',')}`);
-    //const txData = await this.deployedContract.callTx.p1_command([commands[0].attack, commands[1].attack, commands[2].attack]);
-    console.log('[p1Commit] submitting circuit call');
-    var txData;
-    try {
-      const state = await PVPArenaAPI.getPrivateState(this.providers.privateStateProvider);
-      state!.commands = commands;
-      state!.stances = stances;
-      await this.providers.privateStateProvider.set('pvpPrivateState', state);
-      const nonce = utils.randomBytes(32);
-      const wallClockSec = BigInt(Math.floor(Date.now() / 1000));
-      const chainTimestamp = this.providers.getChainTimestamp ? await this.providers.getChainTimestamp() : null;
-      const now = chainTimestamp ?? wallClockSec;
-      console.log(`[p1Commit] wallClockSec=${wallClockSec} chainTimestamp=${chainTimestamp} using now=${now}`);
-      txData = await this.deployedContract.callTx.p1_commit_commands(nonce, now);
-    } catch (err) {
-      console.warn(`[p1Commit] failed: ${err instanceof Error ? err.message : JSON.stringify(err)}`);
-      throw err;
-    }
-    console.log('[p1Commit] done');
-    this.logger?.trace({
-      transactionAdded: {
-        circuit: 'p1_commit',
-        txHash: txData.public.txHash,
-        blockHeight: txData.public.blockHeight,
-      },
+    return this._queueTx(async () => {
+      //console.log(`commands: ${commands.map((c) => c.attack.toString()).join(',')}`);
+      //const txData = await this.deployedContract.callTx.p1_command([commands[0].attack, commands[1].attack, commands[2].attack]);
+      console.log('[p1Commit] submitting circuit call');
+      var txData;
+      try {
+        const state = await PVPArenaAPI.getPrivateState(this.providers.privateStateProvider);
+        state!.commands = commands;
+        state!.stances = stances;
+        await this.providers.privateStateProvider.set('pvpPrivateState', state);
+        const nonce = utils.randomBytes(32);
+        const wallClockSec = BigInt(Math.floor(Date.now() / 1000));
+        const chainTimestamp = this.providers.getChainTimestamp ? await this.providers.getChainTimestamp() : null;
+        const now = chainTimestamp ?? wallClockSec;
+        console.log(`[p1Commit] wallClockSec=${wallClockSec} chainTimestamp=${chainTimestamp} using now=${now}`);
+        txData = await this.deployedContract.callTx.p1_commit_commands(nonce, now);
+      } catch (err) {
+        console.warn(`[p1Commit] failed: ${err instanceof Error ? err.message : JSON.stringify(err)}`);
+        throw err;
+      }
+      console.log('[p1Commit] done');
+      this.logger?.trace({
+        transactionAdded: {
+          circuit: 'p1_commit',
+          txHash: txData.public.txHash,
+          blockHeight: txData.public.blockHeight,
+        },
+      });
     });
   }
 
   async p2Commit(commands: bigint[], stances: STANCE[]): Promise<void> {
     this.logger?.info(`api.p2Commit(${safeJSONString(commands)}, ${safeJSONString(stances)})`);
+    return this._queueTx(async () => {
+      console.log('[p2Commit] submitting circuit call');
+      var txData;
+      try {
+        const state = await PVPArenaAPI.getPrivateState(this.providers.privateStateProvider);
+        state!.commands = commands;
+        state!.stances = stances;
+        await this.providers.privateStateProvider.set('pvpPrivateState', state);
+        const wallClockSec = BigInt(Math.floor(Date.now() / 1000));
+        const chainTimestamp = this.providers.getChainTimestamp ? await this.providers.getChainTimestamp() : null;
+        const now = chainTimestamp ?? wallClockSec;
+        console.log(`[p2Commit] wallClockSec=${wallClockSec} chainTimestamp=${chainTimestamp} using now=${now}`);
+        txData = await this.deployedContract.callTx.p2_commit_commands(now);
+      } catch (err) {
+        console.warn(`[p2Commit] failed: ${err instanceof Error ? err.message : JSON.stringify(err)}`);
+        throw err;
+      }
+      console.log('[p2Commit] done');
+      //const txData = await this.deployedContract.callTx.p2_command([commands[0].attack, commands[1].attack, commands[2].attack]);
 
-    console.log('[p2Commit] submitting circuit call');
-    var txData;
-    try {
-      const state = await PVPArenaAPI.getPrivateState(this.providers.privateStateProvider);
-      state!.commands = commands;
-      state!.stances = stances;
-      await this.providers.privateStateProvider.set('pvpPrivateState', state);
-      const wallClockSec = BigInt(Math.floor(Date.now() / 1000));
-      const chainTimestamp = this.providers.getChainTimestamp ? await this.providers.getChainTimestamp() : null;
-      const now = chainTimestamp ?? wallClockSec;
-      console.log(`[p2Commit] wallClockSec=${wallClockSec} chainTimestamp=${chainTimestamp} using now=${now}`);
-      txData = await this.deployedContract.callTx.p2_commit_commands(now);
-    } catch (err) {
-      console.warn(`[p2Commit] failed: ${err instanceof Error ? err.message : JSON.stringify(err)}`);
-      throw err;
-    }
-    console.log('[p2Commit] done');
-    //const txData = await this.deployedContract.callTx.p2_command([commands[0].attack, commands[1].attack, commands[2].attack]);
-
-    this.logger?.trace({
-      transactionAdded: {
-        circuit: 'p2_commit',
-        txHash: txData.public.txHash,
-        blockHeight: txData.public.blockHeight,
-      },
+      this.logger?.trace({
+        transactionAdded: {
+          circuit: 'p2_commit',
+          txHash: txData.public.txHash,
+          blockHeight: txData.public.blockHeight,
+        },
+      });
     });
   }
 
   async p1Reveal(commands: bigint[], stances: STANCE[]): Promise<void> {
     this.logger?.info(`api.p1Reveal(${safeJSONString(commands)}, ${safeJSONString(stances)})`);
+    return this._queueTx(async () => {
+      var txData;
+      try {
+        const state = await PVPArenaAPI.getPrivateState(this.providers.privateStateProvider);
+        state!.commands = commands;
+        state!.stances = stances;
+        await this.providers.privateStateProvider.set('pvpPrivateState', state);
+        const wallClockSec = BigInt(Math.floor(Date.now() / 1000));
+        const chainTimestamp = this.providers.getChainTimestamp ? await this.providers.getChainTimestamp() : null;
+        const now = chainTimestamp ?? wallClockSec;
+        console.log(`[p1Reveal] wallClockSec=${wallClockSec} chainTimestamp=${chainTimestamp} using now=${now}`);
+        txData = await this.deployedContract.callTx.p1_reveal_commands(now);
+      } catch (err) {
+        console.warn(`[p1Reveal] failed: ${err instanceof Error ? err.message : JSON.stringify(err)}`);
+        throw err;
+      }
 
-    var txData;
-    try {
-      const state = await PVPArenaAPI.getPrivateState(this.providers.privateStateProvider);
-      state!.commands = commands;
-      state!.stances = stances;
-      await this.providers.privateStateProvider.set('pvpPrivateState', state);
-      //await sleep(1000);
-      const wallClockSec = BigInt(Math.floor(Date.now() / 1000));
-      const chainTimestamp = this.providers.getChainTimestamp ? await this.providers.getChainTimestamp() : null;
-      const now = chainTimestamp ?? wallClockSec;
-      console.log(`[p1Reveal] wallClockSec=${wallClockSec} chainTimestamp=${chainTimestamp} using now=${now}`);
-      txData = await this.deployedContract.callTx.p1_reveal_commands(now);
-    } catch (err) {
-      console.warn(`[p1Reveal] failed: ${err instanceof Error ? err.message : JSON.stringify(err)}`);
-      throw err;
-    }
-
-    this.logger?.trace({
-      transactionAdded: {
-        circuit: 'p1_reveal_commands',
-        txHash: txData.public.txHash,
-        blockHeight: txData.public.blockHeight,
-      },
+      this.logger?.trace({
+        transactionAdded: {
+          circuit: 'p1_reveal_commands',
+          txHash: txData.public.txHash,
+          blockHeight: txData.public.blockHeight,
+        },
+      });
     });
   }
 

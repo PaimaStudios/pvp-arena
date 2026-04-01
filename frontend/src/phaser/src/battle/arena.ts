@@ -13,6 +13,7 @@ import { OFFLINE_PRACTICE_CONTRACT_ADDR } from './mockapi';
 import { BatcherClient } from '../batcher-client';
 import { Subscription } from 'rxjs';
 import { StatusUI } from '../menus';
+import * as Sentry from '@sentry/browser';
 
 export type BattleConfig = {
     isP1: boolean,
@@ -267,6 +268,7 @@ export class Arena extends Phaser.Scene
                                 this.committedStances = null;
                                 return;
                             }
+                            Sentry.captureException(e, { tags: { circuit: 'p1_reveal_commands' } });
                             // Reset matchState so the RevealingMove guard doesn't block retry.
                             this.matchState = MatchState.WaitingOtherPlayerReveal;
                             this.status!.setError(e, () => this.runStateChange(), 'Retry');
@@ -800,6 +802,7 @@ export class Arena extends Phaser.Scene
             console.log(`[arena] submit error suppressed — chain already at ${gameStateStr(this.onChainState)}`);
             return;
         }
+        Sentry.captureException(e, { tags: { circuit: gameStateStr(expectedChainState) } });
         console.log(`submit error: ${e}`);
         this.status!.setError(e, () => {
             this.setMatchState(recoveryState);
